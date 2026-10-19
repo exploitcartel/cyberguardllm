@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>{{ t('rules_title') }}</h1><p>{{ rules|length }} {{ t('rules_sub_suffix') }}</p></div><a href="/rules/new" class="btn btn-primary">{{ t('btn_add_custom_rule') }}</a></div>
+<div class="card">
+  <input type="text" placeholder="{{ t('search_placeholder') }}" oninput="filterTable(this, 'rulesTable')" style="margin-bottom:12px;max-width:320px;">
+  <table id="rulesTable">
+    <tr><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_source') }}</th><th>{{ t('col_severity') }}</th><th>{{ t('col_prompt') }}</th><th></th></tr>
+    {% for r in rules %}
+    <tr>
+      <td style="font-family:var(--mono);">{{ r.id }}</td><td>{{ r.owasp }}</td>
+      <td>
+        {% if r.source == 'cgllm_research' %}
+        <span class="badge badge-cgllm">★ {{ r.module or 'CYBERGUARD LLM Research' }}</span>
+        {% elif r.source == 'custom_ui' %}
+        <span class="badge badge-triage-accepted_risk">{{ t('custom_rule_badge') }}{{ ' - ' ~ r.module if r.module }}</span>
+        {% else %}
+        <span class="badge badge-source">{{ r.source }}</span>
+        {% endif %}
+      </td>
+      <td><span class="badge badge-{{ r.severity }}">{{ r.severity }}</span></td>
+      <td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        {% if r.turns %}
+        <span class="badge badge-source" style="margin-right:6px;">{{ r.turns|length }}-turn</span>{{ r.turns[0] }}
+        {% else %}
+        {{ r.prompt }}
+        {% endif %}
+      </td>
+      <td>
+        {% if r.source == 'custom_ui' %}
+        <form method="post" action="/rules/custom/{{ r._custom_db_id }}/delete" onsubmit="return confirm('{{ t('confirm_delete_rule') }}');">
+          <button class="btn" type="submit" style="padding:5px 10px;">{{ t('btn_delete') }}</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div><h1>{{ t('scan_hash') }} #{{ result.id }}</h1><p>{{ t('target_label') }} {{ result.target_name or '-' }} | {{ t('risk_score_label') }} {{ result.risk_score }}/100</p></div>
+  <div style="display:flex;gap:8px;">
+    <a href="/results/{{ result.id }}/json" class="btn">{{ t('btn_export_json') }}</a>
+    <a href="/results/{{ result.id }}/csv" class="btn">{{ t('btn_export_csv') }}</a>
+    <a href="/results/{{ result.id }}/pdf" class="btn btn-primary">{{ t('btn_export_pdf') }}</a>
+  </div>
+</div>
+{% if benchmark %}
+<div class="card" style="margin-bottom:16px;">
+  <h3 style="margin-top:0;">{{ t('benchmark_title') }}</h3>
+  <p style="font-size:13px;">
+    {{ t('benchmark_target_avg') }}: <strong>{{ benchmark.target_avg }}</strong>/100 &nbsp;|&nbsp;
+    {{ t('benchmark_global_avg') }}: <strong>{{ benchmark.benchmark_avg }}</strong>/100
+    {% if benchmark.ratio > 1.15 %}
+      <span style="color:#dc2626;">({{ t('benchmark_above') }}, {{ benchmark.ratio }}x)</span>
+    {% elif benchmark.ratio < 0.85 %}
+      <span style="color:#16a34a;">({{ t('benchmark_below') }}, {{ benchmark.ratio }}x)</span>
+    {% else %}
+      <span style="color:var(--text-muted);">({{ t('benchmark_typical') }})</span>
+    {% endif %}
+  </p>
+</div>
+{% endif %}
+{% if attack_chains %}
+<div class="card" style="margin-bottom:16px;">
+  <h3 style="margin-top:0;">{{ t('attack_chains_title') }}</h3>
+  <p style="color:var(--text-muted);font-size:13px;">{{ t('attack_chains_explanation') }}</p>
+  {% for c in attack_chains %}
+  <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;">
+    <p><span class="badge badge-{{ c.severity }}">{{ c.severity }}</span> <strong>{{ c.title }}</strong>
+      <span style="color:var(--text-muted);font-size:12px;">[{{ c.categories }}]</span>
+      {% if c.source == 'static' %}<span class="badge badge-source" title="{{ t('chain_static_hint') }}">{{ t('chain_static_badge') }}</span>{% else %}<span class="badge badge-cgllm">{{ t('chain_ai_badge') }}</span>{% endif %}
+    </p>
+    <p style="font-size:13px;">{{ c.narrative }}</p>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+<div class="card">
+  <table>
+    <tr><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_severity') }}</th><th>{{ t('col_verdict') }}</th><th>{{ t('col_triage') }}</th><th></th></tr>
+    {% for f in findings %}
+    <tr>
+      <td>{{ f.rule_id }}</td>
+      <td>{{ f.owasp }}</td>
+      <td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td>
+      <td><span class="badge badge-{{ 'fail' if f.verdict=='FAIL' else ('review' if f.verdict=='REVIEW' else 'pass') }}">{{ f.verdict }}</span>{% if f.confidence is not none %} <span style="color:var(--text-muted);font-size:11px;">{{ f.confidence }}%</span>{% endif %}{% if f.reproducibility_total %} <span style="color:var(--text-muted);font-size:11px;" title="{{ t('reproducibility_hint') }}">{{ f.reproducibility_hits }}/{{ f.reproducibility_total }}</span>{% endif %}</td>
+      <td>{% if f.verdict=='FAIL' %}<span class="badge badge-triage-{{ f.triage_status or 'open' }}">{{ t('triage_' ~ (f.triage_status or 'open')) }}</span>{% else %}-{% endif %}</td>
+      <td><a href="/findings/{{ f.id }}" class="btn" style="padding:5px 10px;">{{ t('btn_details') }}</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

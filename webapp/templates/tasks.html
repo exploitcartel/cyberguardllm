@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>{{ t('run_scan_title') }}</h1><p>{{ t('run_scan_sub') }}</p></div></div>
+
+<div class="grid grid-2">
+  <div class="card">
+    <form method="post" action="/tasks/run">
+      <div class="field">
+        <label>{{ t('field_target') }}</label>
+        <select name="target_id" required>
+          {% for trg in targets %}<option value="{{ trg.id }}">{{ trg.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ t('field_scan_config') }}</label>
+        <select name="config_id" required>
+          {% for c in configs %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit">{{ t('btn_start_scan') }}</button>
+    </form>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0;">{{ t('recent_tasks') }}</h3>
+    <table>
+      <tr><th>{{ t('col_target') }}</th><th>{{ t('col_config') }}</th><th>{{ t('col_status') }}</th></tr>
+      {% for task in tasks %}
+      <tr><td>{{ task.target_name or '-' }}</td><td>{{ task.config_name or '-' }}</td><td><span class="badge badge-{{ task.status }}">{{ task.status }}</span></td></tr>
+      {% else %}
+      <tr><td colspan="3" style="text-align:center;color:var(--text-muted);">{{ t('no_tasks_yet') }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

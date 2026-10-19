@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>{{ t('compare_title') }}</h1><p>{{ t('compare_sub') }}</p></div></div>
+<div class="card" style="margin-bottom:16px;">
+  <form method="get" action="/results/compare" style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;">
+    <div class="field">
+      <label>{{ t('compare_from_label') }}</label>
+      <select name="from">
+        <option value="">-</option>
+        {% for r in results %}
+        <option value="{{ r.id }}" {{ 'selected' if from_id==r.id }}>#{{ r.id }} - {{ r.target_name or '-' }} ({{ r.timestamp|fmtdate('%b %d, %Y %H:%M') }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>{{ t('compare_to_label') }}</label>
+      <select name="to">
+        <option value="">-</option>
+        {% for r in results %}
+        <option value="{{ r.id }}" {{ 'selected' if to_id==r.id }}>#{{ r.id }} - {{ r.target_name or '-' }} ({{ r.timestamp|fmtdate('%b %d, %Y %H:%M') }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn btn-primary" type="submit">{{ t('btn_compare') }}</button>
+  </form>
+</div>
+
+{% if comparison %}
+<div class="page-header"><div><h2 style="margin:0;">{{ from_result.target_name or '-' }}: #{{ from_id }} &rarr; #{{ to_id }}</h2></div></div>
+
+<div class="card" style="margin-bottom:16px;border-left:3px solid #22c55e;">
+  <h3 style="margin-top:0;color:#22c55e;">{{ t('compare_fixed_title') }} ({{ comparison.fixed|length }})</h3>
+  {% if comparison.fixed %}
+  <table>
+    <tr><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_severity') }}</th></tr>
+    {% for f in comparison.fixed %}
+    <tr><td>{{ f.rule_id }}</td><td>{{ f.owasp }}</td><td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p style="color:var(--text-muted);">{{ t('compare_none') }}</p>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-bottom:16px;border-left:3px solid #ef4444;">
+  <h3 style="margin-top:0;color:#ef4444;">{{ t('compare_new_title') }} ({{ comparison.new|length }})</h3>
+  {% if comparison.new %}
+  <table>
+    <tr><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_severity') }}</th></tr>
+    {% for f in comparison.new %}
+    <tr><td>{{ f.rule_id }}</td><td>{{ f.owasp }}</td><td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p style="color:var(--text-muted);">{{ t('compare_none') }}</p>
+  {% endif %}
+</div>
+
+<div class="card" style="border-left:3px solid #f59e0b;">
+  <h3 style="margin-top:0;color:#f59e0b;">{{ t('compare_unchanged_title') }} ({{ comparison.unchanged|length }})</h3>
+  {% if comparison.unchanged %}
+  <table>
+    <tr><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_severity') }}</th></tr>
+    {% for f in comparison.unchanged %}
+    <tr><td>{{ f.rule_id }}</td><td>{{ f.owasp }}</td><td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p style="color:var(--text-muted);">{{ t('compare_none') }}</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

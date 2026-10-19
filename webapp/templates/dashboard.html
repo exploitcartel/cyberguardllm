@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div><h1>{{ t('dashboard_title') }}</h1><p>{{ t('dashboard_sub') }}</p></div>
+</div>
+
+<div class="grid grid-4" style="margin-bottom:16px;">
+  <div class="card"><div class="metric-label">{{ t('total_scans') }}</div><div class="metric-value">{{ total_scans }}</div></div>
+  <div class="card"><div class="metric-label">{{ t('total_targets') }}</div><div class="metric-value">{{ total_targets }}</div></div>
+  <div class="card"><div class="metric-label">{{ t('high_critical') }}</div><div class="metric-value" style="color:var(--danger);">{{ high_critical }}</div></div>
+  <div class="card"><div class="metric-label">{{ t('avg_risk_score') }}</div><div class="metric-value">{{ avg_risk }} / 100</div></div>
+</div>
+
+<div class="grid grid-2" style="margin-bottom:16px;">
+  <div class="card">
+    <h3 style="margin-top:0;">{{ t('findings_by_severity') }}</h3>
+    <canvas id="severityChart" height="180"></canvas>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0;">{{ t('owasp_coverage') }}</h3>
+    <canvas id="owaspChart" height="180"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">{{ t('recent_scans') }}</h3>
+  <table>
+    <tr><th>{{ t('col_date') }}</th><th>{{ t('col_target') }}</th><th>{{ t('col_findings') }}</th><th>{{ t('col_risk_score') }}</th><th>{{ t('col_status') }}</th></tr>
+    {% for s in recent_scans %}
+    <tr>
+      <td>{{ s.timestamp|fmtdate }}</td>
+      <td><a href="/results/{{ s.id }}">{{ s.target_name or '-' }}</a></td>
+      <td>{{ s.total_findings }}</td>
+      <td>{{ s.risk_score }}</td>
+      <td><span class="badge badge-{{ s.status }}">{{ s.status }}</span></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="text-align:center;color:var(--text-muted);">{{ t('no_scans_yet') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<script>
+const isDark = document.body.classList.contains('dark');
+const textColor = isDark ? '#e5e9f0' : '#111827';
+new Chart(document.getElementById('severityChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Critical','High','Medium','Low'],
+    datasets: [{data: [{{ severity.critical }},{{ severity.high }},{{ severity.medium }},{{ severity.low }}],
+    backgroundColor: ['#E24B4A','#EF9F27','#378ADD','#97C459']}]
+  },
+  options: {plugins:{legend:{labels:{color:textColor}}}}
+});
+new Chart(document.getElementById('owaspChart'), {
+  type: 'bar',
+  data: {
+    labels: {{ owasp_labels|tojson }},
+    datasets: [{label:'findings', data: {{ owasp_values|tojson }}, backgroundColor:'#2563eb'}]
+  },
+  options: {indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{ticks:{color:textColor}},y:{ticks:{color:textColor}}}}
+});
+</script>
+{% endblock %}

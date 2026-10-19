@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+*.db
+secret.key
+auth_secret.key
+flask_secret.key
+*.pdf

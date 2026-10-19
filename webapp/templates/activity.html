@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>{{ t('activity_title') }}</h1><p>{{ t('activity_sub') }}</p></div></div>
+<div class="card">
+  <table>
+    <tr><th>{{ t('col_time') }}</th><th>{{ t('col_user') }}</th><th>{{ t('col_action') }}</th><th>{{ t('col_details') }}</th></tr>
+    {% for a in logs %}
+    <tr><td>{{ a.timestamp|fmtdate }}</td><td>{{ a.username }}</td><td>{{ a.action }}</td><td>{{ a.details }}</td></tr>
+    {% else %}
+    <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">{{ t('no_activity_yet') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
