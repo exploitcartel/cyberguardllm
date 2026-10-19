@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="{{ 'sq' if lang=='al' else 'en' }}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CYBERGUARD LLM</title>
+<link rel="icon" href="/static/img/logo.png">
+<link rel="stylesheet" href="/static/css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+</head>
+<body class="{{ theme }}">
+<div class="layout">
+  <div class="sidebar">
+    <div class="theme-toggle-top">
+      <button onclick="setTheme('light')" class="{{ 'active' if theme=='light' }}" title="Light">
+        <svg viewBox="0 0 24 24"><path d="M12 7a5 5 0 100 10 5 5 0 000-10zm0-5a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm0 18a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM3 12a1 1 0 011-1h1a1 1 0 110 2H4a1 1 0 01-1-1zm16 0a1 1 0 011-1h1a1 1 0 110 2h-1a1 1 0 01-1-1zM5.64 5.64a1 1 0 011.41 0l.71.7a1 1 0 11-1.41 1.42l-.71-.71a1 1 0 010-1.41zm11.6 11.6a1 1 0 011.41 0l.71.7a1 1 0 11-1.41 1.42l-.71-.71a1 1 0 010-1.41zm0-11.6a1 1 0 010 1.41l-.71.71a1 1 0 11-1.41-1.42l.71-.7a1 1 0 011.41 0zM7.76 17.24a1 1 0 010 1.41l-.71.71a1 1 0 11-1.41-1.42l.71-.7a1 1 0 011.41 0z"/></svg>
+        {{ t('theme_light') }}
+      </button>
+      <button onclick="setTheme('dark')" class="{{ 'active' if theme=='dark' }}" title="Dark">
+        <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        {{ t('theme_dark') }}
+      </button>
+    </div>
+
+    <div class="lang-toggle-top">
+      <button onclick="setLang('en')" class="{{ 'active' if lang=='en' }}">EN</button>
+      <button onclick="setLang('al')" class="{{ 'active' if lang=='al' }}">AL</button>
+    </div>
+
+    <div class="brand">
+      <div class="brand-mark"><img src="/static/img/logo.png" alt="CYBERGUARD LLM"></div>
+      <div><div class="brand-title">CYBERGUARD LLM</div><div class="brand-sub">{{ t('brand_sub') }}</div></div>
+    </div>
+
+    <a class="nav-item {{ 'active' if active=='dashboard' }}" href="/dashboard">
+      <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+      {{ t('nav_dashboard') }}
+    </a>
+    <a class="nav-item {{ 'active' if active=='targets' }}" href="/targets">
+      <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm0-13a5 5 0 100 10 5 5 0 000-10zm0 8a3 3 0 110-6 3 3 0 010 6zm0-5a2 2 0 100 4 2 2 0 000-4z"/></svg>
+      {{ t('nav_targets') }}
+    </a>
+    <a class="nav-item {{ 'active' if active=='scan_configs' }}" href="/scan-configs">
+      <svg viewBox="0 0 24 24"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h12v2H3v-2z"/></svg>
+      {{ t('nav_scan_configs') }}
+    </a>
+    <a class="nav-item {{ 'active' if active=='tasks' }}" href="/tasks">
+      <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 10.59l4.3 4.3-1.42 1.42-4.88-4.89V6h2v6.59z"/></svg>
+      {{ t('nav_tasks') }}
+    </a>
+    <a class="nav-item {{ 'active' if active=='results' }}" href="/results">
+      <svg viewBox="0 0 24 24"><path d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zm2 12h2v4H7v-4zm4-6h2v10h-2V9zm4 3h2v7h-2v-7z"/></svg>
+      {{ t('nav_results') }}
+    </a>
+    <a class="nav-item {{ 'active' if active=='rules' }}" href="/rules">
+      <svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.4 8.9-8 10-4.6-1.1-8-5-8-10V6l8-4zm0 5a3 3 0 100 6 3 3 0 000-6z"/></svg>
+      {{ t('nav_rules') }}
+    </a>
+    <a class="nav-item {{ 'active' if active=='activity' }}" href="/activity">
+      <svg viewBox="0 0 24 24"><path d="M3 12h4l2-7 4 14 2-7h6v2h-4.6l-2 7-4-14-2 7H3z"/></svg>
+      {{ t('nav_activity') }}
+    </a>
+    <a class="nav-item {{ 'active' if active=='settings' }}" href="/settings">
+      <svg viewBox="0 0 24 24"><path d="M19.14 12.94a7.07 7.07 0 000-1.88l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7.3 7.3 0 00-1.63-.94l-.36-2.54a.5.5 0 00-.5-.42h-3.84a.5.5 0 00-.5.42l-.36 2.54c-.59.24-1.14.56-1.63.94l-2.39-.96a.5.5 0 00-.6.22L2.63 8.84a.5.5 0 00.12.64l2.03 1.58a7.07 7.07 0 000 1.88l-2.03 1.58a.5.5 0 00-.12.64l1.92 3.32c.14.24.42.32.6.22l2.39-.96c.49.38 1.04.7 1.63.94l.36 2.54c.05.25.26.42.5.42h3.84c.24 0 .45-.17.5-.42l.36-2.54c.59-.24 1.14-.56 1.63-.94l2.39.96c.24.1.46 0 .6-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7z"/></svg>
+      {{ t('nav_settings') }}
+    </a>
+
+    <div class="sidebar-footer">
+      <div class="user-box">
+        <div class="user-box-name">{{ username }}</div>
+        <span class="role-pill role-{{ user_role or 'operator' }}">{{ t('role_' ~ (user_role or 'operator')) }}</span>
+      </div>
+      <a href="/logout" class="nav-item" style="margin-top:6px;">
+        <svg viewBox="0 0 24 24"><path d="M16 17v-3H9v-4h7V7l5 5-5 5zM14 2a2 2 0 012 2v2h-2V4H5v16h9v-2h2v2a2 2 0 01-2 2H5a2 2 0 01-2-2V4a2 2 0 012-2h9z"/></svg>
+        {{ t('logout') }}
+      </a>
+      <div class="gh-footer">
+        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <a href="https://github.com/exploitcartel" target="_blank">exploitcartel</a>
+      </div>
+    </div>
+  </div>
+  <div class="main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="toast-stack" id="toastStack">
+      {% for category, message in messages %}
+      <div class="toast toast-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+</div>
+<script>
+function setTheme(mode){
+  document.cookie = "theme=" + mode + "; path=/; max-age=31536000";
+  location.reload();
+}
+function setLang(lang){
+  document.cookie = "lang=" + lang + "; path=/; max-age=31536000";
+  try{ localStorage.setItem('cgllm_lang', lang); }catch(e){}
+  location.reload();
+}
+function filterTable(inputEl, tableId){
+  // Rows can be grouped with a shared data-group (e.g. a target row plus an
+  // extra details row underneath it): if any row in a group matches, the
+  // whole group stays visible together.
+  const q = inputEl.value.trim().toLowerCase();
+  const table = document.getElementById(tableId);
+  if(!table) return;
+  const rows = Array.from(table.querySelectorAll('tr')).filter(row => !row.querySelector('th'));
+  if(!q){ rows.forEach(row => row.style.display = ''); return; }
+  const matchedGroups = new Set();
+  rows.forEach(row => {
+    if(row.textContent.toLowerCase().includes(q)){
+      const g = row.getAttribute('data-group');
+      if(g) matchedGroups.add(g);
+    }
+  });
+  rows.forEach(row => {
+    const g = row.getAttribute('data-group');
+    const show = row.textContent.toLowerCase().includes(q) || (g && matchedGroups.has(g));
+    row.style.display = show ? '' : 'none';
+  });
+}
+(function(){
+  const stack = document.getElementById('toastStack');
+  if(!stack) return;
+  Array.from(stack.children).forEach((toast, i) => {
+    setTimeout(() => { toast.classList.add('toast-out'); setTimeout(() => toast.remove(), 300); }, 3200 + i * 150);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+Flask==3.0.3
+requests==2.32.3
+PyYAML==6.0.2
+Werkzeug==3.0.4
+itsdangerous==2.2.0
+cryptography==43.0.1
+matplotlib==3.9.2
+reportlab==4.2.2
+numpy==2.1.1
+playwright==1.47.0
+websockets==13.1
+python-socketio[client]==5.11.4
+

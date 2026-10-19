@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CYBERGUARD LLM - Login</title>
+<link rel="icon" href="/static/img/logo.png">
+<style>
+:root{--bg:#0a0e1a;--navy:#0d1526;--navy-2:#131b2e;--accent:#2563eb;--accent2:#7c3aed;--text:#e5e9f0;--muted:#8b93a7;
+--font:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;font-family:var(--font);}
+body{display:grid;grid-template-columns:1.15fr 1fr;min-height:100vh;background:#fff;overflow:hidden;}
+.left{position:relative;background:radial-gradient(ellipse at 30% 20%, #10193a 0%, var(--bg) 60%);display:flex;flex-direction:column;justify-content:space-between;padding:48px 56px;color:var(--text);overflow:hidden;}
+.brand{display:flex;align-items:center;gap:10px;position:relative;z-index:5;}
+.brand-mark{width:38px;height:38px;border-radius:50%;box-shadow:0 0 22px rgba(37,99,235,0.55);}
+.brand-mark img{width:100%;height:100%;display:block;}
+.brand-name{font-size:19px;font-weight:700;letter-spacing:0.02em;}
+.lang-toggle{display:flex;gap:4px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:3px;position:relative;z-index:5;}
+.lang-toggle button{background:transparent;border:none;color:var(--muted);font-size:12px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:var(--font);}
+.lang-toggle button.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;}
+.top-row{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:5;}
+.canvas-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;cursor:grab;}
+.canvas-wrap:active{cursor:grabbing;}
+#brainCanvas{display:block;width:100%;height:100%;}
+.left-text{position:relative;z-index:5;max-width:420px;}
+.left-text h1{font-size:32px;font-weight:700;line-height:1.25;margin-bottom:12px;letter-spacing:-0.01em;}
+.left-text p{font-size:15px;color:var(--muted);line-height:1.6;}
+.tags{display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;}
+.tag{font-size:12px;padding:5px 12px;border-radius:999px;background:rgba(37,99,235,0.14);color:#8fb3f7;border:1px solid rgba(37,99,235,0.3);}
+.gh-credit{display:flex;align-items:center;gap:8px;position:relative;z-index:5;font-size:12.5px;color:var(--muted);}
+.gh-credit a{color:#cbd5e1;font-weight:600;display:flex;align-items:center;gap:6px;}
+.gh-credit svg{width:16px;height:16px;fill:#cbd5e1;}
+.right{display:flex;align-items:center;justify-content:center;padding:40px;position:relative;}
+.form-box{width:100%;max-width:340px;}
+.form-box h2{font-size:24px;font-weight:700;color:#0f172a;margin-bottom:6px;}
+.form-box .sub{font-size:14px;color:#6b7280;margin-bottom:28px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px;}
+input{width:100%;padding:11px 12px;border-radius:8px;border:1px solid #e5e7eb;font-size:14px;color:#111827;outline:none;font-family:var(--font);}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,0.12);}
+.login-btn{width:100%;margin-top:8px;padding:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+.error-box{margin-top:14px;color:#b91c1c;font-size:13px;}
+.warn{margin-top:16px;display:flex;gap:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;}
+.warn-title{font-size:13px;font-weight:600;color:#92400e;}
+.warn-text{font-size:12px;color:#a16207;margin-top:2px;}
+.right-credit{position:absolute;bottom:18px;font-size:11.5px;color:#9ca3af;display:flex;align-items:center;gap:6px;}
+.right-credit svg{width:14px;height:14px;fill:#9ca3af;}
+@media (max-width:860px){body{grid-template-columns:1fr;}.left{display:none;}}
+</style>
+</head>
+<body>
+<div class="left">
+  <div class="top-row">
+    <div class="brand"><div class="brand-mark"><img src="/static/img/logo.png" alt="CYBERGUARD LLM"></div><div class="brand-name">CYBERGUARD LLM</div></div>
+    <div class="lang-toggle">
+      <button type="button" class="active" data-lang="en" onclick="setLang('en')">EN</button>
+      <button type="button" data-lang="al" onclick="setLang('al')">AL</button>
+    </div>
+  </div>
+  <div class="canvas-wrap" id="canvasWrap"><canvas id="brainCanvas"></canvas></div>
+  <div class="left-text">
+    <h1 data-i18n="headline">AI security assessment platform</h1>
+    <p data-i18n="subtext">Black-box vulnerability scanning for LLM agents and chatbots, against the OWASP LLM Top 10.</p>
+    <div class="tags"><span class="tag">OWASP LLM Top 10</span><span class="tag">Black-box</span><span class="tag">AI-Powered Scanning</span><span class="tag">Reports</span></div>
+  </div>
+  <div class="gh-credit">
+    <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    <span data-i18n="credit">Built by</span>&nbsp;<a href="https://github.com/exploitcartel" target="_blank">exploitcartel</a>
+  </div>
+</div>
+<div class="right">
+  <div class="form-box">
+    <h2 data-i18n="welcome">Welcome back</h2>
+    <div class="sub" data-i18n="signin">Sign in to your CYBERGUARD LLM account</div>
+    <form method="post" action="/login">
+      <div class="field"><label data-i18n="username">Username</label><input type="text" name="username" value="admin" required></div>
+      <div class="field"><label data-i18n="password">Password</label><input type="password" name="password" required></div>
+      <button class="login-btn" type="submit" data-i18n="login">Login</button>
+    </form>
+    {% if error %}<div class="error-box">{{ error }}</div>{% endif %}
+    <div class="warn">
+      <div>
+        <div class="warn-title" data-i18n="warn_title">Default credentials detected!</div>
+        <div class="warn-text" data-i18n="warn_text">admin / admin, change it right after your first login.</div>
+      </div>
+    </div>
+  </div>
+  <div class="right-credit">
+    <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    CYBERGUARD LLM v1.0
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const I18N = {
+  en: {
+    headline: "AI security assessment platform",
+    subtext: "Black-box vulnerability scanning for LLM agents and chatbots, against the OWASP LLM Top 10.",
+    credit: "Built by",
+    welcome: "Welcome back",
+    signin: "Sign in to your CYBERGUARD LLM account",
+    username: "Username",
+    password: "Password",
+    login: "Login",
+    warn_title: "Default credentials detected!",
+    warn_text: "admin / admin, change it right after your first login.",
+  },
+  al: {
+    headline: "Platforme vleresimi sigurie per AI",
+    subtext: "Skanim dobesish black-box per LLM agents dhe chatbots, kundrejt OWASP LLM Top 10.",
+    credit: "Ndertuar nga",
+    welcome: "Mire se erdhe",
+    signin: "Identifikohu ne llogarine tende CYBERGUARD LLM",
+    username: "Username",
+    password: "Password",
+    login: "Hyr",
+    warn_title: "U zbuluan kredenciale default!",
+    warn_text: "admin / admin, ndryshoje menjehere pas login-it te pare.",
+  }
+};
+function setLang(lang){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key = el.getAttribute('data-i18n');
+    if(I18N[lang][key] !== undefined) el.textContent = I18N[lang][key];
+  });
+  document.querySelectorAll('.lang-toggle button').forEach(b=>b.classList.toggle('active', b.getAttribute('data-lang')===lang));
+  try{ localStorage.setItem('cgllm_lang', lang); }catch(e){}
+  document.cookie = "lang=" + lang + "; path=/; max-age=31536000";
+  document.documentElement.lang = lang === 'al' ? 'sq' : 'en';
+}
+(function(){
+  let saved = "{{ lang|default('en') }}";
+  try{ saved = localStorage.getItem('cgllm_lang') || saved; }catch(e){}
+  setLang(saved);
+})();
+
+const wrap = document.getElementById('canvasWrap');
+const canvas = document.getElementById('brainCanvas');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, wrap.clientWidth/wrap.clientHeight, 0.1, 100);
+camera.position.z = 7;
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+function resize(){renderer.setSize(wrap.clientWidth, wrap.clientHeight);camera.aspect=wrap.clientWidth/wrap.clientHeight;camera.updateProjectionMatrix();}
+resize();
+window.addEventListener('resize', resize);
+const brainGroup = new THREE.Group();
+scene.add(brainGroup);
+function brainShape(u,v){
+  const theta=u*Math.PI*2, phi=v*Math.PI;
+  const base=Math.sin(phi);
+  const rx=1.95, ry=1.55, rz=1.65;
+  let bump=1;
+  bump+=Math.sin(theta*9+phi*7)*0.05;
+  bump+=Math.sin(theta*15-phi*5)*0.03;
+  bump+=Math.sin(phi*20)*0.035;
+  bump+=Math.cos(theta*4)*Math.sin(phi*11)*0.04;
+  let x=rx*base*Math.cos(theta)*bump;
+  let y=ry*Math.cos(phi);
+  let z=rz*base*Math.sin(theta)*bump;
+  if(y<-1.0){ y=-1.0-(Math.abs(y)-1.0)*0.4; }
+  const nearMidline=Math.exp(-Math.pow(x*3.2,2));
+  if(y>0){ x+=(x>=0?1:-1)*nearMidline*0.22; z*=(1-nearMidline*0.12); y-=nearMidline*0.28; }
+  return new THREE.Vector3(x,y,z);
+}
+const nodeCount=900;const positions=new Float32Array(nodeCount*3);const nodeVecs=[];
+for(let i=0;i<nodeCount;i++){const p=brainShape(Math.random(),Math.random());positions[i*3]=p.x;positions[i*3+1]=p.y;positions[i*3+2]=p.z;nodeVecs.push(p);}
+const pGeo=new THREE.BufferGeometry();pGeo.setAttribute('position',new THREE.BufferAttribute(positions,3));
+const pMat=new THREE.PointsMaterial({color:0x3b82f6,size:0.045,transparent:true,opacity:0.9});
+brainGroup.add(new THREE.Points(pGeo,pMat));
+const linePositions=[];const maxDist=0.5;const maxLinksPerNode=4;
+for(let i=0;i<nodeCount;i++){let links=0;for(let j=i+1;j<nodeCount&&links<maxLinksPerNode;j++){if(nodeVecs[i].distanceTo(nodeVecs[j])<maxDist){linePositions.push(nodeVecs[i].x,nodeVecs[i].y,nodeVecs[i].z,nodeVecs[j].x,nodeVecs[j].y,nodeVecs[j].z);links++;}}}
+const lGeo=new THREE.BufferGeometry();lGeo.setAttribute('position',new THREE.Float32BufferAttribute(linePositions,3));
+brainGroup.add(new THREE.LineSegments(lGeo,new THREE.LineBasicMaterial({color:0x2563eb,transparent:true,opacity:0.22})));
+let dragging=false,lastX=0,lastY=0,rotVelY=0.0035,targetVelY=0.0035;
+wrap.addEventListener('mousedown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;targetVelY=0;});
+window.addEventListener('mouseup',()=>{dragging=false;targetVelY=0.0035;});
+window.addEventListener('mousemove',e=>{if(!dragging)return;brainGroup.rotation.y+=(e.clientX-lastX)*0.006;brainGroup.rotation.x+=(e.clientY-lastY)*0.006;lastX=e.clientX;lastY=e.clientY;});
+function animate(){requestAnimationFrame(animate);rotVelY+=(targetVelY-rotVelY)*0.05;if(!dragging){brainGroup.rotation.y+=rotVelY;}renderer.render(scene,camera);}
+animate();
+</script>
+</body>
+</html>

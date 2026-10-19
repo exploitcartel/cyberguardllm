@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>{{ t('trend_title') }} - {{ target.name }}</h1><p>{{ t('trend_sub') }}</p></div></div>
+
+{% if comparison %}
+<div class="card" style="margin-bottom:16px;">
+  <h3 style="margin-top:0;">{{ t('benchmark_title') }}</h3>
+  <p>
+    {{ t('benchmark_target_avg') }}: <strong>{{ comparison.target_avg }}</strong> / 100
+    &nbsp;|&nbsp;
+    {{ t('benchmark_global_avg') }}: <strong>{{ comparison.benchmark_avg }}</strong> / 100
+  </p>
+  {% if comparison.ratio > 1.15 %}
+  <p style="color:#dc2626;">{{ t('benchmark_above') }} ({{ comparison.ratio }}x)</p>
+  {% elif comparison.ratio < 0.85 %}
+  <p style="color:#16a34a;">{{ t('benchmark_below') }} ({{ comparison.ratio }}x)</p>
+  {% else %}
+  <p style="color:var(--text-muted);">{{ t('benchmark_typical') }}</p>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if scans %}
+<div class="card" style="margin-bottom:16px;">
+  <h3 style="margin-top:0;">{{ t('trend_history') }}</h3>
+  <canvas id="trendChart" height="90"></canvas>
+</div>
+{% endif %}
+
+<div class="card">
+  {% if not scans %}
+  <p style="color:var(--text-muted);">{{ t('no_results_yet') }}</p>
+  {% else %}
+  <table>
+    <tr><th>{{ t('col_date') }}</th><th>{{ t('col_risk_score') }}</th><th>{{ t('col_findings') }}</th><th></th></tr>
+    {% for s in scans %}
+    <tr>
+      <td>{{ s.timestamp|fmtdate('%b %d, %Y %H:%M') }}</td>
+      <td>{{ s.risk_score }}</td>
+      <td>{{ s.total_findings }}</td>
+      <td><a href="/results/{{ s.id }}" class="btn" style="padding:5px 10px;">{{ t('btn_view') }}</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+
+{% if scans %}
+<script>
+const isDark = document.body.classList.contains('dark');
+const textColor = isDark ? '#e5e9f0' : '#111827';
+const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+const labels = {{ scans|map(attribute='timestamp')|map('fmtdate', '%b %d %H:%M')|list|tojson }};
+const scores = {{ scans|map(attribute='risk_score')|list|tojson }};
+{% if comparison %}
+const benchmarkAvg = {{ comparison.benchmark_avg }};
+const benchmarkLine = labels.map(() => benchmarkAvg);
+{% endif %}
+new Chart(document.getElementById('trendChart'), {
+  type: 'line',
+  data: {
+    labels: labels,
+    datasets: [
+      {
+        label: '{{ t("col_risk_score") }}',
+        data: scores,
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37,99,235,0.15)',
+        tension: 0.25,
+        fill: true,
+        pointRadius: 4,
+      },
+      {% if comparison %}
+      {
+        label: '{{ t("benchmark_global_avg") }}',
+        data: benchmarkLine,
+        borderColor: '#9ca3af',
+        borderDash: [6, 4],
+        pointRadius: 0,
+        fill: false,
+      },
+      {% endif %}
+    ]
+  },
+  options: {
+    scales: {
+      y: {beginAtZero: true, max: 100, ticks: {color: textColor}, grid: {color: gridColor}},
+      x: {ticks: {color: textColor}, grid: {color: gridColor}},
+    },
+    plugins: {legend: {labels: {color: textColor}}},
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

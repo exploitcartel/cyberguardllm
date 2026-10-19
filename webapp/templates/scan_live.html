@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div><h1>Scan in Progress</h1><p>Target: {{ target_name }} | Config: {{ config_name }}</p></div>
+</div>
+
+<div class="grid" style="grid-template-columns: 1.3fr 1fr; gap:20px;">
+  <div class="card" style="min-height:460px;display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden;">
+    <div id="brainWrap" style="width:100%;height:460px;position:relative;">
+      <canvas id="liveBrainCanvas" style="width:100%;height:100%;display:block;"></canvas>
+      <div style="position:absolute;top:16px;left:20px;font-family:var(--mono);font-size:12px;color:var(--text-muted);">
+        NEURAL SCAN ENGINE <span id="engineStatus" style="color:#22c55e;">● ACTIVE</span>
+      </div>
+      <div style="position:absolute;bottom:16px;left:20px;right:20px;text-align:center;">
+        <div id="progressPct" style="font-family:var(--mono);font-size:32px;font-weight:600;">0%</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--text-muted);" id="progressCount">0 / 0 payloads</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    <div class="card">
+      <div class="metric-label">Findings detected</div>
+      <div class="metric-value" id="findingsCount" style="color:var(--danger);">0</div>
+    </div>
+    <div class="card" style="flex:1;">
+      <div class="metric-label" style="margin-bottom:10px;">Live payload log</div>
+      <div id="liveLog" style="font-family:var(--mono);font-size:11.5px;color:var(--text-muted);height:280px;overflow-y:auto;display:flex;flex-direction:column-reverse;gap:4px;"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const taskId = {{ task_id }};
+const wrap = document.getElementById('brainWrap');
+const canvas = document.getElementById('liveBrainCanvas');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, wrap.clientWidth/wrap.clientHeight, 0.1, 100);
+camera.position.z = 7;
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+function resize(){renderer.setSize(wrap.clientWidth, wrap.clientHeight);camera.aspect=wrap.clientWidth/wrap.clientHeight;camera.updateProjectionMatrix();}
+resize();
+window.addEventListener('resize', resize);
+
+const brainGroup = new THREE.Group();
+scene.add(brainGroup);
+
+function brainShape(u,v){
+  const theta=u*Math.PI*2, phi=v*Math.PI;
+  const base=Math.sin(phi);
+  const rx=1.95, ry=1.55, rz=1.65;
+  let bump=1;
+  bump+=Math.sin(theta*9+phi*7)*0.05;
+  bump+=Math.sin(theta*15-phi*5)*0.03;
+  bump+=Math.sin(phi*20)*0.035;
+  bump+=Math.cos(theta*4)*Math.sin(phi*11)*0.04;
+  let x=rx*base*Math.cos(theta)*bump;
+  let y=ry*Math.cos(phi);
+  let z=rz*base*Math.sin(theta)*bump;
+  if(y<-1.0){ y=-1.0-(Math.abs(y)-1.0)*0.4; }
+  const nearMidline=Math.exp(-Math.pow(x*3.2,2));
+  if(y>0){ x+=(x>=0?1:-1)*nearMidline*0.22; z*=(1-nearMidline*0.12); y-=nearMidline*0.28; }
+  return new THREE.Vector3(x,y,z);
+}
+
+const nodeCount = 900;
+const positions = new Float32Array(nodeCount*3);
+const nodeColors = new Float32Array(nodeCount*3);
+const nodeVecs = [];
+const baseColor = new THREE.Color(0x3b82f6);
+for(let i=0;i<nodeCount;i++){
+  const p = brainShape(Math.random(), Math.random());
+  positions[i*3]=p.x; positions[i*3+1]=p.y; positions[i*3+2]=p.z;
+  nodeColors[i*3]=baseColor.r; nodeColors[i*3+1]=baseColor.g; nodeColors[i*3+2]=baseColor.b;
+  nodeVecs.push(p);
+}
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
+pGeo.setAttribute('color', new THREE.BufferAttribute(nodeColors,3));
+const pMat = new THREE.PointsMaterial({size:0.05, transparent:true, opacity:0.9, vertexColors:true});
+const points = new THREE.Points(pGeo, pMat);
+brainGroup.add(points);
+
+const linePositions = [];
+const maxDist=0.55, maxLinksPerNode=4;
+for(let i=0;i<nodeCount;i++){
+  let links=0;
+  for(let j=i+1;j<nodeCount && links<maxLinksPerNode;j++){
+    if(nodeVecs[i].distanceTo(nodeVecs[j])<maxDist){
+      linePositions.push(nodeVecs[i].x,nodeVecs[i].y,nodeVecs[i].z, nodeVecs[j].x,nodeVecs[j].y,nodeVecs[j].z);
+      links++;
+    }
+  }
+}
+const lGeo = new THREE.BufferGeometry();
+lGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions,3));
+const lMat = new THREE.LineBasicMaterial({color:0x2563eb, transparent:true, opacity:0.18});
+brainGroup.add(new THREE.LineSegments(lGeo, lMat));
+
+// outer glow shell that expands with progress
+const glowGeo = new THREE.SphereGeometry(2.4, 32, 32);
+const glowMat = new THREE.MeshBasicMaterial({color:0x2563eb, transparent:true, opacity:0.04, wireframe:true});
+const glowShell = new THREE.Mesh(glowGeo, glowMat);
+brainGroup.add(glowShell);
+
+let rotVelY = 0.004;
+let alertFlash = 0;
+let targetScale = 1.0;
+
+function pulseRandomNodes(count, color){
+  const colorAttr = pGeo.attributes.color;
+  for(let k=0;k<count;k++){
+    const idx = Math.floor(Math.random()*nodeCount);
+    colorAttr.array[idx*3] = color.r;
+    colorAttr.array[idx*3+1] = color.g;
+    colorAttr.array[idx*3+2] = color.b;
+  }
+  colorAttr.needsUpdate = true;
+}
+
+function decayColors(){
+  const colorAttr = pGeo.attributes.color;
+  for(let i=0;i<nodeCount;i++){
+    colorAttr.array[i*3]   += (baseColor.r - colorAttr.array[i*3]) * 0.04;
+    colorAttr.array[i*3+1] += (baseColor.g - colorAttr.array[i*3+1]) * 0.04;
+    colorAttr.array[i*3+2] += (baseColor.b - colorAttr.array[i*3+2]) * 0.04;
+  }
+  colorAttr.needsUpdate = true;
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  brainGroup.rotation.y += rotVelY;
+  decayColors();
+
+  if(alertFlash > 0){
+    alertFlash -= 0.02;
+    glowMat.color.setRGB(0.93, 0.15, 0.15);
+    glowMat.opacity = 0.06 + alertFlash*0.25;
+  } else {
+    glowMat.color.setHex(0x2563eb);
+    glowMat.opacity = 0.04;
+  }
+
+  const s = brainGroup.scale.x + (targetScale - brainGroup.scale.x) * 0.05;
+  brainGroup.scale.set(s,s,s);
+
+  renderer.render(scene, camera);
+}
+animate();
+
+const cyanColor = new THREE.Color(0x60a5fa);
+const redColor = new THREE.Color(0xef4444);
+
+let lastDone = 0;
+const log = document.getElementById('liveLog');
+
+function addLogLine(text, isFail){
+  const div = document.createElement('div');
+  div.textContent = text;
+  if(isFail){ div.style.color = '#ef4444'; }
+  log.appendChild(div);
+  while(log.children.length > 40){ log.removeChild(log.firstChild); }
+}
+
+function poll(){
+  fetch('/api/scan-status/' + taskId).then(r=>r.json()).then(data=>{
+    const pct = data.total > 0 ? Math.round((data.done/data.total)*100) : 0;
+    document.getElementById('progressPct').textContent = pct + '%';
+    document.getElementById('progressCount').textContent = data.done + ' / ' + data.total + ' payloads';
+    document.getElementById('findingsCount').textContent = data.findings;
+    targetScale = 1.0 + Math.min(data.findings * 0.03, 0.35);
+
+    if(data.done > lastDone){
+      pulseRandomNodes(30, cyanColor);
+      if(data.last_rule_id){
+        addLogLine('[' + String(data.done).padStart(3,'0') + '] testing ' + data.last_rule_id + ' ... sent', false);
+      }
+      lastDone = data.done;
+    }
+
+    if(data.findings > (poll._prevFindings || 0)){
+      alertFlash = 1.0;
+      pulseRandomNodes(80, redColor);
+      addLogLine('  >> VULNERABILITY DETECTED', true);
+    }
+    poll._prevFindings = data.findings;
+
+    if(data.status === 'completed'){
+      document.getElementById('engineStatus').textContent = '● DONE';
+      document.getElementById('engineStatus').style.color = '#3b82f6';
+      setTimeout(()=>{ window.location.href = '/results/' + data.result_id; }, 1200);
+    } else {
+      setTimeout(poll, 500);
+    }
+  }).catch(()=>{ setTimeout(poll, 1000); });
+}
+poll();
+</script>
+{% endblock %}

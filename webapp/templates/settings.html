@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>{{ t('settings_title') }}</h1><p>{{ t('settings_sub') }}</p></div></div>
+
+{% if must_change %}
+<div class="warn-box">
+  <div><strong>{{ t('default_creds_warning_title') }}</strong> {{ t('default_creds_warning_text') }}</div>
+</div>
+{% endif %}
+
+<div class="grid grid-2">
+  <div class="card">
+    <h3 style="margin-top:0;">{{ t('change_password_title') }}</h3>
+    <form method="post" action="/settings/change-password">
+      <div class="field"><label>{{ t('field_new_password') }}</label><input type="password" name="new_password" required></div>
+      <button class="btn btn-primary" type="submit">{{ t('btn_save') }}</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0;">{{ t('your_account_title') }}</h3>
+    <div class="field"><label>{{ t('field_username') }}</label><input value="{{ username }}" disabled></div>
+    <div class="field"><label>{{ t('field_role') }}</label><input value="{{ t('role_' ~ (user_role or 'operator')) }}" disabled></div>
+    <p style="color:var(--text-muted);font-size:12.5px;">{{ t('role_explanation') }}</p>
+  </div>
+</div>
+
+{% if user_role == 'global_administrator' %}
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">{{ t('user_management_title') }} <span class="badge badge-cgllm">{{ t('role_global_administrator') }}</span></h3>
+  <div class="grid grid-2">
+    <form method="post" action="/settings/users/create">
+      <div class="field"><label>{{ t('field_username') }}</label><input type="text" name="new_username" required></div>
+      <div class="field"><label>{{ t('field_password') }}</label><input type="password" name="new_password" required></div>
+      <div class="field">
+        <label>{{ t('field_role') }}</label>
+        <select name="role">
+          {% for r in roles %}
+          <option value="{{ r }}">{{ t('role_' ~ r) }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit">{{ t('btn_create_user') }}</button>
+    </form>
+    <div>
+      <table>
+        <tr><th>{{ t('col_user') }}</th><th>{{ t('field_role') }}</th><th>{{ t('col_actions') }}</th></tr>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.username }}</td>
+          <td>
+            <form method="post" action="/settings/users/{{ u.id }}/role" style="display:flex;gap:6px;">
+              <select name="role" onchange="this.form.submit()">
+                {% for r in roles %}
+                <option value="{{ r }}" {{ 'selected' if u.role==r }}>{{ t('role_' ~ r) }}</option>
+                {% endfor %}
+              </select>
+            </form>
+          </td>
+          <td>
+            {% if u.username != username %}
+            <form method="post" action="/settings/users/{{ u.id }}/delete" onsubmit="return confirm('{{ t('confirm_delete_user') }}');">
+              <button class="btn btn-danger" style="padding:5px 10px;" type="submit">{{ t('btn_delete') }}</button>
+            </form>
+            {% else %}
+            <span style="color:var(--text-muted);font-size:12px;">{{ t('you_label') }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">{{ t('scan_engine_mode_title') }} <span class="badge badge-cgllm">{{ t('role_global_administrator') }}</span></h3>
+  <p style="color:var(--text-muted);font-size:13px;">
+    {{ t('scan_mode_explanation') }}
+  </p>
+  <form method="post" action="/settings/scan-mode">
+    <div class="field">
+      <label>{{ t('field_scan_mode') }}</label>
+      <select name="scan_mode">
+        <option value="offline" {{ 'selected' if settings.scan_mode=='offline' }}>{{ t('offline_option') }}</option>
+        <option value="ai_powered" {{ 'selected' if settings.scan_mode=='ai_powered' }}>{{ t('ai_powered_option') }}</option>
+      </select>
+    </div>
+    <div class="grid grid-2">
+      <div class="field"><label>{{ t('field_ai_api_base') }}</label><input type="text" name="ai_api_base" placeholder="https://api.openai.com/v1" value="{{ settings.ai_api_base }}"></div>
+      <div class="field"><label>{{ t('field_model') }}</label><input type="text" name="ai_model" placeholder="gpt-4o-mini" value="{{ settings.ai_model }}"></div>
+    </div>
+    <div class="field"><label>{{ t('field_ai_api_key') }}</label><input type="password" name="ai_api_key" placeholder="{{ t('ai_api_key_placeholder_stored') if settings.ai_api_key_encrypted else 'sk-...' }}"></div>
+    <button class="btn btn-primary" type="submit">{{ t('btn_save_scan_mode') }}</button>
+  </form>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">{{ t('proxy_routing_title') }} <span class="badge badge-cgllm">{{ t('role_global_administrator') }}</span></h3>
+  <p style="color:var(--text-muted);font-size:13px;">
+    {{ t('proxy_explanation') }}
+  </p>
+  <form method="post" action="/settings/proxy">
+    <div class="checkbox-row"><input type="checkbox" name="proxy_enabled" {{ 'checked' if settings.proxy_enabled=='1' }}> {{ t('enable_proxy_checkbox') }}</div>
+    <div class="field"><label>{{ t('field_proxy_url') }}</label><input type="text" name="proxy_url" placeholder="socks5://user:pass@host:1080" value="{{ settings.proxy_url }}"></div>
+    <button class="btn btn-primary" type="submit">{{ t('btn_save_proxy') }}</button>
+  </form>
+  <form method="post" action="/settings/proxy/test" style="margin-top:10px;">
+    <input type="hidden" name="proxy_url" value="{{ settings.proxy_url }}">
+    <button class="btn" type="submit">{{ t('btn_test_proxy') }}</button>
+  </form>
+  {% if proxy_test_result %}
+  <div class="warn-box" style="margin-top:10px;background:{{ 'rgba(34,197,94,0.08)' if proxy_test_result.ok else 'rgba(239,68,68,0.08)' }};border-color:{{ 'rgba(34,197,94,0.25)' if proxy_test_result.ok else 'rgba(239,68,68,0.25)' }};">
+    <div>{{ proxy_test_result.info }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">{{ t('stealth_mode_title') }} <span class="badge badge-cgllm">{{ t('role_administrator') }}</span></h3>
+  <p style="color:var(--text-muted);font-size:13px;">
+    {{ t('stealth_explanation') }}
+  </p>
+  <form method="post" action="/settings/stealth">
+    <div class="checkbox-row"><input type="checkbox" name="stealth_enabled" {{ 'checked' if settings.stealth_enabled=='1' }}> {{ t('enable_stealth_checkbox') }}</div>
+    <div class="checkbox-row"><input type="checkbox" name="stealth_rotate_ua" {{ 'checked' if settings.stealth_rotate_ua=='1' }}> {{ t('rotate_ua_checkbox') }}</div>
+    <div class="grid grid-2">
+      <div class="field"><label>{{ t('field_delay_min') }}</label><input type="number" min="0" name="stealth_delay_min_ms" value="{{ settings.stealth_delay_min_ms }}"></div>
+      <div class="field"><label>{{ t('field_delay_max') }}</label><input type="number" min="0" name="stealth_delay_max_ms" value="{{ settings.stealth_delay_max_ms }}"></div>
+    </div>
+    <button class="btn btn-primary" type="submit">{{ t('btn_save_stealth') }}</button>
+  </form>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">{{ t('canary_title') }} <span class="badge badge-cgllm">{{ t('role_administrator') }}</span></h3>
+  <p style="color:var(--text-muted);font-size:13px;">
+    {{ t('canary_explanation') }}
+  </p>
+  <form method="post" action="/settings/canary">
+    <div class="field"><label>{{ t('field_canary_base_url') }}</label>
+      <input type="text" name="canary_base_url" placeholder="http://203.0.113.10:8000" value="{{ settings.canary_base_url }}">
+    </div>
+    <button class="btn btn-primary" type="submit">{{ t('btn_save_canary') }}</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

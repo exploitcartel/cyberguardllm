@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>{{ finding.rule_id }} - {{ finding.owasp }}</h1><p>{{ t('severity_label') }} <span class="badge badge-{{ finding.severity }}">{{ finding.severity }}</span> {{ t('verdict_label') }} <span class="badge badge-{{ 'fail' if finding.verdict=='FAIL' else ('review' if finding.verdict=='REVIEW' else 'pass') }}">{{ finding.verdict }}</span>{% if finding.confidence is not none %} <span style="color:var(--text-muted);font-size:12px;">({{ finding.confidence }}% {{ t('confidence_label') }})</span>{% endif %}{% if finding.reproducibility_total %} <span style="color:var(--text-muted);font-size:12px;">({{ finding.reproducibility_hits }}/{{ finding.reproducibility_total }} {{ t('reproducibility_label') }})</span>{% endif %}</p></div></div>
+<div class="card" style="margin-bottom:16px;">
+  <h3 style="margin-top:0;">{{ t('description_title') }}</h3>
+  <p>{{ finding.description }}</p>
+</div>
+<div class="grid grid-2">
+  <div class="card">
+    <h3 style="margin-top:0;">{{ t('prompt_sent_title') }}</h3>
+    <pre>{{ finding.prompt_sent }}</pre>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0;">{{ t('raw_response_title') }}</h3>
+    <pre>{{ finding.raw_response }}</pre>
+  </div>
+</div>
+{% if finding.verdict == 'FAIL' %}
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">{{ t('triage_title') }}</h3>
+  <p style="color:var(--text-muted);font-size:13px;">
+    {{ t('current_status_label') }} <span class="badge badge-triage-{{ finding.triage_status or 'open' }}">{{ t('triage_' ~ (finding.triage_status or 'open')) }}</span>
+    {% if finding.triaged_by %} - {{ t('triaged_by_label') }} {{ finding.triaged_by }} ({{ finding.triaged_at|fmtdate }}){% endif %}
+  </p>
+  {% if finding.triage_note %}<p><em>{{ finding.triage_note }}</em></p>{% endif %}
+  <form method="post" action="/findings/{{ finding.id }}/triage" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+    <div class="field">
+      <label>{{ t('field_triage_status') }}</label>
+      <select name="triage_status">
+        <option value="open" {{ 'selected' if (finding.triage_status or 'open')=='open' }}>{{ t('triage_open') }}</option>
+        <option value="false_positive" {{ 'selected' if finding.triage_status=='false_positive' }}>{{ t('triage_false_positive') }}</option>
+        <option value="accepted_risk" {{ 'selected' if finding.triage_status=='accepted_risk' }}>{{ t('triage_accepted_risk') }}</option>
+      </select>
+    </div>
+    <div class="field" style="flex:1;min-width:220px;">
+      <label>{{ t('field_triage_note') }}</label>
+      <input type="text" name="triage_note" value="{{ finding.triage_note or '' }}" placeholder="{{ t('triage_note_placeholder') }}">
+    </div>
+    <button class="btn btn-primary" type="submit">{{ t('btn_save_triage') }}</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

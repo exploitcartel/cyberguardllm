@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header">
+  <div><h1>{{ t('targets_title') }}</h1><p>{{ t('targets_sub') }}</p></div>
+  {% if user_role in ('administrator','global_administrator') %}
+  <a href="/targets/new" class="btn btn-primary">{{ t('add_target') }}</a>
+  {% endif %}
+</div>
+<div class="card">
+  <input type="text" placeholder="{{ t('search_placeholder') }}" oninput="filterTable(this, 'targetsTable')" style="margin-bottom:12px;max-width:320px;">
+  <table id="targetsTable">
+    <tr><th>{{ t('col_name') }}</th><th>{{ t('col_url') }}</th><th>{{ t('col_auth') }}</th><th>{{ t('col_format') }}</th><th>{{ t('col_status') }}</th><th>{{ t('col_actions') }}</th></tr>
+    {% for t_row in targets %}
+    <tr data-group="target-{{ t_row.id }}">
+      <td>{{ t_row.name }}</td>
+      <td>{{ t_row.url }}</td>
+      <td>{{ t_row.auth_scheme }}</td>
+      <td>{{ t_row.body_format }}</td>
+      <td><span class="badge badge-{{ t_row.status }}">{{ t_row.status }}</span></td>
+      <td>
+        <a href="/targets/{{ t_row.id }}/trend" class="btn" style="padding:5px 10px;">{{ t('btn_trend') }}</a>
+        {% if user_role in ('administrator','global_administrator') %}
+        <form method="post" action="/targets/{{ t_row.id }}/delete" style="display:inline;" onsubmit="return confirm('{{ t('confirm_delete_target') }}');">
+          <button type="submit" class="btn" style="padding:5px 10px;">{{ t('btn_delete') }}</button>
+        </form>
+        {% else %}
+        <span style="color:var(--text-muted);font-size:12px;">{{ t('view_only') }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% if user_role in ('administrator','global_administrator') %}
+    <tr data-group="target-{{ t_row.id }}">
+      <td colspan="6" style="padding-top:0;">
+        <form method="post" action="/targets/{{ t_row.id }}/context" style="display:flex;gap:8px;align-items:center;">
+          <label style="color:var(--text-muted);font-size:12px;white-space:nowrap;">{{ t('business_context_label') }}</label>
+          <input type="text" name="business_context" value="{{ t_row.business_context or '' }}" placeholder="{{ t('business_context_placeholder') }}" style="flex:1;">
+          <button class="btn" type="submit" style="padding:5px 10px;">{{ t('btn_save') }}</button>
+        </form>
+      </td>
+    </tr>
+    {% endif %}
+    {% else %}
+    <tr><td colspan="6" style="text-align:center;color:var(--text-muted);">{{ t('no_targets_yet') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
