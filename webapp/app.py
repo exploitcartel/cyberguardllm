@@ -835,9 +835,25 @@ def rules_page():
 
 @app.route("/rules/new", methods=["GET"])
 def rule_new():
+    from_finding_id = request.args.get("from_finding", type=int)
+    prefill = None
+    if from_finding_id:
+        conn = get_conn()
+        f = conn.execute("SELECT * FROM findings WHERE id=?", (from_finding_id,)).fetchone()
+        conn.close()
+        if f:
+            prefill = {
+                "rule_id": f"AI-PROMOTED-{f['id']}",
+                "owasp": f["owasp"],
+                "severity": f["severity"] or "medium",
+                "module": "Promoted from AI-Powered/PyRIT scan",
+                "technique": (f["module"] or "ai_promoted").lower().replace(" ", "_")[:40],
+                "prompt": f["prompt_sent"] or "",
+            }
     username, err = require_role("administrator")
     if err: return err
-    return render_template("rule_new.html", **ctx(active="rules", owasp_categories=list(OWASP_LABELS.keys())))
+    return render_template("rule_new.html", **ctx(active="rules", owasp_categories=list(OWASP_LABELS.keys()),
+                                                    prefill=prefill))
 
 
 @app.route("/rules/create", methods=["POST"])

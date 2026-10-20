@@ -15,6 +15,16 @@
     <pre>{{ finding.raw_response }}</pre>
   </div>
 </div>
+{% if finding.verdict == 'FAIL' and finding.source in ('ai_agent', 'pyrit') and user_role in ('administrator', 'global_administrator') %}
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">Promote to Static Rule</h3>
+  <p style="color:var(--text-muted);font-size:14.5px;">
+    This attack was generated live by the AI attacking agent. Promote it into the static OWASP payload library so
+    it reruns offline, with no AI API cost, on every future scan.
+  </p>
+  <a class="btn btn-primary" href="/rules/new?from_finding={{ finding.id }}">Promote to Rule</a>
+</div>
+{% endif %}
 {% if finding.verdict == 'FAIL' %}
 <div class="card" style="margin-top:16px;">
   <h3 style="margin-top:0;">{{ t('triage_title') }}</h3>
