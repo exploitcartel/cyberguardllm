@@ -53,7 +53,7 @@ def run_canary_checks(conn, result_id, target_row, wait_s=8):
     template. Returns the number of FAIL (proven real action) findings.
     """
     from storage.db import get_setting
-    from core.discovery import send_prompt
+    from core.discovery import send_prompt, is_transport_error
 
     base_url = (get_setting("canary_base_url", "") or "").rstrip("/")
     if not base_url:
@@ -73,6 +73,27 @@ def run_canary_checks(conn, result_id, target_row, wait_s=8):
         prompt = template.format(url=canary_url)
 
         response_text = send_prompt(target_row, prompt)
+
+        if is_transport_error(response_text):
+            # The prompt itself was never successfully delivered to the
+            # target (timeout/rate-limit/provider error, already retried in
+            # send_prompt). A "no canary hit" PASS here would be dishonest -
+            # it would read as "the target declined or can't reach the
+            # network" when actually we never even confirmed the target saw
+            # this request at all. Record it as its own ERROR instead of
+            # silently counting it as a clean result.
+            conn.execute(
+                """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
+                   description, module, source, recommendation)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (result_id, f"CANARY-{i}", "LLM06", "low", "ERROR", prompt, response_text,
+                 f"This canary prompt was never successfully delivered to the target ({response_text}). This is a "
+                 "scan/network issue, not a security result - no conclusion (PASS or FAIL) can be drawn from it. "
+                 "Re-run this scan once the target is reachable.",
+                 "Out-of-band Canary (LLM06)", "canary", ""),
+            )
+            conn.commit()
+            continue
 
         hit = None
         waited = 0.0
