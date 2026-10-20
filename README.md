@@ -1,14 +1,60 @@
-# CYBERGUARD LLM
+<a name="top"></a>
+<p align="center">
+  <img src="webapp/static/img/logo.png" alt="CyberGuard LLM" width="140">
+</p>
 
-CYBERGUARD LLM is a black-box security assessment platform for AI chatbots and LLM-backed agents. You give it a
-target URL and a session token, nothing else, and it automatically figures out how to talk to the target, runs a
-library of adversarial payloads mapped to the OWASP Top 10 for Large Language Model Applications, scores the result,
-and produces a detailed PDF report. It is built as a GVM/OpenVAS-style self-hosted web application: you run it
-locally (or on a server you control) and operate it entirely from the browser.
+<h1 align="center">CYBERGUARD LLM</h1>
+<p align="center"><b>Black-box security assessment platform for AI chatbots and LLM-backed agents</b></p>
+
+<p align="center">
+  <a href="#-setup"><img src="https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9+"></a>
+  <a href="#-setup"><img src="https://img.shields.io/badge/framework-Flask-000000?logo=flask&logoColor=white" alt="Flask"></a>
+  <img src="https://img.shields.io/badge/style-GVM%2FOpenVAS--style-0A66C2" alt="GVM/OpenVAS-style">
+  <img src="https://img.shields.io/badge/OWASP-LLM%20Top%2010-FF4500" alt="OWASP LLM Top 10">
+  <img src="https://img.shields.io/badge/deployment-self--hosted-brightgreen" alt="Self-hosted">
+  <img src="https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-0078D4" alt="OS support">
+</p>
+
+⭐ Star this repo if it's useful to you - it genuinely helps.
+
+You give CYBERGUARD LLM a target URL and a session token, nothing else. It figures out how to talk to the target,
+runs a library of adversarial payloads mapped to the OWASP Top 10 for Large Language Model Applications, scores the
+result, and produces a detailed PDF report. It is built as a GVM/OpenVAS-style self-hosted web application: you run
+it locally (or on a server you control) and operate it entirely from the browser.
 
 Built by [exploitcartel](https://github.com/exploitcartel).
 
-## What it actually does
+## Table of Contents
+
+- [🚀 Quickstart](#-quickstart)
+- [🧠 Features](#-features)
+- [🗂️ Project Structure](#-project-structure)
+- [📦 Setup](#-setup)
+- [🧭 Using It](#-using-it)
+- [🔒 Security Notes](#-security-notes)
+- [🤝 Feedback and Contributions](#-feedback-and-contributions)
+- [📃 License](#-license)
+- [🗨️ Contact](#-contact)
+
+## 🚀 Quickstart
+
+```bash
+git clone https://github.com/exploitcartel/cyberguardllm
+cd cyberguardllm
+./install.sh
+source venv/bin/activate
+python run.py
+```
+
+Open `http://127.0.0.1:8000` and log in with `admin` / `admin` (you'll be forced to change it immediately).
+
+`install.sh` creates an isolated virtual environment, installs the core app, installs Playwright's Chromium
+browser (for Browser-Assisted Discovery), and installs the two optional external pentest engines, garak and
+PyRIT. It never installs anything outside the venv, and it never silently falls back to your system Python - if a
+step can't complete it stops and tells you exactly what to run. Hit a problem? See [📦 Setup](#-setup) below for
+the full troubleshooting table.
+
+## 🧠 Features
 
 ### 1. Black-box auto-discovery
 
@@ -488,7 +534,7 @@ not again on a subsequent page load; the scan config form was confirmed to still
 correctly (including the three brand-new offline modules) after being restructured into sections; and the table
 filter grouping logic was unit-tested directly in Node to confirm a target's two rows stay together when filtered.
 
-## Project structure
+## 🗂️ Project Structure
 
 ```
 auth/            Authentication, password hashing, session cookies, RBAC role ranking
@@ -502,30 +548,10 @@ test_target.py   A small fake vulnerable chatbot server, useful for testing the 
 run.py           Entry point
 ```
 
-## Setup
+## 📦 Setup
 
-Requires Python 3.9+.
-
-### Quick start
-
-```bash
-git clone https://github.com/exploitcartel/cyberguardllm
-cd cyberguardllm
-./install.sh
-source venv/bin/activate
-python run.py
-```
-
-Open `http://127.0.0.1:8000` and log in with `admin` / `admin` (you'll be forced to change it immediately).
-
-`install.sh` does everything in one shot: creates an isolated virtual environment (`venv/`), installs the core
-app, installs Playwright's Chromium browser (needed only for Browser-Assisted Discovery), and then installs the
-two optional external pentest engines, garak and PyRIT (section 10). It never installs anything outside `venv/`,
-and it never silently falls back to your system Python - if a step can't complete, it stops and tells you exactly
-what to run to fix it. Safe to re-run any time, including after fixing something it flagged.
-
-If something still goes wrong, check the table below before asking anywhere else - these are the actual issues
-people have hit running this on a fresh Kali box, with the exact fix for each.
+Requires Python 3.9+. For the fastest path, see [🚀 Quickstart](#-quickstart) above - this section covers what to
+do when something in that path doesn't go smoothly.
 
 ### Common install problems
 
@@ -566,7 +592,7 @@ The `playwright install chromium` step, and `playwright` itself, is only require
 Discovery** (see below); every other feature in the app works without it, and nothing else in `requirements.txt`
 depends on it.
 
-## Using it
+## 🧭 Using It
 
 1. **Add a target**: go to Targets, click "Add Target" (Administrator role or higher). If you already know the
    chatbot's API URL and have a session token, give it a name, the URL and the token, click "Detect" to run
@@ -595,7 +621,7 @@ depends on it.
    and use "Test Proxy" to confirm it works.
 9. **Manage users** (Global Administrator): go to Settings to create new users and assign them a role.
 
-## Security notes
+## 🔒 Security Notes
 
 - All three signing/encryption keys are generated randomly on first run and persisted to local, gitignored key
   files, never hardcoded in source: the login-session signing key (`auth/auth.py` -> `auth_secret.key`), the
@@ -607,3 +633,28 @@ depends on it.
   the same as any other credential: don't share them, and generate fresh ones per install.
 - Target session tokens and the AI API key are stored encrypted at rest using Fernet symmetric encryption.
 - Only use CYBERGUARD LLM against targets you are authorized to test.
+
+## 🤝 Feedback and Contributions
+
+The core scan engine and rule library work end-to-end, but this is one person's project, not a maintained product
+with an SLA. What you run into on your own targets and your own setup is what can't be seen from here.
+
+> [!IMPORTANT]
+> Bug reports, false positives/negatives in a specific rule, install issues on a distro not covered above, or
+> ideas for new OWASP LLM Top 10 coverage are all genuinely useful. A report that names the exact command, the
+> Python version, and the OS is what turns a guess into a fix.
+
+Open an [issue](https://github.com/exploitcartel/cyberguardllm/issues) or send a pull request.
+
+## 📃 License
+
+No license file has been published for this repository yet - until one is added, all rights are reserved by the
+author and no reuse, redistribution, or modification is granted beyond viewing the source. Reach out (see
+Contact below) if you want to use this somewhere and need terms clarified.
+
+## 🗨️ Contact
+
+- GitHub: [exploitcartel](https://github.com/exploitcartel)
+- Issues and bug reports: [github.com/exploitcartel/cyberguardllm/issues](https://github.com/exploitcartel/cyberguardllm/issues)
+
+[Back to top](#top)
