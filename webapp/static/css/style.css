@@ -76,10 +76,10 @@ code{font-family:var(--mono);background:rgba(37,99,235,0.08);padding:1px 6px;bor
 
 .nav-item{
   display:flex;align-items:center;gap:12px;padding:12px 13px;border-radius:9px;
-  color:#8b93a7;font-size:16.5px;margin-bottom:2px;transition:all .15s;
+  color:#e5e9f0;font-size:16.5px;margin-bottom:2px;transition:all .15s;
   border:1px solid transparent;font-weight:500;
 }
-.nav-item svg{width:19px;height:19px;fill:currentColor;flex:0 0 auto;opacity:0.85;}
+.nav-item svg{width:19px;height:19px;fill:currentColor;flex:0 0 auto;opacity:0.95;}
 .nav-item:hover{background:var(--sidebar-hover);color:#fff;border-color:rgba(59,130,246,0.2);}
 .nav-item.active{
   background:linear-gradient(90deg, rgba(37,99,235,0.2), rgba(124,58,237,0.04));
