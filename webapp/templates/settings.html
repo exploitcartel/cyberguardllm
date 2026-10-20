@@ -8,6 +8,15 @@
 </div>
 {% endif %}
 
+<div class="tab-bar">
+  <a href="/settings?tab=account" class="{{ 'active' if active_tab=='account' }}">{{ t('tab_account') }}</a>
+  {% if user_role == 'global_administrator' %}
+  <a href="/settings?tab=users" class="{{ 'active' if active_tab=='users' }}">{{ t('tab_user_management') }}</a>
+  <a href="/settings?tab=scan" class="{{ 'active' if active_tab=='scan' }}">{{ t('tab_scan_settings') }}</a>
+  {% endif %}
+</div>
+
+{% if active_tab == 'account' %}
 <div class="grid grid-2">
   <div class="card">
     <h3 style="margin-top:0;">{{ t('change_password_title') }}</h3>
@@ -24,8 +33,9 @@
     <p style="color:var(--text-muted);font-size:14px;">{{ t('role_explanation') }}</p>
   </div>
 </div>
+{% endif %}
 
-{% if user_role == 'global_administrator' %}
+{% if user_role == 'global_administrator' and active_tab == 'users' %}
 <div class="card" style="margin-top:16px;">
   <h3 style="margin-top:0;">{{ t('user_management_title') }} <span class="badge badge-cgllm">{{ t('role_global_administrator') }}</span></h3>
   <div class="grid grid-2">
@@ -72,8 +82,10 @@
     </div>
   </div>
 </div>
+{% endif %}
 
-<div class="card" style="margin-top:16px;">
+{% if user_role == 'global_administrator' and active_tab == 'scan' %}
+<div class="card">
   <h3 style="margin-top:0;">{{ t('scan_engine_mode_title') }} <span class="badge badge-cgllm">{{ t('role_global_administrator') }}</span></h3>
   <p style="color:var(--text-muted);font-size:14.5px;">
     {{ t('scan_mode_explanation') }}

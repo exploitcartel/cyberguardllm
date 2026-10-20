@@ -905,8 +905,11 @@ def settings_page():
     users = conn.execute("SELECT * FROM users ORDER BY created_at").fetchall()
     conn.close()
     settings = get_all_settings()
+    active_tab = request.args.get("tab", "account")
+    if active_tab not in ("account", "users", "scan"):
+        active_tab = "account"
     return render_template("settings.html", **ctx(
-        active="settings", must_change=bool(user["must_change_password"]) if user else False,
+        active="settings", active_tab=active_tab, must_change=bool(user["must_change_password"]) if user else False,
         users=users, roles=ROLES, role_labels=ROLE_LABELS, settings=settings,
         proxy_test_result=None,
     ))
@@ -924,7 +927,7 @@ def change_password():
     conn.close()
     log_activity(username, "Password Changed", "")
     flash_t("flash_password_changed")
-    return redirect("/settings")
+    return redirect("/settings?tab=account")
 
 
 @app.route("/settings/users/create", methods=["POST"])
@@ -949,7 +952,7 @@ def user_create():
             log_activity(username, "User Created", f"{new_username} ({role})")
             flash_t("flash_user_created")
         conn.close()
-    return redirect("/settings")
+    return redirect("/settings?tab=users")
 
 
 @app.route("/settings/users/<int:user_id>/role", methods=["POST"])
@@ -967,7 +970,7 @@ def user_update_role(user_id):
     if target:
         log_activity(username, "User Role Changed", f"{target['username']} -> {role}")
         flash_t("flash_user_role_changed")
-    return redirect("/settings")
+    return redirect("/settings?tab=users")
 
 
 @app.route("/settings/users/<int:user_id>/delete", methods=["POST"])
@@ -982,7 +985,7 @@ def user_delete(user_id):
         log_activity(username, "User Deleted", target["username"])
         flash_t("flash_user_deleted")
     conn.close()
-    return redirect("/settings")
+    return redirect("/settings?tab=users")
 
 
 @app.route("/settings/scan-mode", methods=["POST"])
@@ -1007,7 +1010,7 @@ def settings_scan_mode():
         set_setting("ai_api_key_encrypted", encrypt_token(ai_api_key))
     log_activity(username, "Scan Mode Updated", scan_mode)
     flash_t("flash_scan_mode_updated")
-    return redirect("/settings")
+    return redirect("/settings?tab=scan")
 
 
 @app.route("/settings/proxy", methods=["POST"])
@@ -1020,7 +1023,7 @@ def settings_proxy():
     set_setting("proxy_url", proxy_url)
     log_activity(username, "Proxy Settings Updated", "enabled" if proxy_enabled == "1" else "disabled")
     flash_t("flash_proxy_updated")
-    return redirect("/settings")
+    return redirect("/settings?tab=scan")
 
 
 @app.route("/settings/stealth", methods=["POST"])
@@ -1040,7 +1043,7 @@ def settings_stealth():
     set_setting("stealth_rotate_ua", rotate_ua)
     log_activity(username, "Stealth Settings Updated", "enabled" if stealth_enabled == "1" else "disabled")
     flash_t("flash_stealth_updated")
-    return redirect("/settings")
+    return redirect("/settings?tab=scan")
 
 
 @app.route("/settings/canary", methods=["POST"])
@@ -1051,7 +1054,7 @@ def settings_canary():
     set_setting("canary_base_url", canary_base_url)
     log_activity(username, "Canary Settings Updated", canary_base_url or "(cleared)")
     flash_t("flash_canary_updated")
-    return redirect("/settings")
+    return redirect("/settings?tab=scan")
 
 
 @app.route("/canary/<token>", methods=["GET", "POST"])
@@ -1091,7 +1094,7 @@ def settings_proxy_test():
         ok, info = False, "No proxy URL configured."
     log_activity(username, "Proxy Test", info)
     return render_template("settings.html", **ctx(
-        active="settings", must_change=bool(user["must_change_password"]) if user else False,
+        active="settings", active_tab="scan", must_change=bool(user["must_change_password"]) if user else False,
         users=users, roles=ROLES, role_labels=ROLE_LABELS, settings=settings,
         proxy_test_result={"ok": ok, "info": info},
     ))
