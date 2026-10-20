@@ -128,18 +128,34 @@ def _evaluate_attempt(target, rule, ai_judge_cfg, min_confidence):
         probe_response, history = send_conversation_turn(target, probe_prompt, history)
         responses_log.append(("probe", probe_response))
 
-        verdict = evaluate_persistence(rule, probe_response)
         prompt_sent = "\n".join(f"[{label}] {text}" for label, text in turn_log)
         raw_response = "\n".join(f"[{label}] {text}" for label, text in responses_log)
+        if any(is_transport_error(resp) for _, resp in responses_log):
+            # At least one turn in this plant/filler/probe sequence never
+            # actually reached the target. evaluate_persistence() reads only
+            # the final probe_response, but even that alone can't be judged
+            # honestly if an earlier turn (planting the instruction, or a
+            # filler meant to separate it from the probe) failed - the
+            # whole point of this check is the SEQUENCE, not one message.
+            return ("ERROR", rule["severity"], None, prompt_sent, raw_response,
+                    " At least one turn in this sequence was never delivered to the target (network/rate-limit "
+                    "issue, already retried). No conclusion can be drawn from a broken sequence - re-run this scan "
+                    "once the target is reachable.")
+        verdict = evaluate_persistence(rule, probe_response)
     elif turns:
         history = []
         responses = []
         for turn_prompt in turns:
             response_text, history = send_conversation_turn(target, turn_prompt, history)
             responses.append(response_text)
-        verdict = evaluate_multiturn(rule, responses)
         prompt_sent = "\n".join(f"[Turn {idx}] {p}" for idx, p in enumerate(turns, start=1))
         raw_response = "\n".join(f"[Turn {idx}] {r}" for idx, r in enumerate(responses, start=1))
+        if any(is_transport_error(r) for r in responses):
+            return ("ERROR", rule["severity"], None, prompt_sent, raw_response,
+                    " At least one turn in this multi-turn sequence was never delivered to the target "
+                    "(network/rate-limit issue, already retried). No conclusion can be drawn from a broken "
+                    "sequence - re-run this scan once the target is reachable.")
+        verdict = evaluate_multiturn(rule, responses)
     else:
         response_text = send_prompt(target, rule["prompt"])
         verdict = evaluate(rule, response_text)

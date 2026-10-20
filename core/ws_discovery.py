@@ -141,27 +141,49 @@ def discover_ws(url: str, token: str, timeout: float = 10.0):
     return {"status": "failed", "log": results_log}
 
 
-def send_prompt_ws(target_row, prompt: str, timeout: float = 20.0):
+def send_prompt_ws(target_row, prompt: str, timeout: float = 20.0, max_retries: int = 2):
+    """
+    Retries up to max_retries additional times (exponential backoff: 2s,
+    4s, ...) on a connection/send/receive failure, matching the retry
+    behavior core/discovery.py's HTTP send_prompt() already has - without
+    this, a single transient WebSocket hiccup (a dropped connection, a
+    brief server restart) would fail this attempt outright instead of
+    getting a second chance, the same false-negative risk the HTTP path
+    had before today. Only returns the "[ERROR] ..." sentinel after
+    retries are exhausted.
+    """
     if not _available():
         return "[ERROR] the 'websockets' package is not installed (pip install -r requirements.txt)"
 
-    from core.crypto import decrypt_token
-    token = decrypt_token(target_row["token_encrypted"])
+    from core.crypto import decrypt_token, TokenDecryptionError
+    try:
+        token = decrypt_token(target_row["token_encrypted"])
+    except TokenDecryptionError as e:
+        return f"[ERROR] {e}"
     auth_mode = target_row["ws_auth_mode"] or "header"
     body_format = target_row["body_format"]
     template = BODY_FORMATS.get(body_format, BODY_FORMATS["message"])
     effective_url, connect_kwargs = _connect_kwargs(target_row["url"], token, auth_mode)
 
-    try:
-        with _open(effective_url, connect_kwargs, timeout) as ws:
-            if auth_mode == "first-message" and token:
-                try:
-                    ws.send(json.dumps({"token": token}))
-                    ws.recv(timeout=2.0)
-                except Exception:
-                    pass
-            body = _fill_body(template, prompt)
-            ws.send(json.dumps(body))
-            return _collect_responses(ws, window_s=min(timeout, RECV_WINDOW_S)) or "(no reply received)"
-    except Exception as e:
-        return f"[ERROR] {e}"
+    delay = 2.0
+    last_error = "[ERROR] unknown failure"
+    for attempt in range(max_retries + 1):
+        try:
+            with _open(effective_url, connect_kwargs, timeout) as ws:
+                if auth_mode == "first-message" and token:
+                    try:
+                        ws.send(json.dumps({"token": token}))
+                        ws.recv(timeout=2.0)
+                    except Exception:
+                        pass
+                body = _fill_body(template, prompt)
+                ws.send(json.dumps(body))
+                return _collect_responses(ws, window_s=min(timeout, RECV_WINDOW_S)) or "(no reply received)"
+        except Exception as e:
+            last_error = f"[ERROR] {e}"
+            if attempt < max_retries:
+                time.sleep(delay)
+                delay *= 2
+                continue
+            return last_error
+    return last_error

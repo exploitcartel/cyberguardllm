@@ -344,8 +344,11 @@ def send_prompt(target_row, prompt: str, timeout: float = 20.0, max_retries: int
         from core.socketio_discovery import send_prompt_socketio
         return send_prompt_socketio(target_row, prompt, timeout=timeout)
 
-    from core.crypto import decrypt_token
-    token = decrypt_token(target_row["token_encrypted"])
+    from core.crypto import decrypt_token, TokenDecryptionError
+    try:
+        token = decrypt_token(target_row["token_encrypted"])
+    except TokenDecryptionError as e:
+        return f"[ERROR] {e}"
     auth_scheme = target_row["auth_scheme"]
     body_format = target_row["body_format"]
     response_field = target_row["response_field"]
@@ -434,8 +437,11 @@ def send_conversation_turn(target_row, prompt: str, history: list, timeout: floa
     body_format = target_row["body_format"]
 
     if body_format == "messages":
-        from core.crypto import decrypt_token
-        token = decrypt_token(target_row["token_encrypted"])
+        from core.crypto import decrypt_token, TokenDecryptionError
+        try:
+            token = decrypt_token(target_row["token_encrypted"])
+        except TokenDecryptionError as e:
+            return f"[ERROR] {e}", history
         auth_scheme = target_row["auth_scheme"]
         response_field = target_row["response_field"]
         headers = _apply_stealth(_build_headers(auth_scheme, token))
