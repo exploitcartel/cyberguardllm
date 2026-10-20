@@ -127,10 +127,21 @@
   {% endif %}
   <div class="card">
     <h3 style="margin-top:0;">{{ t('existing_configs') }}</h3>
+    {% if user_role in ('administrator','global_administrator') %}
+    <div id="configsToolbar" style="display:none;margin-bottom:12px;flex-direction:row;align-items:center;gap:14px;flex-wrap:wrap;">
+      <strong id="configsSelectedCount" style="color:var(--text);"></strong>
+      <button type="button" id="btnDeleteConfigs" class="btn btn-danger" style="padding:7px 12px;">{{ t('btn_delete') }}</button>
+    </div>
+    {% endif %}
     <table>
-      <tr><th>{{ t('col_name') }}</th><th>{{ t('col_categories') }}</th><th>{{ t('col_mode') }}</th><th style="width:60px;"></th></tr>
+      <tr>
+        {% if user_role in ('administrator','global_administrator') %}<th style="width:34px;"><input type="checkbox" id="configsSelectAll"></th>{% endif %}
+        <th>{{ t('col_name') }}</th><th>{{ t('col_categories') }}</th><th>{{ t('col_mode') }}</th><th style="width:60px;"></th>
+      </tr>
       {% for c in configs %}
-      <tr><td id="cfg-name-{{ c.id }}">{{ c.name }}</td><td>{{ c.categories }}</td><td>
+      <tr>
+        {% if user_role in ('administrator','global_administrator') %}<td><input type="checkbox" class="config-check" value="{{ c.id }}"></td>{% endif %}
+        <td id="cfg-name-{{ c.id }}">{{ c.name }}</td><td>{{ c.categories }}</td><td>
         {% if c.ai_powered %}<span class="badge badge-cgllm">AI-Powered</span>{% else %}<span class="badge badge-source">Offline</span>{% endif %}
         {% if c.enable_static is none or c.enable_static %}
         <span class="badge badge-{{ 'critical' if c.scan_level == 'aggressive' else ('high' if c.scan_level == 'medium' else 'low') }}">Static: {{ (c.scan_level or 'low') | capitalize }}</span>
@@ -165,13 +176,27 @@
       </td>
       </tr>
       {% else %}
-      <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">{{ t('no_configs_yet') }}</td></tr>
+      <tr><td colspan="5" style="text-align:center;color:var(--text-muted);">{{ t('no_configs_yet') }}</td></tr>
       {% endfor %}
     </table>
   </div>
 </div>
 
 <script>
+{% if user_role in ('administrator','global_administrator') %}
+initBulkSelect({
+  checkboxSelector: '.config-check',
+  selectAllId: 'configsSelectAll',
+  toolbarId: 'configsToolbar',
+  countId: 'configsSelectedCount',
+  countOneText: '{{ t("results_selected_one") }}',
+  countManyText: '{{ t("results_selected_many") }}',
+  deleteBtnId: 'btnDeleteConfigs',
+  deleteUrl: '/scan-configs/delete',
+  deleteFieldName: 'config_ids',
+  confirmMsg: '{{ t("confirm_delete_configs") }}'
+});
+{% endif %}
 const countsByLevel = {{ counts_by_level | tojson }};
 function updateCategoryCounts(level){
   const counts = countsByLevel[level] || {};

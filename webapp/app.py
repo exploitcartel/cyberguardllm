@@ -393,6 +393,28 @@ def target_delete(target_id):
     return redirect("/targets")
 
 
+@app.route("/targets/delete", methods=["POST"])
+def targets_bulk_delete():
+    username, err = require_role("administrator")
+    if err: return err
+    ids = [int(x) for x in request.form.getlist("target_ids") if x.strip().isdigit()]
+    if not ids:
+        flash("No targets selected.", "error")
+        return redirect("/targets")
+    conn = get_conn()
+    placeholders = ",".join("?" * len(ids))
+    rows = conn.execute(f"SELECT id, name FROM targets WHERE id IN ({placeholders})", ids).fetchall()
+    if rows:
+        found_ids = [r["id"] for r in rows]
+        fplaceholders = ",".join("?" * len(found_ids))
+        conn.execute(f"DELETE FROM targets WHERE id IN ({fplaceholders})", found_ids)
+        conn.commit()
+        log_activity(username, "Target(s) Deleted", f"{len(rows)} target(s): {', '.join(r['name'] for r in rows)}")
+        flash(f"Deleted {len(rows)} target(s).", "success")
+    conn.close()
+    return redirect("/targets")
+
+
 def _external_tool_status():
     garak_ok = pyrit_ok = False
     try:
@@ -519,6 +541,37 @@ def scan_config_delete(config_id):
     return redirect("/scan-configs")
 
 
+@app.route("/scan-configs/delete", methods=["POST"])
+def scan_configs_bulk_delete():
+    username, err = require_role("administrator")
+    if err: return err
+    ids = [int(x) for x in request.form.getlist("config_ids") if x.strip().isdigit()]
+    if not ids:
+        flash("No scan configs selected.", "error")
+        return redirect("/scan-configs")
+    conn = get_conn()
+    placeholders = ",".join("?" * len(ids))
+    rows = conn.execute(f"SELECT id, name FROM scan_configs WHERE id IN ({placeholders})", ids).fetchall()
+    deletable, blocked = [], []
+    for row in rows:
+        in_use = conn.execute("SELECT COUNT(*) AS c FROM tasks WHERE scan_config_id=?", (row["id"],)).fetchone()["c"]
+        (blocked if in_use > 0 else deletable).append(row)
+    if deletable:
+        dplaceholders = ",".join("?" * len(deletable))
+        conn.execute(f"DELETE FROM scan_configs WHERE id IN ({dplaceholders})", [r["id"] for r in deletable])
+        conn.commit()
+        log_activity(username, "Config(s) Deleted", f"{len(deletable)} config(s): {', '.join(r['name'] for r in deletable)}")
+    conn.close()
+    if deletable and not blocked:
+        flash(f"Deleted {len(deletable)} scan config(s).", "success")
+    elif deletable and blocked:
+        flash(f"Deleted {len(deletable)} config(s). Skipped {len(blocked)} still referenced by tasks: "
+              f"{', '.join(r['name'] for r in blocked)}.", "error")
+    else:
+        flash(f"Could not delete: all {len(blocked)} selected config(s) are still referenced by tasks.", "error")
+    return redirect("/scan-configs")
+
+
 @app.route("/tasks", methods=["GET"])
 def tasks_page():
     username, err = require_login()
@@ -620,6 +673,35 @@ def results_page():
                                ORDER BY sr.timestamp DESC""").fetchall()
     conn.close()
     return render_template("results.html", **ctx(active="results", results=results))
+
+
+@app.route("/results/delete", methods=["POST"])
+def results_delete():
+    username, err = require_role("administrator")
+    if err: return err
+    ids = [int(x) for x in request.form.getlist("result_ids") if x.strip().isdigit()]
+    if not ids:
+        flash("No scan results selected.", "error")
+        return redirect("/results")
+    conn = get_conn()
+    placeholders = ",".join("?" * len(ids))
+    found_ids = [r["id"] for r in conn.execute(
+        f"SELECT id FROM scan_results WHERE id IN ({placeholders})", ids).fetchall()]
+    if found_ids:
+        fplaceholders = ",".join("?" * len(found_ids))
+        # scan_results has no DB-level ON DELETE CASCADE, so findings and
+        # attack_chains for these results are removed explicitly first; a
+        # task that produced one of these results has its result_id cleared
+        # rather than left pointing at a now-missing row.
+        conn.execute(f"DELETE FROM findings WHERE scan_result_id IN ({fplaceholders})", found_ids)
+        conn.execute(f"DELETE FROM attack_chains WHERE scan_result_id IN ({fplaceholders})", found_ids)
+        conn.execute(f"UPDATE tasks SET result_id=NULL WHERE result_id IN ({fplaceholders})", found_ids)
+        conn.execute(f"DELETE FROM scan_results WHERE id IN ({fplaceholders})", found_ids)
+        conn.commit()
+        log_activity(username, "Scan Result(s) Deleted", f"{len(found_ids)} result(s): {', '.join(map(str, found_ids))}")
+        flash(f"Deleted {len(found_ids)} scan result(s).", "success")
+    conn.close()
+    return redirect("/results")
 
 
 @app.route("/results/<int:result_id>")
@@ -914,6 +996,28 @@ def rule_delete(custom_id):
     if row:
         log_activity(username, "Custom Rule Deleted", row["rule_id"])
         flash_t("flash_rule_deleted")
+    return redirect("/rules")
+
+
+@app.route("/rules/custom/delete", methods=["POST"])
+def rules_bulk_delete():
+    username, err = require_role("administrator")
+    if err: return err
+    ids = [int(x) for x in request.form.getlist("custom_ids") if x.strip().isdigit()]
+    if not ids:
+        flash("No custom rules selected.", "error")
+        return redirect("/rules")
+    conn = get_conn()
+    placeholders = ",".join("?" * len(ids))
+    rows = conn.execute(f"SELECT id, rule_id FROM custom_rules WHERE id IN ({placeholders})", ids).fetchall()
+    if rows:
+        found_ids = [r["id"] for r in rows]
+        fplaceholders = ",".join("?" * len(found_ids))
+        conn.execute(f"DELETE FROM custom_rules WHERE id IN ({fplaceholders})", found_ids)
+        conn.commit()
+        log_activity(username, "Custom Rule(s) Deleted", f"{len(rows)} rule(s): {', '.join(r['rule_id'] for r in rows)}")
+        flash(f"Deleted {len(rows)} custom rule(s).", "success")
+    conn.close()
     return redirect("/rules")
 
 

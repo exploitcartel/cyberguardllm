@@ -1,12 +1,20 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-header"><div><h1>{{ t('rules_title') }}</h1><p>{{ rules|length }} {{ t('rules_sub_suffix') }}</p></div><a href="/rules/new" class="btn btn-primary">{{ t('btn_add_custom_rule') }}</a></div>
+
+<div id="rulesToolbar" class="card" style="display:none;margin-bottom:14px;flex-direction:row;align-items:center;gap:14px;flex-wrap:wrap;">
+  <strong id="rulesSelectedCount" style="color:var(--text);"></strong>
+  <button type="button" id="btnDeleteRules" class="btn btn-danger" style="padding:7px 12px;margin-left:auto;">{{ t('btn_delete') }}</button>
+</div>
+
 <div class="card">
   <input type="text" placeholder="{{ t('search_placeholder') }}" oninput="filterTable(this, 'rulesTable')" style="margin-bottom:12px;max-width:320px;">
+  <p style="color:var(--text-muted);font-size:13.5px;margin-top:0;">{{ t('rules_bulk_hint') }}</p>
   <table id="rulesTable">
-    <tr><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_source') }}</th><th>{{ t('col_severity') }}</th><th>{{ t('col_prompt') }}</th><th></th></tr>
+    <tr><th style="width:34px;"><input type="checkbox" id="rulesSelectAll"></th><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_source') }}</th><th>{{ t('col_severity') }}</th><th>{{ t('col_prompt') }}</th><th></th></tr>
     {% for r in rules %}
     <tr>
+      <td>{% if r.source == 'custom_ui' %}<input type="checkbox" class="rule-check" value="{{ r._custom_db_id }}">{% endif %}</td>
       <td style="font-family:var(--mono);">{{ r.id }}</td><td>{{ r.owasp }}</td>
       <td>
         {% if r.source == 'cgllm_research' %}
@@ -36,4 +44,19 @@
     {% endfor %}
   </table>
 </div>
+
+<script>
+initBulkSelect({
+  checkboxSelector: '.rule-check',
+  selectAllId: 'rulesSelectAll',
+  toolbarId: 'rulesToolbar',
+  countId: 'rulesSelectedCount',
+  countOneText: '{{ t("results_selected_one") }}',
+  countManyText: '{{ t("results_selected_many") }}',
+  deleteBtnId: 'btnDeleteRules',
+  deleteUrl: '/rules/custom/delete',
+  deleteFieldName: 'custom_ids',
+  confirmMsg: '{{ t("confirm_delete_rules") }}'
+});
+</script>
 {% endblock %}

@@ -125,6 +125,84 @@ function filterTable(inputEl, tableId){
     row.style.display = show ? '' : 'none';
   });
 }
+function initBulkSelect(opts){
+  // Shared "select rows with checkboxes, then act on the selection" wiring
+  // used by every list page (results, targets, scan configs, custom rules).
+  // opts:
+  //   checkboxSelector  - CSS selector for the row checkboxes, e.g. '.result-check'
+  //   selectAllId       - id of the header "select all" checkbox (optional)
+  //   toolbarId         - id of the toolbar container shown once >=1 row is checked
+  //   countId           - id of the element that shows "N selected"
+  //   countOneText / countManyText - label text for 1 vs N selected
+  //   exportLinks       - optional [{id, urlBuilder(id)}], shown only when exactly 1 row is checked
+  //   exportWrapId      - id of the element wrapping the export links
+  //   deleteBtnId       - id of the bulk "Delete" button (optional)
+  //   deleteUrl         - POST target for bulk delete
+  //   deleteFieldName   - form field name each selected id is posted under
+  //   confirmMsg        - confirm() text before submitting the bulk delete
+  const toolbar = document.getElementById(opts.toolbarId);
+  const countEl = document.getElementById(opts.countId);
+  const selectAll = opts.selectAllId ? document.getElementById(opts.selectAllId) : null;
+  if(!toolbar || !countEl) return function(){};
+
+  function getChecked(){
+    return Array.from(document.querySelectorAll(opts.checkboxSelector + ':checked'));
+  }
+  function refresh(){
+    const boxes = getChecked();
+    const all = document.querySelectorAll(opts.checkboxSelector);
+    if(selectAll) selectAll.checked = all.length > 0 && boxes.length === all.length;
+    if(boxes.length === 0){ toolbar.style.display = 'none'; return; }
+    toolbar.style.display = 'flex';
+    countEl.textContent = boxes.length === 1 ? opts.countOneText : (boxes.length + ' ' + opts.countManyText);
+    if(opts.exportLinks && opts.exportWrapId){
+      const wrap = document.getElementById(opts.exportWrapId);
+      if(wrap){
+        if(boxes.length === 1){
+          const id = boxes[0].value;
+          opts.exportLinks.forEach(function(link){
+            const el = document.getElementById(link.id);
+            if(el) el.href = link.urlBuilder(id);
+          });
+          wrap.style.display = 'flex';
+        } else {
+          wrap.style.display = 'none';
+        }
+      }
+    }
+  }
+  document.querySelectorAll(opts.checkboxSelector).forEach(function(cb){
+    cb.addEventListener('change', refresh);
+  });
+  if(selectAll){
+    selectAll.addEventListener('change', function(){
+      document.querySelectorAll(opts.checkboxSelector).forEach(function(cb){ cb.checked = selectAll.checked; });
+      refresh();
+    });
+  }
+  const deleteBtn = opts.deleteBtnId ? document.getElementById(opts.deleteBtnId) : null;
+  if(deleteBtn){
+    deleteBtn.addEventListener('click', function(){
+      const boxes = getChecked();
+      if(boxes.length === 0) return;
+      if(!confirm(opts.confirmMsg)) return;
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = opts.deleteUrl;
+      boxes.forEach(function(cb){
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = opts.deleteFieldName;
+        inp.value = cb.value;
+        form.appendChild(inp);
+      });
+      document.body.appendChild(form);
+      form.submit();
+    });
+  }
+  refresh();
+  return refresh;
+}
 (function(){
   const stack = document.getElementById('toastStack');
   if(!stack) return;
