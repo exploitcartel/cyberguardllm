@@ -173,6 +173,7 @@ tr:hover td{background:rgba(37,99,235,0.05);}
 .badge-triage-accepted_risk{background:rgba(124,58,237,0.15);color:#a78bfa;}
 .badge-source{background:rgba(124,58,237,0.15);color:#a78bfa;}
 .badge-cgllm{background:linear-gradient(135deg, rgba(124,58,237,0.22), rgba(37,99,235,0.22));color:#c4b5fd;border:1px solid rgba(124,58,237,0.3);}
+.badge-public-research{background:linear-gradient(135deg, rgba(16,185,129,0.22), rgba(37,99,235,0.18));color:#6ee7b7;border:1px solid rgba(16,185,129,0.3);cursor:help;}
 
 /* Light theme: the colors above are tuned for the dark panel background and
    read as washed-out pastel text on the white light-theme panel. Darken the
@@ -196,6 +197,7 @@ body:not(.dark) .badge-triage-false_positive{background:rgba(148,163,184,0.22);c
 body:not(.dark) .badge-triage-accepted_risk{background:rgba(124,58,237,0.14);color:#6d28d9;}
 body:not(.dark) .badge-source{background:rgba(124,58,237,0.14);color:#6d28d9;}
 body:not(.dark) .badge-cgllm{background:linear-gradient(135deg, rgba(124,58,237,0.14), rgba(37,99,235,0.14));color:#5b21b6;border-color:rgba(124,58,237,0.35);}
+body:not(.dark) .badge-public-research{background:linear-gradient(135deg, rgba(16,185,129,0.14), rgba(37,99,235,0.1));color:#047857;border-color:rgba(16,185,129,0.35);}
 
 input, select, textarea{width:100%;padding:12px 14px;border-radius:9px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:15px;font-family:var(--font);}
 textarea{min-height:140px;line-height:1.5;resize:vertical;}

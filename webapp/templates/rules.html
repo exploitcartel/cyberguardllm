@@ -21,6 +21,8 @@
         <span class="badge badge-cgllm">★ {{ r.module or 'CYBERGUARD LLM Research' }}</span>
         {% elif r.source == 'custom_ui' %}
         <span class="badge badge-triage-accepted_risk">{{ t('custom_rule_badge') }}{{ ' - ' ~ r.module if r.module }}</span>
+        {% elif r.source == 'public_research' %}
+        <span class="badge badge-public-research" {% if r.origin %}title="{{ r.origin }}"{% endif %}>🌐 {{ r.module or 'Public Jailbreak Corpus' }}</span>
         {% else %}
         <span class="badge badge-source">{{ r.source }}</span>
         {% endif %}
