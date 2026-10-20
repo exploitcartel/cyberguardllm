@@ -187,6 +187,12 @@ _MIGRATIONS = [
     ("targets", "business_context", "TEXT"),
     ("scan_configs", "enable_fingerprint", "INTEGER DEFAULT 0"),
     ("scan_configs", "enable_session_isolation", "INTEGER DEFAULT 0"),
+    # Operator control signal for an in-progress scan: 'run' (default),
+    # 'pause' (the runner finishes its current in-flight request then idles
+    # until this flips back to 'run'), or 'stop' (the runner finishes its
+    # current in-flight request, saves everything completed so far, and
+    # ends the scan early instead of running the remaining payloads).
+    ("tasks", "control", "TEXT DEFAULT 'run'"),
 ]
 
 

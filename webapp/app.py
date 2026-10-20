@@ -520,8 +520,40 @@ def scan_live(task_id):
 def api_scan_status(task_id):
     progress = get_task_progress(task_id)
     if not progress:
-        return {"status": "unknown", "total": 0, "done": 0, "findings": 0, "result_id": None}
+        return {"status": "unknown", "total": 0, "done": 0, "findings": 0, "result_id": None, "control": "run"}
     return progress
+
+
+def _set_task_control(task_id, control, action_label):
+    # Operators are allowed to control a running scan (pause/resume/stop),
+    # same role bar as starting one.
+    username, err = require_role("operator")
+    if err: return err
+    conn = get_conn()
+    task = conn.execute("SELECT status FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if not task or task["status"] != "running":
+        conn.close()
+        return jsonify({"ok": False, "error": "Task is not running"}), 409
+    conn.execute("UPDATE tasks SET control=? WHERE id=?", (control, task_id))
+    conn.commit()
+    conn.close()
+    log_activity(username, action_label, f"Task #{task_id}")
+    return jsonify({"ok": True, "control": control})
+
+
+@app.route("/tasks/<int:task_id>/pause", methods=["POST"])
+def tasks_pause(task_id):
+    return _set_task_control(task_id, "pause", "Scan Paused")
+
+
+@app.route("/tasks/<int:task_id>/resume", methods=["POST"])
+def tasks_resume(task_id):
+    return _set_task_control(task_id, "run", "Scan Resumed")
+
+
+@app.route("/tasks/<int:task_id>/stop", methods=["POST"])
+def tasks_stop(task_id):
+    return _set_task_control(task_id, "stop", "Scan Stopped")
 
 
 @app.route("/results")
