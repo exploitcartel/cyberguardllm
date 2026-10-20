@@ -436,6 +436,7 @@ def scan_config_create():
     if err: return err
     name = request.form.get("name")
     categories = request.form.getlist("categories")
+    ai_categories = request.form.getlist("ai_categories")
     ai_powered = 1 if request.form.get("ai_powered") == "on" else 0
     scan_level = request.form.get("scan_level", "low")
     if scan_level not in ("low", "medium", "aggressive"):
@@ -470,11 +471,13 @@ def scan_config_create():
     conn.execute(
         """INSERT INTO scan_configs (name, categories, ai_powered, use_garak, garak_probes, use_pyrit,
            pyrit_objectives, mutation_techniques, enable_retest, retest_count, enable_canary, enable_recon,
-           ai_max_attempts, enable_fingerprint, enable_session_isolation, scan_level, enable_static, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           ai_max_attempts, enable_fingerprint, enable_session_isolation, scan_level, enable_static, ai_categories,
+           created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (name, ",".join(categories), ai_powered, use_garak, ",".join(garak_probes), use_pyrit,
          ",".join(pyrit_objectives), ",".join(mutation_techniques), enable_retest, retest_count, enable_canary,
-         enable_recon, ai_max_attempts, enable_fingerprint, enable_session_isolation, scan_level, enable_static, now()),
+         enable_recon, ai_max_attempts, enable_fingerprint, enable_session_isolation, scan_level, enable_static,
+         ",".join(ai_categories), now()),
     )
     conn.commit()
     conn.close()

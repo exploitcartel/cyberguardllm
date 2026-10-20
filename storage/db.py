@@ -203,6 +203,12 @@ _MIGRATIONS = [
     # a config that should run AI-Powered mode and/or garak/PyRIT only,
     # without having to uncheck every OWASP category one by one.
     ("scan_configs", "enable_static", "INTEGER DEFAULT 1"),
+    # Separate OWASP category selection for AI-Powered mode, independent of
+    # "categories" (which drives the static payload engine). A config can
+    # target different categories with the AI attacking agent than it does
+    # with static payloads - e.g. static on everything, AI-Powered only on
+    # the categories worth the extra API cost.
+    ("scan_configs", "ai_categories", "TEXT"),
 ]
 
 

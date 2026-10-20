@@ -472,6 +472,19 @@ def _execute(task_id: int):
     target = conn.execute("SELECT * FROM targets WHERE id=?", (task["target_id"],)).fetchone()
     config = conn.execute("SELECT * FROM scan_configs WHERE id=?", (task["scan_config_id"],)).fetchone()
     categories = [c.strip() for c in (config["categories"] or "").split(",") if c.strip()]
+    # AI-Powered mode has its own, independent OWASP category selection
+    # (scan_configs.ai_categories) so a config can target different
+    # categories with the AI attacking agent than it does with static
+    # payloads, rather than the two sharing one list.
+    ai_categories_raw = config["ai_categories"] if "ai_categories" in config.keys() else None
+    if ai_categories_raw is None:
+        # Configs created before ai_categories existed have no value here at
+        # all (NULL, migration default) - fall back to the shared static
+        # categories so an older config's AI-Powered mode keeps working
+        # exactly as before instead of silently testing zero categories.
+        ai_categories = list(categories)
+    else:
+        ai_categories = [c.strip() for c in ai_categories_raw.split(",") if c.strip()]
 
     global_mode = get_setting("scan_mode", "offline")
     ai_powered = bool(config["ai_powered"]) or global_mode == "ai_powered"
@@ -488,7 +501,7 @@ def _execute(task_id: int):
     stopped = False
     try:
         if ai_powered:
-            stopped = _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=config["ai_max_attempts"])
+            stopped = _run_ai_powered(conn, task_id, result_id, target, ai_categories, max_attempts=config["ai_max_attempts"])
         else:
             stopped = _run_static(conn, task_id, result_id, target, categories, config)
     except Exception as e:
