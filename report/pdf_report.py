@@ -218,11 +218,9 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
     tmp_dir = os.path.dirname(output_path) or "."
     pie_path = os.path.join(tmp_dir, f"_pie_{scan_result['id']}.png")
     bar_path = os.path.join(tmp_dir, f"_bar_{scan_result['id']}.png")
-    brain_cover_path = os.path.join(tmp_dir, f"_brain_cover_{scan_result['id']}.png")
     brain_section_path = os.path.join(tmp_dir, f"_brain_section_{scan_result['id']}.png")
     make_severity_pie(severity_breakdown_data, pie_path)
     make_owasp_bar(owasp_breakdown_data, bar_path)
-    make_brain_graphic(brain_cover_path, seed=scan_result["id"] or 1)
     make_brain_graphic(brain_section_path, seed=(scan_result["id"] or 1) + 1000,
                         accent="#378ADD", accent2="#E24B4A", glow="#EF9F27")
 
@@ -243,8 +241,7 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
     elements = []
 
     # ---------- Page 1: Cover ----------
-    elements.append(Spacer(1, 0.8 * cm))
-    elements.append(Image(brain_cover_path, width=6 * cm, height=6 * cm, hAlign="CENTER"))
+    elements.append(Spacer(1, 2 * cm))
     if os.path.exists(LOGO_PATH):
         elements.append(Image(LOGO_PATH, width=2.2 * cm, height=2.2 * cm, hAlign="CENTER"))
     elements.append(Spacer(1, 0.4 * cm))
@@ -520,6 +517,5 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
 
     os.remove(pie_path)
     os.remove(bar_path)
-    os.remove(brain_cover_path)
     os.remove(brain_section_path)
     return output_path
