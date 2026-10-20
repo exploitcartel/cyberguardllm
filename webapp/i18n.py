@@ -167,31 +167,40 @@ TRANSLATIONS = {
               "dhenat e njeri-tjetrit, por eshte parakushti per ate lloj problemi (LLM02)."},
     "btn_save_config": {"en": "Save Configuration", "al": "Ruaj Konfigurimin"},
     "existing_configs": {"en": "Existing configs", "al": "Konfigurime ekzistuese"},
-    "use_garak_checkbox_label": {"en": "Also run Garak module (external, NVIDIA's garak)",
-                                  "al": "Ekzekuto gjithashtu modulin Garak (i jashtëm, garak nga NVIDIA)"},
+    "use_garak_checkbox_label": {"en": "Run Garak module (external, NVIDIA's garak) - offline, no AI API needed",
+                                  "al": "Ekzekuto modulin Garak (i jashtëm, garak nga NVIDIA) - offline, s'ka nevojë për AI API"},
     "garak_module_explanation": {
-        "en": "Runs a curated set of garak's own probes against this target through its real auth/body config, "
-              "in addition to CYBERGUARD LLM's own rule library. Requires garak installed (pip install -r "
-              "requirements.txt). Findings are marked source 'garak' and should be verified manually, since "
-              "garak's detector heuristics can produce false positives.",
-        "al": "Ekzekuton një grup të zgjedhur prob-esh nga vet garak kundrejt ketë target, duke "
-              "përdorur auth/body config-un real të tij, përveç librarë së rregullave të "
-              "CYBERGUARD LLM. Kërkon garak të instaluar (pip install -r requirements.txt). Gjetjet "
-              "shënohen me burim 'garak' dhe duhen verifikuar manualisht, pasi heuristikat e detektorëve të garak "
-              "mund të prodhojnë false positive."},
+        "en": "Runs a curated set of garak's own probes directly against this target through its real auth/body "
+              "config - a fully standalone test, independent of the static payload scan above (turn that off "
+              "if you want garak only). Purely offline: garak's own detectors here are heuristic/substring "
+              "checks, no AI API key or model of any kind is called. Requires garak installed "
+              "(pip install -r requirements.txt). Findings are marked source 'garak' and should be verified "
+              "manually, since garak's detector heuristics can produce false positives.",
+        "al": "Ekzekuton një grup të zgjedhur prob-esh nga vet garak direkt kundrejt këtij targeti, duke "
+              "përdorur auth/body config-un real të tij - test krejtësisht i pavarur, pa lidhje me skanimin "
+              "statik më sipër (fike atë nëse don vetëm garak). Tërësisht offline: detektorët e garak këtu janë "
+              "kontrolle heuristike/substring, s'thirret asnjë AI API key apo model. Kërkon garak të instaluar "
+              "(pip install -r requirements.txt). Gjetjet shënohen me burim 'garak' dhe duhen verifikuar "
+              "manualisht, pasi heuristikat e detektorëve të garak mund të prodhojnë false positive."},
     "garak_extra_probes_label": {"en": "Advanced: extra garak probe names (comma-separated, any installed probe)",
                                   "al": "Të përparuara: emra shtesë probe-sh garak (ndarë me presje, çdo probe i instaluar)"},
-    "use_pyrit_checkbox_label": {"en": "Also run PyRIT module (external, Microsoft PyRIT)",
-                                  "al": "Ekzekuto gjithashtu modulin PyRIT (i jashtëm, Microsoft PyRIT)"},
+    "use_pyrit_checkbox_label": {"en": "Run PyRIT module (external, Microsoft PyRIT) - requires AI API",
+                                  "al": "Ekzekuto modulin PyRIT (i jashtëm, Microsoft PyRIT) - kërkon AI API"},
     "pyrit_module_explanation": {
-        "en": "Runs Microsoft PyRIT's adaptive multi-turn attack (Crescendo) for the selected objectives against "
-              "this target, then judges the resulting conversation with CYBERGUARD LLM's own AI judge. Requires "
-              "PyRIT installed AND an AI API key configured under Settings, since that model drives both the "
-              "adaptive attacker and the judge.",
-        "al": "Ekzekuton sulmin adaptiv shumë-turnor të Microsoft PyRIT (Crescendo) për objektivat e "
-              "zgjedhur kundrejt këtij targeti, pastaj gjykon bisedën me gjykatësin AI të vetë CYBERGUARD LLM. "
-              "Kërkon PyRIT të instaluar DHE një AI API key të konfiguruar te Settings, pasi "
-              "ai model drejton si sulmuesin adaptiv ashtu edhe gjykatësin."},
+        "en": "Runs Microsoft PyRIT's adaptive multi-turn attack (Crescendo) directly against this target for "
+              "the selected objectives - a fully standalone test, independent of the static payload scan above "
+              "(turn that off if you want PyRIT only). The AI API requirement is not something this app adds: "
+              "Crescendo is an LLM that decides each next message by reading the target's previous reply, and "
+              "the resulting conversation is judged by an LLM too, so a real model is unavoidable for this "
+              "specific technique, the same as using PyRIT directly. Requires PyRIT installed AND an AI API "
+              "key configured under Settings.",
+        "al": "Ekzekuton sulmin adaptiv shumë-turnor të Microsoft PyRIT (Crescendo) direkt kundrejt këtij "
+              "targeti për objektivat e zgjedhur - test krejtësisht i pavarur, pa lidhje me skanimin statik "
+              "më sipër (fike atë nëse don vetëm PyRIT). Kërkesa për AI API s'është diçka që e shtojmë ne: "
+              "Crescendo është vetë një AI që vendos çdo mesazh të radhës duke lexuar përgjigjen e mëparshme të "
+              "targetit, dhe biseda që del gjykohet gjithashtu nga një AI, pra një model real është i "
+              "pashmangshëm për këtë teknikë specifike, njësoj si kur e përdor PyRIT direkt vetë. Kërkon PyRIT "
+              "të instaluar DHE një AI API key të konfiguruar te Settings."},
     "tool_not_installed": {"en": "not installed", "al": "s'është instaluar"},
     "enable_retest_checkbox": {"en": "Retest FAIL findings for reproducibility",
                                 "al": "Rifirmo gjetjet FAIL për reproducibility"},
