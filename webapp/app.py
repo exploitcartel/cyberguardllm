@@ -3,6 +3,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import json, csv, io
 import secrets
+import yaml
 from flask import (Flask, request, render_template, redirect, make_response, send_file, jsonify, Response,
                     flash, get_flashed_messages)
 from storage.db import init_db, get_conn, now, get_setting, set_setting, get_all_settings
@@ -1020,25 +1021,68 @@ def rule_delete(custom_id):
     return redirect("/rules")
 
 
-@app.route("/rules/custom/delete", methods=["POST"])
+@app.route("/rules/delete", methods=["POST"])
 def rules_bulk_delete():
+    """
+    Deletes any selection of payloads from the Rules / Payload Library page,
+    whatever their source. A custom_ui rule is removed from the custom_rules
+    DB table (same as the existing single-row delete). A built-in rule -
+    whether from the community/original YAML library or CYBERGUARD LLM's own
+    research modules - has no DB row to delete, so it is removed directly
+    from the YAML file it lives in (grouped by file so each file is read and
+    rewritten once, not once per rule), which is the only way to make such a
+    payload stop running without leaving it in the library under a different
+    name. This is a real, permanent edit to the file on disk; it is not
+    reversible from inside the app the way most other deletes are.
+    """
     username, err = require_role("administrator")
     if err: return err
-    ids = [int(x) for x in request.form.getlist("custom_ids") if x.strip().isdigit()]
-    if not ids:
-        flash("No custom rules selected.", "error")
+    selected_ids = {x for x in request.form.getlist("rule_ids") if x.strip()}
+    if not selected_ids:
+        flash("No payloads selected.", "error")
         return redirect("/rules")
-    conn = get_conn()
-    placeholders = ",".join("?" * len(ids))
-    rows = conn.execute(f"SELECT id, rule_id FROM custom_rules WHERE id IN ({placeholders})", ids).fetchall()
-    if rows:
-        found_ids = [r["id"] for r in rows]
-        fplaceholders = ",".join("?" * len(found_ids))
-        conn.execute(f"DELETE FROM custom_rules WHERE id IN ({fplaceholders})", found_ids)
+
+    all_rules = load_all_rules()
+    by_id = {r["id"]: r for r in all_rules if r.get("id") in selected_ids}
+    missing = selected_ids - set(by_id.keys())
+
+    custom_db_ids, builtin_by_file = [], {}
+    for rid, r in by_id.items():
+        if r.get("source") == "custom_ui":
+            custom_db_ids.append(r["_custom_db_id"])
+        else:
+            builtin_by_file.setdefault(r["_file"], set()).add(rid)
+
+    deleted_count = 0
+    if custom_db_ids:
+        conn = get_conn()
+        placeholders = ",".join("?" * len(custom_db_ids))
+        conn.execute(f"DELETE FROM custom_rules WHERE id IN ({placeholders})", custom_db_ids)
         conn.commit()
-        log_activity(username, "Custom Rule(s) Deleted", f"{len(rows)} rule(s): {', '.join(r['rule_id'] for r in rows)}")
-        flash(f"Deleted {len(rows)} custom rule(s).", "success")
-    conn.close()
+        conn.close()
+        deleted_count += len(custom_db_ids)
+
+    file_errors = []
+    for filepath, ids_in_file in builtin_by_file.items():
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or []
+            kept = [entry for entry in data if entry.get("id") not in ids_in_file]
+            removed = len(data) - len(kept)
+            with open(filepath, "w", encoding="utf-8") as f:
+                yaml.safe_dump(kept, f, sort_keys=False, allow_unicode=True, default_flow_style=False)
+            deleted_count += removed
+        except Exception as e:
+            file_errors.append(f"{os.path.basename(filepath)}: {e}")
+
+    if by_id:
+        log_activity(username, "Payload(s) Deleted", f"{deleted_count} payload(s): {', '.join(sorted(by_id.keys()))}")
+    if deleted_count:
+        flash(f"Deleted {deleted_count} payload(s).", "success")
+    if missing:
+        flash(f"{len(missing)} selected payload(s) could not be found (already removed?).", "error")
+    if file_errors:
+        flash("Could not update: " + "; ".join(file_errors), "error")
     return redirect("/rules")
 
 

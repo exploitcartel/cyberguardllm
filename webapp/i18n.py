@@ -350,8 +350,8 @@ TRANSLATIONS = {
     "btn_add_custom_rule": {"en": "Add Custom Rule", "al": "Shto Rregull Personalizuar"},
     "custom_rule_badge": {"en": "Custom (UI)", "al": "Personalizuar (UI)"},
     "confirm_delete_rule": {"en": "Delete this custom rule?", "al": "Fshi kete rregull personalizuar?"},
-    "rules_bulk_hint": {"en": "Only custom (UI) rules can be selected and deleted - the built-in payload library is read-only.",
-                         "al": "Vetem rregullat e personalizuara (UI) mund te zgjidhen dhe fshihen - libraria e integruar e payload-ve eshte vetem-lexim."},
+    "rules_bulk_hint": {"en": "Any payload can be selected and deleted, including the built-in library - that removes it permanently from its source file.",
+                         "al": "Çdo payload mund te zgjidhet dhe fshihet, perfshire ato te integruarit - kjo e heq perfundimisht nga skedari burim."},
 
     # ---- rule_new.html ----
     "rule_new_title": {"en": "Add Custom Rule", "al": "Shto Rregull Personalizuar"},
@@ -477,8 +477,8 @@ TRANSLATIONS = {
                                 "al": "Te fshihen target-et e zgjedhur? Ky veprim nuk mund te kthehet mbrapsht."},
     "confirm_delete_configs": {"en": "Delete the selected scan config(s)? This cannot be undone.",
                                 "al": "Te fshihen konfigurimet e zgjedhura? Ky veprim nuk mund te kthehet mbrapsht."},
-    "confirm_delete_rules": {"en": "Delete the selected custom rule(s)? This cannot be undone.",
-                              "al": "Te fshihen rregullat e zgjedhura? Ky veprim nuk mund te kthehet mbrapsht."},
+    "confirm_delete_rules": {"en": "Delete the selected payload(s)? Built-in payloads are removed from their source file permanently, not just hidden.",
+                              "al": "Te fshihen payload-et e zgjedhur? Ato te integruarit hiqen perfundimisht nga skedari burim, jo vetem fshihen nga lista."},
     "flash_target_created": {"en": "Target saved.", "al": "Target-i u ruajt."},
     "flash_target_context_updated": {"en": "Business context updated.", "al": "Konteksti u perditesua."},
     "flash_target_deleted": {"en": "Target deleted.", "al": "Target-i u fshi."},
