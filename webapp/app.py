@@ -990,12 +990,17 @@ def settings_scan_mode():
     # Offline vs AI-Powered scanning + AI credentials: vital system change.
     username, err = require_role("global_administrator")
     if err: return err
+    from engine.ai_agent import PROVIDER_DEFAULTS
     scan_mode = request.form.get("scan_mode", "offline")
-    ai_api_base = request.form.get("ai_api_base", "").strip()
-    ai_model = request.form.get("ai_model", "").strip() or "gpt-4o-mini"
+    ai_provider = request.form.get("ai_provider", "openai_compatible")
+    if ai_provider not in PROVIDER_DEFAULTS:
+        ai_provider = "openai_compatible"
+    ai_api_base = request.form.get("ai_api_base", "").strip() or PROVIDER_DEFAULTS[ai_provider]["api_base"]
+    ai_model = request.form.get("ai_model", "").strip() or PROVIDER_DEFAULTS[ai_provider]["model"]
     ai_api_key = request.form.get("ai_api_key", "").strip()
 
     set_setting("scan_mode", scan_mode if scan_mode in ("offline", "ai_powered") else "offline")
+    set_setting("ai_provider", ai_provider)
     set_setting("ai_api_base", ai_api_base)
     set_setting("ai_model", ai_model)
     if ai_api_key:

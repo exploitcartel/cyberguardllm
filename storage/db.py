@@ -221,6 +221,7 @@ def now():
 
 DEFAULT_SETTINGS = {
     "scan_mode": "offline",            # offline | ai_powered
+    "ai_provider": "openai_compatible", # openai_compatible | anthropic | gemini - see engine/ai_agent.py
     "ai_api_base": "",                 # e.g. https://api.openai.com/v1 or any OpenAI-compatible base
     "ai_api_key_encrypted": "",
     "ai_model": "gpt-4o-mini",
