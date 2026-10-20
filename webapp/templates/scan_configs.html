@@ -9,6 +9,18 @@
     <form method="post" action="/scan-configs/create">
       <div class="field"><label>{{ t('config_name_label') }}</label><input type="text" name="name" placeholder="Full Audit" required></div>
 
+      <details class="config-section" open>
+        <summary>{{ t('owasp_categories_label') }}</summary>
+        <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">
+          This selection is shared: it decides which categories the Static Payload Scan below tests AND which
+          categories AI-Powered mode attacks, independently of whether the static scan itself is enabled or
+          disabled. Turning off static payloads does not affect this list.
+        </p>
+        {% for code, label, count in categories %}
+        <div class="checkbox-row"><input type="checkbox" name="categories" value="{{ code }}" checked> {{ code }} - {{ label }} (<span class="cat-count" data-code="{{ code }}">{{ count }}</span> payloads)</div>
+        {% endfor %}
+      </details>
+
       <details class="config-section">
         <summary>Static Payload Scan (OWASP Library)</summary>
         <div class="checkbox-row" style="margin-top:6px;">
@@ -16,7 +28,7 @@
         </div>
         <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">
           Uncheck this if you want this config to run AI-Powered mode and/or garak/PyRIT only, with no static
-          OWASP payloads at all - no need to uncheck every category below one by one.
+          OWASP payloads at all. The categories selected above are unaffected either way.
         </p>
         <div id="staticScanOptions">
           <label>Static Scan Level</label>
@@ -27,11 +39,6 @@
           <div class="checkbox-row"><input type="radio" name="scan_level" value="low" id="scanLevelLow"> Low - core payloads only ({{ counts_by_level.low.values() | sum }} total)</div>
           <div class="checkbox-row"><input type="radio" name="scan_level" value="medium" id="scanLevelMedium"> Medium - curated expansion ({{ counts_by_level.medium.values() | sum }} total)</div>
           <div class="checkbox-row"><input type="radio" name="scan_level" value="aggressive" id="scanLevelAggressive" checked> Aggressive - full library ({{ counts_by_level.aggressive.values() | sum }} total)</div>
-
-          <label style="margin-top:14px;display:block;">{{ t('owasp_categories_label') }}</label>
-          {% for code, label, count in categories %}
-          <div class="checkbox-row"><input type="checkbox" name="categories" value="{{ code }}" checked> {{ code }} - {{ label }} (<span class="cat-count" data-code="{{ code }}">{{ count }}</span> payloads)</div>
-          {% endfor %}
         </div>
       </details>
       <details class="config-section">
@@ -39,7 +46,7 @@
         <div class="checkbox-row" style="margin-top:6px;">
           <input type="checkbox" name="ai_powered"> {{ t('ai_powered_checkbox_label') }}
         </div>
-        <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('ai_freestyle_explanation') }}</p>
+        <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('ai_freestyle_explanation') }} Attacks run against the categories selected above.</p>
         <div class="field"><label>{{ t('field_ai_max_attempts') }}</label>
           <input type="number" name="ai_max_attempts" min="1" max="10" value="3" style="max-width:100px;">
         </div>
