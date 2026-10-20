@@ -21,12 +21,35 @@ echo
 # --- [1/4] venv -------------------------------------------------------------
 if [ ! -d venv ]; then
     echo "--- [1/4] Creating virtualenv (venv/) ---"
-    python3 -m venv venv
+    if ! python3 -m venv venv; then
+        echo
+        echo "FAILED to create venv/ - see the error above."
+        echo "The two most common causes:"
+        echo "  - Permission denied: this folder (or files in it) belong to root, usually"
+        echo "    from an earlier 'sudo' command. Fix with:"
+        echo "        sudo chown -R \"\$(whoami)\":\"\$(whoami)\" ."
+        echo "  - 'No module named venv': install the matching package, e.g. on"
+        echo "    Debian/Kali/Ubuntu: sudo apt install python3-venv"
+        echo "Fix the issue above, then re-run ./install.sh."
+        exit 1
+    fi
 else
     echo "--- [1/4] venv/ already exists, reusing it ---"
 fi
 # shellcheck disable=SC1091
 source venv/bin/activate
+# Hard-stop if the venv isn't actually active. Without this check, every pip
+# install below would silently fall through to the system/user Python instead
+# - installing over (and potentially breaking) unrelated tools on the machine.
+if [ -z "${VIRTUAL_ENV:-}" ]; then
+    echo
+    echo "FAILED to activate venv/ (VIRTUAL_ENV is not set after sourcing"
+    echo "venv/bin/activate). Refusing to continue, since every install below"
+    echo "would otherwise go to the system Python instead of an isolated venv."
+    echo "Check that venv/bin/activate exists and is readable, then re-run ./install.sh."
+    exit 1
+fi
+echo "venv active: $VIRTUAL_ENV"
 pip install -U pip >/dev/null
 
 # --- [2/4] core requirements --------------------------------------------------

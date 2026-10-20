@@ -506,80 +506,65 @@ run.py           Entry point
 
 Requires Python 3.9+.
 
-### One command (recommended)
+### Quick start
 
 ```bash
+git clone https://github.com/exploitcartel/cyberguardllm
+cd cyberguardllm
 ./install.sh
-```
-
-This does everything a pentester needs in one shot: creates the venv, installs the core app (with an automatic
-fallback if `playwright`/`greenlet` has no prebuilt wheel for your Python version - see below), installs
-Playwright's Chromium browser for Browser-Assisted Discovery, and then runs the best-effort installer for the two
-optional external pentest engines, garak and PyRIT (section 10). It never fails the whole run over an optional
-piece: if Chromium's download fails, or garak/PyRIT can't both be installed together (they have a real dependency
-conflict with each other, see below), it says so clearly and moves on - the core app and everything that doesn't
-depend on that piece is unaffected. Safe to re-run any time, e.g. after fixing a step that failed.
-
-Then:
-
-```bash
 source venv/bin/activate
 python run.py
 ```
 
+Open `http://127.0.0.1:8000` and log in with `admin` / `admin` (you'll be forced to change it immediately).
+
+`install.sh` does everything in one shot: creates an isolated virtual environment (`venv/`), installs the core
+app, installs Playwright's Chromium browser (needed only for Browser-Assisted Discovery), and then installs the
+two optional external pentest engines, garak and PyRIT (section 10). It never installs anything outside `venv/`,
+and it never silently falls back to your system Python - if a step can't complete, it stops and tells you exactly
+what to run to fix it. Safe to re-run any time, including after fixing something it flagged.
+
+If something still goes wrong, check the table below before asking anywhere else - these are the actual issues
+people have hit running this on a fresh Kali box, with the exact fix for each.
+
+### Common install problems
+
+| What you see | What it means | Fix |
+|---|---|---|
+| `Permission denied` when `install.sh` tries to create `venv/` | The project folder (or files in it) are owned by `root`, usually from an earlier `sudo` command (e.g. you extracted a zip or ran something with `sudo` in this folder before) | `sudo chown -R "$(whoami)":"$(whoami)" .` in the project folder, then re-run `./install.sh` |
+| `No module named venv` when creating the venv | Your distro ships `venv` as a separate package | Debian/Kali/Ubuntu: `sudo apt install python3-venv`, then re-run `./install.sh` |
+| Build fails compiling `greenlet`, mentions `Py_BUILD_CORE` or a long C compile log | A `playwright` dependency (`greenlet`) has no prebuilt wheel for your exact Python version, so pip tries to compile it from source against CPython's internal headers and fails - a packaging mismatch, not a bug in this app | `install.sh` already falls back to installing everything except `playwright` in this case, so the app still runs. To get Browser-Assisted Discovery working too, see "Installing Playwright separately" below |
+| App works, but adding a target with Browser-Assisted Discovery says `Playwright is not installed in this environment` | Exactly what it says: the step above fell back without `playwright` | See "Installing Playwright separately" below. Every other feature works fine without it |
+| `install_external_tools.sh` prints `REFUSING TO RUN: no active virtualenv detected` | You ran it without activating the venv first | `source venv/bin/activate` then re-run `./install_external_tools.sh` (or just run `./install.sh` from the project root, which does both automatically) |
+| Summary says `garak : NOT available` but `pyrit : available` (or vice versa) | Expected sometimes - garak and PyRIT have a real, direct dependency conflict with each other (`datasets<4.0` vs `datasets>=4.8.0`), so getting both in one environment isn't always possible depending on what's available at install time (section 10 has the full explanation) | Nothing to fix - that tool's checkbox just shows "not installed" in Scan Configs, everything else works. To confirm what's really installed: `source venv/bin/activate && python3 -c "import garak"` (or `import pyrit`) |
+| `pip install` seems stuck building `matplotlib` from source | No prebuilt wheel for your Python version | `pip install -U pip` first, or loosen the `matplotlib` version pin in `requirements.txt` |
+
+**Installing Playwright separately** (after the core app is already running without it):
+
+```bash
+source venv/bin/activate
+pip install --only-binary :all: greenlet && pip install playwright==1.47.0 --no-deps
+# if that still fails, try the newer unpinned release instead:
+#   pip install playwright
+playwright install chromium
+```
+
 ### Manual, step by step
 
-If you'd rather control each step yourself (or `install.sh` isn't an option on your system):
+If you'd rather control each step yourself:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate        # on Windows: venv\Scripts\activate
 pip install -r requirements.txt
-playwright install chromium     # only needed for Browser-Assisted Discovery (see below)
+playwright install chromium     # only needed for Browser-Assisted Discovery
 ./install_external_tools.sh     # optional: garak + PyRIT, see section 10
 python run.py
 ```
 
-The app starts on `http://127.0.0.1:8000`. Log in with `admin` / `admin`, then change the password immediately when
-prompted.
-
-The `playwright install chromium` step, and `playwright` itself, is only required if you want to use
-**Browser-Assisted Discovery** when adding a target (see below); every other feature in the app works without it.
-Nothing else in `requirements.txt` depends on it.
-
-**If `pip install -r requirements.txt` fails while building `greenlet`** (a dependency pulled in by `playwright`),
-with errors mentioning `Py_BUILD_CORE` or a long C compile log: this means pip could not find a prebuilt wheel for
-`greenlet` on your exact Python version and is trying to compile it from CPython's internal headers, which only
-match the greenlet release it was built against. This is a packaging mismatch, not a problem with this app. Three
-ways to get past it, in order of preference:
-
-1. Let pip grab a prebuilt wheel instead of compiling from source:
-   ```bash
-   pip install --only-binary :all: greenlet
-   pip install -r requirements.txt
-   ```
-2. If that has no wheel for your Python version either, install `playwright` unpinned (a newer release usually
-   has a compatible `greenlet` wheel available), then the rest of the pinned requirements with `--no-deps` so it
-   doesn't fight the other pins:
-   ```bash
-   pip install playwright
-   pip install -r requirements.txt
-   playwright install chromium
-   ```
-3. If neither works on your Python version, skip `playwright` entirely and install everything else - you lose
-   only Browser-Assisted Discovery, every other feature (manual discovery, all scan techniques, reports, etc.)
-   is unaffected:
-   ```bash
-   grep -v '^playwright' requirements.txt | pip install -r /dev/stdin
-   python run.py
-   ```
-   You can revisit Browser-Assisted Discovery later (e.g. after upgrading Python, or on a machine with a matching
-   prebuilt wheel) by just running `pip install playwright && playwright install chromium` in the same venv.
-
-If `pip install` tries to build `matplotlib` from source and seems stuck, it usually means there is no prebuilt
-wheel for your Python version. Either upgrade pip (`pip install -U pip`) first, or create the virtual environment
-with `--system-site-packages` if your OS already has `python3-matplotlib` installed, and loosen the version pin in
-`requirements.txt` if needed.
+The `playwright install chromium` step, and `playwright` itself, is only required for **Browser-Assisted
+Discovery** (see below); every other feature in the app works without it, and nothing else in `requirements.txt`
+depends on it.
 
 ## Using it
 

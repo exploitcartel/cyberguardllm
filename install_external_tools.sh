@@ -36,17 +36,18 @@ echo "=== CyberGuard LLM: optional external tool installer (garak / pyrit) ==="
 echo
 
 if [ -z "${VIRTUAL_ENV:-}" ]; then
-    echo "WARNING: no active virtualenv detected (VIRTUAL_ENV is unset)."
-    echo "This will install into whatever Python 'pip' currently points to,"
-    echo "which is probably NOT the app's venv. Activate it first:"
+    echo "REFUSING TO RUN: no active virtualenv detected (VIRTUAL_ENV is unset)."
+    echo "Running this without an active venv would install garak/pyrit (and their"
+    echo "many dependencies) into your system/user Python instead, which can silently"
+    echo "upgrade packages other tools on this machine already depend on."
+    echo
+    echo "Activate the app's venv first, then re-run this script:"
     echo "    source venv/bin/activate"
+    echo "    ./install_external_tools.sh"
     echo
-    read -r -p "Continue anyway? [y/N] " ans
-    case "$ans" in
-        [yY]*) ;;
-        *) echo "Aborted."; exit 1 ;;
-    esac
-    echo
+    echo "(No venv yet? Run ./install.sh from the project root first - it creates one"
+    echo "and calls this script automatically at the end.)"
+    exit 1
 fi
 
 echo "--- [1/4] Installing garak ($GARAK_VERSION, full) ---"
