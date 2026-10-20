@@ -18,6 +18,7 @@
       <div style="position:absolute;bottom:16px;left:20px;right:20px;text-align:center;">
         <div id="progressPct" style="font-family:var(--mono);font-size:32px;font-weight:600;">0%</div>
         <div style="font-family:var(--mono);font-size:12px;color:var(--text-muted);" id="progressCount">0 / 0 payloads</div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-top:4px;" id="phaseLabel"></div>
       </div>
     </div>
   </div>
@@ -158,6 +159,7 @@ const cyanColor = new THREE.Color(0x60a5fa);
 const redColor = new THREE.Color(0xef4444);
 
 let lastDone = 0;
+let lastPhaseText = '';
 let currentControl = 'run';
 let actionInFlight = false;
 const log = document.getElementById('liveLog');
@@ -213,12 +215,30 @@ function poll(){
     document.getElementById('findingsCount').textContent = data.findings;
     targetScale = 1.0 + Math.min(data.findings * 0.03, 0.35);
 
-    if(data.done > lastDone){
+    // last_rule_id is either a bare rule id (no spaces, e.g. "OUT-004" or
+    // "ai-LLM01-1") while the static/AI-powered engine is testing payloads,
+    // or a human sentence (e.g. "Running PyRIT module...") once that phase
+    // is done and an external module (garak/PyRIT/recon/etc) has taken
+    // over. Tell them apart on whitespace so the log/label always reflects
+    // what is actually running right now, instead of freezing on the last
+    // payload count once the static phase ends.
+    const isPhaseMessage = data.last_rule_id && /\s/.test(data.last_rule_id);
+
+    if(data.done > lastDone && !isPhaseMessage){
       pulseRandomNodes(30, cyanColor);
       if(data.last_rule_id){
         addLogLine('[' + String(data.done).padStart(3,'0') + '] testing ' + data.last_rule_id + ' ... sent', false);
       }
       lastDone = data.done;
+    }
+
+    if(isPhaseMessage && data.last_rule_id !== lastPhaseText){
+      document.getElementById('phaseLabel').textContent = data.last_rule_id;
+      addLogLine('  >> ' + data.last_rule_id, false);
+      lastPhaseText = data.last_rule_id;
+    } else if(!isPhaseMessage && lastPhaseText){
+      document.getElementById('phaseLabel').textContent = '';
+      lastPhaseText = '';
     }
 
     if(data.findings > (poll._prevFindings || 0)){

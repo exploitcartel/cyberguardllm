@@ -329,7 +329,10 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
     except (TypeError, ValueError):
         attempts_budget = AI_ATTEMPTS_PER_CATEGORY
 
-    cats = categories or list(OWASP_LABELS_FALLBACK.keys())
+    # Same rule as the static engine (see engine/loader.py): no OWASP
+    # category selected means no AI-powered attempts run either, instead of
+    # silently defaulting to every category.
+    cats = categories
     total = len(cats) * attempts_budget
     conn.execute("UPDATE tasks SET progress_total=?, progress_done=0, progress_findings=0, status='running', result_id=? WHERE id=?",
                  (total, result_id, task_id))
