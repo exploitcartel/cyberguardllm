@@ -116,7 +116,7 @@ code{font-family:var(--mono);background:rgba(37,99,235,0.08);padding:1px 6px;bor
 .btn-primary:hover{box-shadow:0 0 28px rgba(37,99,235,0.5);}
 .btn-danger{background:var(--danger);border-color:var(--danger);color:#fff;}
 .btn-warning{background:var(--warning);border-color:var(--warning);color:#1a1200;}
-.btn-sm{padding:7px 14px;font-size:13px;min-height:34px;}
+.btn-sm{padding:8px 16px;font-size:14px;min-height:36px;}
 
 .grid{display:grid;gap:16px;}
 .grid-4{grid-template-columns:repeat(4,1fr);}
@@ -128,15 +128,15 @@ code{font-family:var(--mono);background:rgba(37,99,235,0.08);padding:1px 6px;bor
 }
 body.dark .card{box-shadow:0 0 0 1px rgba(59,130,246,0.04), 0 8px 30px rgba(0,0,0,0.3);}
 body:not(.dark) .card{box-shadow:0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04);}
-.metric-label{font-size:13px;color:var(--text-muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;}
+.metric-label{font-size:14.5px;color:var(--text-muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;}
 .metric-value{font-size:32px;font-weight:700;font-family:var(--mono);}
 
 table{width:100%;border-collapse:collapse;font-size:14.5px;}
-th{text-align:left;color:var(--text-muted);font-weight:600;padding:13px 10px;border-bottom:1px solid var(--border);font-size:12px;text-transform:uppercase;letter-spacing:0.04em;}
+th{text-align:left;color:var(--text-muted);font-weight:600;padding:13px 10px;border-bottom:1px solid var(--border);font-size:13.5px;text-transform:uppercase;letter-spacing:0.04em;}
 td{padding:13px 10px;border-bottom:1px solid var(--border);}
 tr:hover td{background:rgba(37,99,235,0.05);}
 
-.badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:600;}
+.badge{display:inline-block;padding:5px 13px;border-radius:999px;font-size:13.5px;font-weight:600;}
 .badge-critical{background:rgba(239,68,68,0.15);color:#ef4444;box-shadow:0 0 8px rgba(239,68,68,0.15);}
 .badge-high{background:rgba(245,158,11,0.15);color:#f59e0b;}
 .badge-medium{background:rgba(59,130,246,0.15);color:#3b82f6;}
@@ -182,7 +182,7 @@ body:not(.dark) .badge-cgllm{background:linear-gradient(135deg, rgba(124,58,237,
 input, select{width:100%;padding:12px 14px;border-radius:9px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:15px;font-family:var(--font);}
 input:focus, select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,0.15);}
 input:disabled{opacity:0.6;}
-label{display:block;font-size:12.5px;font-weight:600;margin-bottom:7px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.03em;}
+label{display:block;font-size:14.5px;font-weight:700;margin-bottom:8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.03em;}
 .field{margin-bottom:18px;}
 
 input[type="checkbox"], input[type="radio"]{
@@ -195,11 +195,11 @@ input[type="checkbox"], input[type="radio"]{
 .tab-bar{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;}
 .tab-bar a{padding:11px 18px;font-size:15px;color:var(--text-muted);border-bottom:2px solid transparent;}
 .tab-bar a.active{color:var(--accent);border-bottom-color:var(--accent);}
-pre{background:rgba(0,0,0,0.15);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-family:var(--mono);}
+pre{background:rgba(0,0,0,0.15);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:13.5px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-family:var(--mono);}
 body:not(.dark) pre{background:#f7f8fa;}
 
 .config-section{margin-top:12px;border-top:1px solid var(--border);padding-top:12px;}
-.config-section summary{cursor:pointer;font-size:11.5px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.03em;list-style:none;padding:4px 0;}
+.config-section summary{cursor:pointer;font-size:15.5px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:0.03em;list-style:none;padding:8px 0;}
 .config-section summary::-webkit-details-marker{display:none;}
 .config-section summary::before{content:"▸ ";display:inline-block;transition:transform 0.15s;}
 .config-section[open] summary::before{transform:rotate(90deg);}

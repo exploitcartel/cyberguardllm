@@ -199,6 +199,10 @@ _MIGRATIONS = [
     # library). See engine/loader.py:load_rules_by_categories and
     # scripts/generate_payloads.py.
     ("scan_configs", "scan_level", "TEXT DEFAULT 'low'"),
+    # Lets an operator disable the static OWASP payload engine entirely for
+    # a config that should run AI-Powered mode and/or garak/PyRIT only,
+    # without having to uncheck every OWASP category one by one.
+    ("scan_configs", "enable_static", "INTEGER DEFAULT 1"),
 ]
 
 

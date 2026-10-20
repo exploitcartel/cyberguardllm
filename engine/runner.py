@@ -184,12 +184,21 @@ def _retest_fail(target, rule, ai_judge_cfg, min_confidence, retest_count):
 
 def _run_static(conn, task_id, result_id, target, categories, config=None):
     scan_level = "low"
+    enable_static = True
     if config is not None:
         try:
             scan_level = config["scan_level"] or "low"
         except (IndexError, KeyError):
             scan_level = "low"
-    rules = load_rules_by_categories(categories, level=scan_level)
+        try:
+            enable_static = bool(config["enable_static"]) if config["enable_static"] is not None else True
+        except (IndexError, KeyError):
+            enable_static = True
+    # Operator turned the static OWASP payload engine off entirely for this
+    # config (running AI-Powered and/or garak/PyRIT only instead) - behave
+    # exactly like "no categories selected": zero static rules, straight
+    # through to whatever external modules are enabled.
+    rules = load_rules_by_categories(categories, level=scan_level) if enable_static else []
 
     mutation_techniques = []
     enable_retest = False
