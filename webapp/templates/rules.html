@@ -14,7 +14,7 @@
     <tr><th style="width:34px;"><input type="checkbox" id="rulesSelectAll"></th><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_source') }}</th><th>{{ t('col_severity') }}</th><th>{{ t('col_prompt') }}</th><th></th></tr>
     {% for r in rules %}
     <tr>
-      <td>{% if r.source == 'custom_ui' %}<input type="checkbox" class="rule-check" value="{{ r._custom_db_id }}">{% endif %}</td>
+      <td><input type="checkbox" class="rule-check" value="{{ r.id }}"></td>
       <td style="font-family:var(--mono);">{{ r.id }}</td><td>{{ r.owasp }}</td>
       <td>
         {% if r.source == 'cgllm_research' %}
@@ -54,8 +54,8 @@ initBulkSelect({
   countOneText: '{{ t("results_selected_one") }}',
   countManyText: '{{ t("results_selected_many") }}',
   deleteBtnId: 'btnDeleteRules',
-  deleteUrl: '/rules/custom/delete',
-  deleteFieldName: 'custom_ids',
+  deleteUrl: '/rules/delete',
+  deleteFieldName: 'rule_ids',
   confirmMsg: '{{ t("confirm_delete_rules") }}'
 });
 </script>
