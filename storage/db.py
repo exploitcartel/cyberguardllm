@@ -193,6 +193,12 @@ _MIGRATIONS = [
     # current in-flight request, saves everything completed so far, and
     # ends the scan early instead of running the remaining payloads).
     ("tasks", "control", "TEXT DEFAULT 'run'"),
+    # Static payload intensity for a scan config: 'low' (the original 128
+    # hand-written rules), 'medium' (low + a curated proportional subset of
+    # the community-sourced expansion), or 'aggressive' (the full ~566-rule
+    # library). See engine/loader.py:load_rules_by_categories and
+    # scripts/generate_payloads.py.
+    ("scan_configs", "scan_level", "TEXT DEFAULT 'low'"),
 ]
 
 

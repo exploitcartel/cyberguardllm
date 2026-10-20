@@ -10,7 +10,7 @@ from auth.auth import (seed_admin, verify_password, hash_password, make_session_
                         log_activity, get_user_role, role_at_least, ROLES, ROLE_LABELS)
 from core.discovery import discover_target, get_proxies, test_proxy_connectivity
 from core.crypto import encrypt_token, decrypt_token
-from engine.loader import load_all_rules, count_by_category
+from engine.loader import load_all_rules, count_by_category, count_by_category_all_levels
 from engine.runner import run_scan_async, get_task_progress
 from engine.scorer import severity_breakdown_rows, owasp_breakdown_rows
 from report.pdf_report import generate_pdf_report
@@ -400,7 +400,8 @@ def _external_tool_status():
 def scan_configs_page():
     username, err = require_login()
     if err: return err
-    counts = count_by_category()
+    counts_by_level = count_by_category_all_levels()
+    counts = counts_by_level["aggressive"]  # full totals, shown by default (Aggressive is pre-selected)
     categories = [(code, OWASP_LABELS.get(code, code), counts.get(code, 0)) for code in OWASP_LABELS]
     conn = get_conn()
     configs = conn.execute("SELECT * FROM scan_configs").fetchall()
@@ -413,6 +414,7 @@ def scan_configs_page():
         active="scan_configs", categories=categories, configs=configs,
         garak_probes=garak_probes, pyrit_objectives=pyrit_objectives,
         garak_ok=garak_ok, pyrit_ok=pyrit_ok, mutation_labels=MUTATION_LABELS,
+        counts_by_level=counts_by_level,
     ))
 
 
@@ -423,6 +425,9 @@ def scan_config_create():
     name = request.form.get("name")
     categories = request.form.getlist("categories")
     ai_powered = 1 if request.form.get("ai_powered") == "on" else 0
+    scan_level = request.form.get("scan_level", "low")
+    if scan_level not in ("low", "medium", "aggressive"):
+        scan_level = "low"
 
     use_garak = 1 if request.form.get("use_garak") == "on" else 0
     garak_probes = list(request.form.getlist("garak_probes"))
@@ -452,11 +457,11 @@ def scan_config_create():
     conn.execute(
         """INSERT INTO scan_configs (name, categories, ai_powered, use_garak, garak_probes, use_pyrit,
            pyrit_objectives, mutation_techniques, enable_retest, retest_count, enable_canary, enable_recon,
-           ai_max_attempts, enable_fingerprint, enable_session_isolation, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           ai_max_attempts, enable_fingerprint, enable_session_isolation, scan_level, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (name, ",".join(categories), ai_powered, use_garak, ",".join(garak_probes), use_pyrit,
          ",".join(pyrit_objectives), ",".join(mutation_techniques), enable_retest, retest_count, enable_canary,
-         enable_recon, ai_max_attempts, enable_fingerprint, enable_session_isolation, now()),
+         enable_recon, ai_max_attempts, enable_fingerprint, enable_session_isolation, scan_level, now()),
     )
     conn.commit()
     conn.close()

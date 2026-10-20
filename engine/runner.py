@@ -183,7 +183,13 @@ def _retest_fail(target, rule, ai_judge_cfg, min_confidence, retest_count):
 
 
 def _run_static(conn, task_id, result_id, target, categories, config=None):
-    rules = load_rules_by_categories(categories)
+    scan_level = "low"
+    if config is not None:
+        try:
+            scan_level = config["scan_level"] or "low"
+        except (IndexError, KeyError):
+            scan_level = "low"
+    rules = load_rules_by_categories(categories, level=scan_level)
 
     mutation_techniques = []
     enable_retest = False
