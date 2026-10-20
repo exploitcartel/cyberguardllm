@@ -1,12 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-header"><div><h1>{{ t('results_title') }}</h1><p>{{ t('results_sub') }}</p></div><a href="/results/compare" class="btn">{{ t('btn_compare_scans') }}</a></div>
+
+<div id="resultsToolbar" class="card" style="display:none;margin-bottom:14px;flex-direction:row;align-items:center;gap:14px;flex-wrap:wrap;">
+  <strong id="resultsSelectedCount" style="color:var(--text);"></strong>
+  <div id="resultsExportLinks" style="display:none;gap:8px;flex-wrap:wrap;">
+    <a id="btnExportJson" href="#" class="btn" style="padding:7px 12px;">{{ t('btn_export_json') }}</a>
+    <a id="btnExportCsv" href="#" class="btn" style="padding:7px 12px;">{{ t('btn_export_csv') }}</a>
+    <a id="btnExportPdf" href="#" class="btn" style="padding:7px 12px;">{{ t('btn_export_pdf') }}</a>
+  </div>
+  {% if user_role in ('administrator', 'global_administrator') %}
+  <button type="button" id="btnDeleteResults" class="btn btn-danger" style="padding:7px 12px;margin-left:auto;">{{ t('btn_delete') }}</button>
+  {% endif %}
+</div>
+
 <div class="card">
   <input type="text" placeholder="{{ t('search_placeholder') }}" oninput="filterTable(this, 'resultsTable')" style="margin-bottom:12px;max-width:320px;">
   <table id="resultsTable">
-    <tr><th>{{ t('col_date') }}</th><th>{{ t('col_target') }}</th><th>{{ t('col_findings') }}</th><th>{{ t('col_risk_score') }}</th><th>{{ t('col_status') }}</th><th></th></tr>
+    <tr>
+      <th style="width:34px;"><input type="checkbox" id="resultsSelectAll"></th>
+      <th>{{ t('col_date') }}</th><th>{{ t('col_target') }}</th><th>{{ t('col_findings') }}</th><th>{{ t('col_risk_score') }}</th><th>{{ t('col_status') }}</th><th></th>
+    </tr>
     {% for r in results %}
     <tr>
+      <td><input type="checkbox" class="result-check" value="{{ r.id }}"></td>
       <td>{{ r.timestamp|fmtdate('%b %d, %Y %H:%M') }}</td>
       <td>{{ r.target_name or '-' }}</td>
       <td>{{ r.total_findings }}</td>
@@ -15,8 +32,29 @@
       <td><a href="/results/{{ r.id }}" class="btn" style="padding:5px 10px;">{{ t('btn_view') }}</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="6" style="text-align:center;color:var(--text-muted);">{{ t('no_results_yet') }}</td></tr>
+    <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">{{ t('no_results_yet') }}</td></tr>
     {% endfor %}
   </table>
 </div>
+
+<script>
+initBulkSelect({
+  checkboxSelector: '.result-check',
+  selectAllId: 'resultsSelectAll',
+  toolbarId: 'resultsToolbar',
+  countId: 'resultsSelectedCount',
+  countOneText: '{{ t("results_selected_one") }}',
+  countManyText: '{{ t("results_selected_many") }}',
+  exportLinks: [
+    {id: 'btnExportJson', urlBuilder: function(id){ return '/results/' + id + '/json'; }},
+    {id: 'btnExportCsv', urlBuilder: function(id){ return '/results/' + id + '/csv'; }},
+    {id: 'btnExportPdf', urlBuilder: function(id){ return '/results/' + id + '/pdf'; }}
+  ],
+  exportWrapId: 'resultsExportLinks',
+  deleteBtnId: 'btnDeleteResults',
+  deleteUrl: '/results/delete',
+  deleteFieldName: 'result_ids',
+  confirmMsg: '{{ t("confirm_delete_results") }}'
+});
+</script>
 {% endblock %}

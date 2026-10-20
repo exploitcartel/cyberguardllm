@@ -291,6 +291,11 @@ TRANSLATIONS = {
     "btn_view": {"en": "View", "al": "Shiko"},
     "no_results_yet": {"en": "No results yet.", "al": "S'ka rezultate ende."},
     "btn_compare_scans": {"en": "Compare scans", "al": "Krahaso skanime"},
+    "results_selected_one": {"en": "1 selected", "al": "1 i zgjedhur"},
+    "results_selected_many": {"en": "selected", "al": "të zgjedhur"},
+    "btn_delete": {"en": "Delete", "al": "Fshi"},
+    "confirm_delete_results": {"en": "Delete the selected scan result(s)? This cannot be undone.",
+                                "al": "Te fshihen rezultatet e zgjedhura? Ky veprim nuk mund te kthehet mbrapsht."},
 
     # ---- result_detail.html ----
     "scan_hash": {"en": "Scan", "al": "Skanimi"},
@@ -345,6 +350,8 @@ TRANSLATIONS = {
     "btn_add_custom_rule": {"en": "Add Custom Rule", "al": "Shto Rregull Personalizuar"},
     "custom_rule_badge": {"en": "Custom (UI)", "al": "Personalizuar (UI)"},
     "confirm_delete_rule": {"en": "Delete this custom rule?", "al": "Fshi kete rregull personalizuar?"},
+    "rules_bulk_hint": {"en": "Only custom (UI) rules can be selected and deleted - the built-in payload library is read-only.",
+                         "al": "Vetem rregullat e personalizuara (UI) mund te zgjidhen dhe fshihen - libraria e integruar e payload-ve eshte vetem-lexim."},
 
     # ---- rule_new.html ----
     "rule_new_title": {"en": "Add Custom Rule", "al": "Shto Rregull Personalizuar"},
@@ -466,6 +473,12 @@ TRANSLATIONS = {
     "confirm_delete_user": {"en": "Delete this user?", "al": "Fshi këtë përdorues?"},
     "confirm_delete_target": {"en": "Delete this target? This cannot be undone.",
                                "al": "Fshi kete target? Ky veprim nuk mund te kthehet mbrapsht."},
+    "confirm_delete_targets": {"en": "Delete the selected target(s)? This cannot be undone.",
+                                "al": "Te fshihen target-et e zgjedhur? Ky veprim nuk mund te kthehet mbrapsht."},
+    "confirm_delete_configs": {"en": "Delete the selected scan config(s)? This cannot be undone.",
+                                "al": "Te fshihen konfigurimet e zgjedhura? Ky veprim nuk mund te kthehet mbrapsht."},
+    "confirm_delete_rules": {"en": "Delete the selected custom rule(s)? This cannot be undone.",
+                              "al": "Te fshihen rregullat e zgjedhura? Ky veprim nuk mund te kthehet mbrapsht."},
     "flash_target_created": {"en": "Target saved.", "al": "Target-i u ruajt."},
     "flash_target_context_updated": {"en": "Business context updated.", "al": "Konteksti u perditesua."},
     "flash_target_deleted": {"en": "Target deleted.", "al": "Target-i u fshi."},

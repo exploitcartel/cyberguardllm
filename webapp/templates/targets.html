@@ -6,12 +6,26 @@
   <a href="/targets/new" class="btn btn-primary">{{ t('add_target') }}</a>
   {% endif %}
 </div>
+
+{% if user_role in ('administrator','global_administrator') %}
+<div id="targetsToolbar" class="card" style="display:none;margin-bottom:14px;flex-direction:row;align-items:center;gap:14px;flex-wrap:wrap;">
+  <strong id="targetsSelectedCount" style="color:var(--text);"></strong>
+  <button type="button" id="btnDeleteTargets" class="btn btn-danger" style="padding:7px 12px;margin-left:auto;">{{ t('btn_delete') }}</button>
+</div>
+{% endif %}
+
 <div class="card">
   <input type="text" placeholder="{{ t('search_placeholder') }}" oninput="filterTable(this, 'targetsTable')" style="margin-bottom:12px;max-width:320px;">
   <table id="targetsTable">
-    <tr><th>{{ t('col_name') }}</th><th>{{ t('col_url') }}</th><th>{{ t('col_auth') }}</th><th>{{ t('col_format') }}</th><th>{{ t('col_status') }}</th><th>{{ t('col_actions') }}</th></tr>
+    <tr>
+      {% if user_role in ('administrator','global_administrator') %}<th style="width:34px;"><input type="checkbox" id="targetsSelectAll"></th>{% endif %}
+      <th>{{ t('col_name') }}</th><th>{{ t('col_url') }}</th><th>{{ t('col_auth') }}</th><th>{{ t('col_format') }}</th><th>{{ t('col_status') }}</th><th>{{ t('col_actions') }}</th>
+    </tr>
     {% for t_row in targets %}
     <tr data-group="target-{{ t_row.id }}">
+      {% if user_role in ('administrator','global_administrator') %}
+      <td rowspan="2" style="vertical-align:top;"><input type="checkbox" class="target-check" value="{{ t_row.id }}"></td>
+      {% endif %}
       <td>{{ t_row.name }}</td>
       <td>{{ t_row.url }}</td>
       <td>{{ t_row.auth_scheme }}</td>
@@ -40,8 +54,25 @@
     </tr>
     {% endif %}
     {% else %}
-    <tr><td colspan="6" style="text-align:center;color:var(--text-muted);">{{ t('no_targets_yet') }}</td></tr>
+    <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">{{ t('no_targets_yet') }}</td></tr>
     {% endfor %}
   </table>
 </div>
+
+{% if user_role in ('administrator','global_administrator') %}
+<script>
+initBulkSelect({
+  checkboxSelector: '.target-check',
+  selectAllId: 'targetsSelectAll',
+  toolbarId: 'targetsToolbar',
+  countId: 'targetsSelectedCount',
+  countOneText: '{{ t("results_selected_one") }}',
+  countManyText: '{{ t("results_selected_many") }}',
+  deleteBtnId: 'btnDeleteTargets',
+  deleteUrl: '/targets/delete',
+  deleteFieldName: 'target_ids',
+  confirmMsg: '{{ t("confirm_delete_targets") }}'
+});
+</script>
+{% endif %}
 {% endblock %}
