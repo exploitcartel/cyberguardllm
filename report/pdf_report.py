@@ -530,6 +530,36 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
         ]))
         elements.append(rt)
 
+    # ---------- Scan infrastructure issues (target never actually responded) ----------
+    errored = [f for f in findings if f["verdict"] == "ERROR"]
+    if errored:
+        elements.append(Spacer(1, 0.3 * cm))
+        elements.append(Paragraph("Scan Infrastructure Issues - Re-run Recommended", h3))
+        elements.append(Paragraph(
+            f"For {len(errored)} attempt(s) below, the target did not actually produce a response to evaluate "
+            "(a network timeout, a rate-limit response, or a provider/transport error, after automatic retries "
+            "were already attempted). These are NOT security results and are excluded from the risk score and "
+            "findings above - they mean the target was not reachable at that moment, not that it resisted the "
+            "attack. If there are many of these, the target may be rate-limiting this scan; re-run it with a "
+            "lower request rate or once the target is confirmed stable.", body))
+        elements.append(Spacer(1, 0.2 * cm))
+        error_table = [["ID", "OWASP", "Description"]]
+        for f in errored:
+            error_table.append([
+                f["rule_id"], f["owasp"],
+                Paragraph(f["description"] or "-", body),
+            ])
+        et = Table(error_table, colWidths=[3.2 * cm, 1.8 * cm, 10.9 * cm])
+        et.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4b5563")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f3f4f6")]),
+        ]))
+        elements.append(et)
+
     elements.append(PageBreak())
 
     # ---------- Remediation ----------

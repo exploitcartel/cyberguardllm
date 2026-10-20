@@ -4,7 +4,7 @@ from storage.db import get_conn, now, get_setting
 from engine.loader import load_rules_by_categories
 from engine.evaluator import evaluate, evaluate_multiturn, evaluate_persistence
 from engine.scorer import compute_risk_score_rows
-from core.discovery import send_prompt, send_conversation_turn
+from core.discovery import send_prompt, send_conversation_turn, is_transport_error
 from core.mutation import apply_mutations, MUTATION_LABELS
 from engine import ai_agent
 from engine import baseline_module
@@ -118,6 +118,18 @@ def _evaluate_attempt(target, rule, ai_judge_cfg, min_confidence):
     severity = rule["severity"]
     confidence = None
     judge_note = ""
+
+    if is_transport_error(raw_response):
+        # The target never actually answered this prompt (timeout,
+        # rate-limited, or a provider error after retries already happened
+        # in send_prompt/send_conversation_turn). Both the offline regex
+        # verdict and the AI judge would otherwise be evaluating an error
+        # message as if it were the target's real behavior - flag this as
+        # its own ERROR verdict (excluded from the risk score) instead of a
+        # misleading PASS/FAIL, and skip the AI judge call entirely.
+        return ("ERROR", severity, None, prompt_sent, raw_response,
+                f" The target did not produce a response to evaluate ({raw_response}). This is a scan/network "
+                "issue, not a security result - re-run this scan once the target is reachable.")
 
     # Dual-judge: the offline heuristic above already produced a verdict.
     # When an AI judge is configured, it is not simply trusted blindly in
@@ -418,15 +430,30 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 business_context = None
 
             confidence = None
-            try:
-                verdict, severity, reasoning, confidence = ai_agent.judge_response(
-                    api_base, api_key, model, owasp_code, label, prompt, response_text,
-                    business_context=business_context)
-                min_confidence = int(get_setting("ai_judge_min_confidence", "60") or 60)
-                if confidence < min_confidence:
-                    verdict = "REVIEW"
-            except Exception as e:
-                verdict, severity, reasoning = "PASS", "low", f"AI judge call failed: {e}"
+            if is_transport_error(response_text):
+                # The target never actually produced a response (timeout,
+                # rate-limited, or a provider error after retries) - there is
+                # nothing here for the AI judge to evaluate. Recording this
+                # as PASS/FAIL would misrepresent an infra failure as a
+                # security result (a scan full of these would wrongly show
+                # as "0 findings / resisted everything"), so it is flagged
+                # as its own ERROR verdict instead, excluded from the risk
+                # score and from the attack-escalation logic below, and
+                # called out in the report as needing a re-run.
+                verdict, severity, reasoning = "ERROR", "low", (
+                    f"The target did not produce a response to evaluate ({response_text}). "
+                    "This is a scan/network issue, not a security result - re-run this scan once the "
+                    "target is reachable and not rate-limiting the scanner.")
+            else:
+                try:
+                    verdict, severity, reasoning, confidence = ai_agent.judge_response(
+                        api_base, api_key, model, owasp_code, label, prompt, response_text,
+                        business_context=business_context)
+                    min_confidence = int(get_setting("ai_judge_min_confidence", "60") or 60)
+                    if confidence < min_confidence:
+                        verdict = "REVIEW"
+                except Exception as e:
+                    verdict, severity, reasoning = "PASS", "low", f"AI judge call failed: {e}"
 
             if verdict == "FAIL":
                 findings_count += 1
