@@ -403,6 +403,23 @@ TRANSLATIONS = {
     "field_scan_mode": {"en": "Scan mode", "al": "Modaliteti i skanimit"},
     "offline_option": {"en": "Offline (static payload library)", "al": "Offline (libraria statike e payload-ve)"},
     "ai_powered_option": {"en": "AI-Powered (adversarial AI agent)", "al": "AI-Powered (AI agent sulmues)"},
+    "field_ai_provider": {"en": "AI Provider", "al": "Ofruesi AI"},
+    "provider_openai_compatible": {"en": "OpenAI-compatible (OpenAI, DeepSeek, Groq, Mistral, local, OpenRouter, ...)",
+                                    "al": "OpenAI-compatible (OpenAI, DeepSeek, Groq, Mistral, lokal, OpenRouter, ...)"},
+    "provider_anthropic": {"en": "Anthropic (Claude)", "al": "Anthropic (Claude)"},
+    "provider_gemini": {"en": "Google (Gemini)", "al": "Google (Gemini)"},
+    "provider_explanation": {
+        "en": "Pick your provider, paste its API key below, that's it - the base URL and model are pre-filled "
+              "for you and this app speaks each provider's native format internally, so DeepSeek/Groq/etc just "
+              "work under \"OpenAI-compatible\" with their own base URL, while Anthropic and Google use their own "
+              "native API automatically.",
+        "al": "Zgjidh ofruesin, ngjit API key-n poshtë, kaq - base URL dhe modeli plotësohen vetë dhe aplikacioni "
+              "flet formatin native të secilit ofrues brenda, kështu që DeepSeek/Groq/etj punojnë thjesht nën "
+              "\"OpenAI-compatible\" me base URL-në e tyre, ndërsa Anthropic dhe Google përdorin API-n e tyre "
+              "native automatikisht."},
+    "ai_api_key_hint": {
+        "en": "Just the API key from your provider's dashboard - no other setup needed.",
+        "al": "Thjesht API key nga dashboard-i i ofruesit tënd - s'duhet asgjë tjetër."},
     "field_ai_api_base": {"en": "AI API base URL", "al": "AI API base URL"},
     "field_model": {"en": "Model", "al": "Modeli"},
     "field_ai_api_key": {"en": "AI API key", "al": "AI API key"},

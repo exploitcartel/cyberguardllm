@@ -86,14 +86,49 @@
         <option value="ai_powered" {{ 'selected' if settings.scan_mode=='ai_powered' }}>{{ t('ai_powered_option') }}</option>
       </select>
     </div>
+    <div class="field">
+      <label>{{ t('field_ai_provider') }}</label>
+      <select name="ai_provider" id="aiProviderSelect">
+        <option value="openai_compatible" {{ 'selected' if (settings.ai_provider or 'openai_compatible')=='openai_compatible' }}>{{ t('provider_openai_compatible') }}</option>
+        <option value="anthropic" {{ 'selected' if settings.ai_provider=='anthropic' }}>{{ t('provider_anthropic') }}</option>
+        <option value="gemini" {{ 'selected' if settings.ai_provider=='gemini' }}>{{ t('provider_gemini') }}</option>
+      </select>
+      <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('provider_explanation') }}</p>
+    </div>
     <div class="grid grid-2">
-      <div class="field"><label>{{ t('field_ai_api_base') }}</label><input type="text" name="ai_api_base" placeholder="https://api.openai.com/v1" value="{{ settings.ai_api_base }}"></div>
-      <div class="field"><label>{{ t('field_model') }}</label><input type="text" name="ai_model" placeholder="gpt-4o-mini" value="{{ settings.ai_model }}"></div>
+      <div class="field"><label>{{ t('field_ai_api_base') }}</label><input type="text" name="ai_api_base" id="aiApiBaseInput" placeholder="https://api.openai.com/v1" value="{{ settings.ai_api_base }}"></div>
+      <div class="field"><label>{{ t('field_model') }}</label><input type="text" name="ai_model" id="aiModelInput" placeholder="gpt-4o-mini" value="{{ settings.ai_model }}"></div>
     </div>
     <div class="field"><label>{{ t('field_ai_api_key') }}</label><input type="password" name="ai_api_key" placeholder="{{ t('ai_api_key_placeholder_stored') if settings.ai_api_key_encrypted else 'sk-...' }}"></div>
+    <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('ai_api_key_hint') }}</p>
     <button class="btn btn-primary" type="submit">{{ t('btn_save_scan_mode') }}</button>
   </form>
 </div>
+
+<script>
+const PROVIDER_DEFAULTS = {
+  openai_compatible: {api_base: 'https://api.openai.com/v1', model: 'gpt-4o-mini'},
+  anthropic: {api_base: 'https://api.anthropic.com', model: 'claude-sonnet-4-5-20250929'},
+  gemini: {api_base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash'},
+};
+const providerSelect = document.getElementById('aiProviderSelect');
+const apiBaseInput = document.getElementById('aiApiBaseInput');
+const modelInput = document.getElementById('aiModelInput');
+if(providerSelect){
+  providerSelect.addEventListener('change', function(){
+    const d = PROVIDER_DEFAULTS[this.value];
+    if(!d) return;
+    if(!apiBaseInput.value || Object.values(PROVIDER_DEFAULTS).some(p => p.api_base === apiBaseInput.value)){
+      apiBaseInput.value = d.api_base;
+    }
+    if(!modelInput.value || Object.values(PROVIDER_DEFAULTS).some(p => p.model === modelInput.value)){
+      modelInput.value = d.model;
+    }
+    apiBaseInput.placeholder = d.api_base;
+    modelInput.placeholder = d.model;
+  });
+}
+</script>
 
 <div class="card" style="margin-top:16px;">
   <h3 style="margin-top:0;">{{ t('proxy_routing_title') }} <span class="badge badge-cgllm">{{ t('role_global_administrator') }}</span></h3>

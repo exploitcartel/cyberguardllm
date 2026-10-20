@@ -8,9 +8,15 @@ and then judges the target's response. This is the "AI agent vs AI agent"
 mode: an attacking model red-teams the target model and writes its own
 findings report, instead of us only replaying a fixed prompt list.
 
-It talks to any OpenAI-compatible Chat Completions endpoint (OpenAI itself,
-Azure OpenAI with the compatible path, OpenRouter, a local vLLM/Ollama
-OpenAI-compatible server, etc.) so the user is not locked into one vendor.
+By default it talks to any OpenAI-compatible Chat Completions endpoint
+(OpenAI itself, DeepSeek, Groq, Mistral, Together, Azure OpenAI with the
+compatible path, OpenRouter, a local vLLM/Ollama server, etc.) - most
+providers speak this format, so that single mode already covers them.
+Anthropic (Claude) and Google (Gemini) each have a genuinely different
+native request/response shape, so Settings also offers them as distinct
+providers; _chat() below branches on the "ai_provider" setting and every
+caller in this file keeps working unchanged regardless of which one is
+selected, since they only ever deal with plain text in and out.
 
 This tool must only be pointed at targets the user is authorized to test.
 The system prompts below instruct the attacking model to behave as a
@@ -19,6 +25,12 @@ prompts and judgments only, never real-world harmful content.
 """
 import json
 import requests
+
+PROVIDER_DEFAULTS = {
+    "openai_compatible": {"api_base": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
+    "anthropic": {"api_base": "https://api.anthropic.com", "model": "claude-sonnet-4-5-20250929"},
+    "gemini": {"api_base": "https://generativelanguage.googleapis.com", "model": "gemini-2.0-flash"},
+}
 
 ATTACK_SYSTEM_PROMPT = """You are an AI red-team assistant embedded in CYBERGUARD LLM, an authorized \
 black-box security testing tool. The operator has explicit permission to test \
@@ -59,7 +71,7 @@ Respond ONLY with compact JSON in this exact shape, nothing else:
 """
 
 
-def _chat(api_base, api_key, model, system_prompt, user_prompt, timeout=30):
+def _chat_openai_compatible(api_base, api_key, model, system_prompt, user_prompt, timeout):
     url = api_base.rstrip("/") + "/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     body = {
@@ -75,6 +87,60 @@ def _chat(api_base, api_key, model, system_prompt, user_prompt, timeout=30):
     resp.raise_for_status()
     data = resp.json()
     return data["choices"][0]["message"]["content"].strip()
+
+
+def _chat_anthropic(api_base, api_key, model, system_prompt, user_prompt, timeout):
+    url = (api_base or PROVIDER_DEFAULTS["anthropic"]["api_base"]).rstrip("/") + "/v1/messages"
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+    body = {
+        "model": model,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_prompt}],
+        "max_tokens": 400,
+        "temperature": 0.9,
+    }
+    resp = requests.post(url, headers=headers, json=body, timeout=timeout)
+    resp.raise_for_status()
+    data = resp.json()
+    # content is a list of blocks (text/tool_use/...); join every text block,
+    # same defensive approach as _deep_find_texts in engine/garak_module.py.
+    return "".join(b.get("text", "") for b in data.get("content", []) if isinstance(b, dict)).strip()
+
+
+def _chat_gemini(api_base, api_key, model, system_prompt, user_prompt, timeout):
+    base = (api_base or PROVIDER_DEFAULTS["gemini"]["api_base"]).rstrip("/")
+    url = f"{base}/v1beta/models/{model}:generateContent?key={api_key}"
+    body = {
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+        "generationConfig": {"temperature": 0.9, "maxOutputTokens": 400},
+    }
+    resp = requests.post(url, headers={"Content-Type": "application/json"}, json=body, timeout=timeout)
+    resp.raise_for_status()
+    data = resp.json()
+    parts = data["candidates"][0]["content"]["parts"]
+    return "".join(p.get("text", "") for p in parts).strip()
+
+
+_PROVIDER_FUNCS = {
+    "openai_compatible": _chat_openai_compatible,
+    "anthropic": _chat_anthropic,
+    "gemini": _chat_gemini,
+}
+
+
+def _chat(api_base, api_key, model, system_prompt, user_prompt, timeout=30):
+    # Lazy import: storage.db has no reverse dependency on this module, but
+    # importing lazily here keeps this module usable standalone/in tests
+    # without the DB layer, consistent with the rest of the codebase.
+    from storage.db import get_setting
+    provider = get_setting("ai_provider", "openai_compatible") or "openai_compatible"
+    fn = _PROVIDER_FUNCS.get(provider, _chat_openai_compatible)
+    return fn(api_base, api_key, model, system_prompt, user_prompt, timeout)
 
 
 def generate_adversarial_prompt(api_base, api_key, model, owasp_category, category_label,
