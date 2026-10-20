@@ -9,7 +9,7 @@
     <form method="post" action="/scan-configs/create">
       <div class="field"><label>{{ t('config_name_label') }}</label><input type="text" name="name" placeholder="Full Audit" required></div>
 
-      <details open class="config-section">
+      <details class="config-section">
         <summary>Static Payload Scan (OWASP Library)</summary>
         <div class="checkbox-row" style="margin-top:6px;">
           <input type="checkbox" name="enable_static" id="enableStatic" checked> Enable static payload scan
@@ -34,7 +34,7 @@
           {% endfor %}
         </div>
       </details>
-      <details open class="config-section">
+      <details class="config-section">
         <summary>{{ t('section_ai_powered') }}</summary>
         <div class="checkbox-row" style="margin-top:6px;">
           <input type="checkbox" name="ai_powered"> {{ t('ai_powered_checkbox_label') }}
@@ -75,7 +75,7 @@
         </div>
       </details>
 
-      <details open class="config-section">
+      <details class="config-section">
         <summary>{{ t('section_reliability') }}</summary>
         <div style="margin-top:10px;">
           <div class="checkbox-row"><input type="checkbox" name="enable_retest"> {{ t('enable_retest_checkbox') }}</div>
@@ -93,7 +93,7 @@
         </div>
       </details>
 
-      <details open class="config-section">
+      <details class="config-section">
         <summary>{{ t('section_extra_modules') }}</summary>
         <div style="margin-top:10px;">
           <div class="checkbox-row"><input type="checkbox" name="enable_canary"> {{ t('enable_canary_checkbox') }}</div>
