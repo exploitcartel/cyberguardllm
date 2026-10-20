@@ -71,10 +71,19 @@ def load_all_rules():
 
 
 def load_rules_by_categories(categories):
-    """categories: list like ['LLM01','LLM02']"""
-    all_rules = load_all_rules()
+    """
+    categories: list like ['LLM01','LLM02'].
+
+    No categories selected means no static OWASP payloads should run at
+    all - a scan config built purely for PyRIT/garak (nothing checked under
+    OWASP CATEGORIES) must not silently fall back to running the entire
+    128-payload static library, since that makes the run look unrelated to
+    the tool the operator actually picked. Returns [] in that case instead
+    of defaulting to everything.
+    """
     if not categories:
-        return all_rules
+        return []
+    all_rules = load_all_rules()
     return [r for r in all_rules if r.get("owasp") in categories]
 
 
