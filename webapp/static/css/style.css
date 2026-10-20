@@ -136,6 +136,19 @@ th{text-align:left;color:var(--text-muted);font-weight:600;padding:13px 10px;bor
 td{padding:13px 10px;border-bottom:1px solid var(--border);}
 tr:hover td{background:rgba(37,99,235,0.05);}
 
+.row-menu{position:relative;display:inline-block;}
+.row-menu-btn{background:transparent;border:1px solid var(--border);border-radius:8px;width:34px;height:34px;font-size:18px;line-height:1;color:var(--text-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.row-menu-btn:hover{background:rgba(37,99,235,0.08);color:var(--text);}
+.row-menu-dropdown{display:none;position:absolute;right:0;top:40px;min-width:180px;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.18);z-index:50;overflow:hidden;}
+.row-menu.open .row-menu-dropdown{display:block;}
+.row-menu-dropdown button, .row-menu-dropdown a{display:block;width:100%;text-align:left;background:transparent;border:none;padding:11px 14px;font-size:14px;color:var(--text);cursor:pointer;font-family:var(--font);}
+.row-menu-dropdown button:hover, .row-menu-dropdown a:hover{background:rgba(37,99,235,0.08);}
+.row-menu-dropdown .danger{color:var(--danger);}
+.row-menu-dropdown form{margin:0;}
+.row-rename-form{display:none;gap:6px;padding:10px;border-top:1px solid var(--border);}
+.row-rename-form.open{display:flex;}
+.row-rename-form input{flex:1;min-width:0;}
+
 .badge{display:inline-block;padding:5px 13px;border-radius:999px;font-size:13.5px;font-weight:600;}
 .badge-critical{background:rgba(239,68,68,0.15);color:#ef4444;box-shadow:0 0 8px rgba(239,68,68,0.15);}
 .badge-high{background:rgba(245,158,11,0.15);color:#f59e0b;}

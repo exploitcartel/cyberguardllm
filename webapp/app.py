@@ -471,6 +471,39 @@ def scan_config_create():
     return redirect("/scan-configs")
 
 
+@app.route("/scan-configs/<int:config_id>/rename", methods=["POST"])
+def scan_config_rename(config_id):
+    username, err = require_role("administrator")
+    if err: return err
+    new_name = (request.form.get("name") or "").strip()
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM scan_configs WHERE id=?", (config_id,)).fetchone()
+    if row and new_name:
+        conn.execute("UPDATE scan_configs SET name=? WHERE id=?", (new_name, config_id))
+        conn.commit()
+        log_activity(username, "Config Renamed", f"{row['name']} -> {new_name}")
+    conn.close()
+    return redirect("/scan-configs")
+
+
+@app.route("/scan-configs/<int:config_id>/delete", methods=["POST"])
+def scan_config_delete(config_id):
+    username, err = require_role("administrator")
+    if err: return err
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM scan_configs WHERE id=?", (config_id,)).fetchone()
+    in_use = conn.execute("SELECT COUNT(*) AS c FROM tasks WHERE scan_config_id=?", (config_id,)).fetchone()["c"]
+    if row and in_use == 0:
+        conn.execute("DELETE FROM scan_configs WHERE id=?", (config_id,))
+        conn.commit()
+        log_activity(username, "Config Deleted", row["name"])
+        flash(f"Config '{row['name']}' deleted.", "success")
+    elif row and in_use > 0:
+        flash(f"Cannot delete '{row['name']}': {in_use} task(s) reference it. Delete those tasks first.", "error")
+    conn.close()
+    return redirect("/scan-configs")
+
+
 @app.route("/tasks", methods=["GET"])
 def tasks_page():
     username, err = require_login()
