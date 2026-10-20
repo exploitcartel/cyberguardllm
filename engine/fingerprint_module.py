@@ -64,12 +64,26 @@ def _looks_like_compliance(response_text: str) -> bool:
 
 
 def run_fingerprint(conn, result_id, target, timeout_s=20):
-    from core.discovery import send_prompt
+    from core.discovery import send_prompt, is_transport_error
 
     try:
         response_text = send_prompt(target, TRIGGER_PROMPT, timeout=timeout_s)
     except Exception as e:
         response_text = f"[ERROR] {e}"
+
+    if is_transport_error(response_text):
+        conn.execute(
+            """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
+               description, module, source, recommendation)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (result_id, "guardrail-fingerprint", "LLM01", "low", "ERROR", TRIGGER_PROMPT, response_text,
+             f"The fingerprint probe was never successfully delivered to the target ({response_text}). This is a "
+             "scan/network issue, not an \"unlabeled guardrail\" - no fingerprinting conclusion can be drawn. "
+             "Re-run this scan once the target is reachable.",
+             "Guardrail Fingerprinting", "fingerprint", ""),
+        )
+        conn.commit()
+        return None
 
     detected = _match_signature(response_text)
     if detected:

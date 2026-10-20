@@ -44,6 +44,38 @@ def _check_control(conn, task_id):
         time.sleep(1)
 
 
+def _run_optional_module(conn, result_id, rule_id, step_label, module_label, source_tag, fn):
+    """
+    Runs one of the optional post-processing modules (garak, PyRIT, canary,
+    recon, fingerprint, session isolation, chaining) and, if it raises
+    anything its own internal error handling didn't already catch, records
+    an explicit finding explaining that this check crashed and was skipped
+    - instead of silently swallowing the exception and leaving the scan
+    looking complete with that entire check quietly missing. A tool/env bug
+    (missing dependency, bad config, a bug in the module itself) should be
+    visible in the report, not invisible, the same way an AI-Powered call
+    failure already is (see "ai-call-error" above).
+    """
+    try:
+        fn()
+    except Exception as e:
+        try:
+            conn.execute(
+                """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
+                   description, module, source, recommendation)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (result_id, rule_id, "LLM01", "low", "ERROR", "", "",
+                 f"{step_label} crashed before it could finish ({e}) and the rest of this check was skipped for "
+                 "this scan. This is a tool/environment issue (a missing dependency, a bad config value, or a bug "
+                 "in this module), not a security result - check the server logs, fix the underlying issue, and "
+                 "re-run this scan to get real coverage here.",
+                 module_label, source_tag, ""),
+            )
+            conn.commit()
+        except Exception:
+            pass
+
+
 def _get_ai_judge_config():
     """
     Returns (api_base, api_key, model) if an AI API is configured in Settings,
@@ -303,7 +335,12 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
             if repro_total:
                 description += f" | Retested {repro_total}x, reproduced {repro_hits}/{repro_total}"
 
-            is_anomaly, latency_ratio = baseline_module.is_latency_anomaly(elapsed_ms, baseline)
+            # Skip the latency-anomaly note for ERROR verdicts: send_prompt's
+            # own retry/backoff delays on a failing attempt would otherwise
+            # inflate elapsed_ms and produce a spurious "hidden tool call?"
+            # note on a row that is already explained as a scan/network
+            # issue, not a timing signal worth anything.
+            is_anomaly, latency_ratio = (False, None) if verdict == "ERROR" else baseline_module.is_latency_anomaly(elapsed_ms, baseline)
             if is_anomaly:
                 description += (f" | Latency anomaly: this response took {latency_ratio:.1f}x longer than the "
                                  f"benign control question, a possible sign of a hidden tool call (LLM06) or "
@@ -561,70 +598,74 @@ def _execute(task_id: int):
     if config["use_garak"]:
         conn.execute("UPDATE tasks SET last_rule_id='Running Garak module...' WHERE id=?", (task_id,))
         conn.commit()
-        try:
+
+        def _do_garak():
             from engine.garak_module import run_garak_scan
             probes = [p.strip() for p in (config["garak_probes"] or "").split(",") if p.strip()]
             run_garak_scan(conn, result_id, target, probes)
-        except Exception:
-            pass
+        _run_optional_module(conn, result_id, "garak-module-crash", "The Garak module", "Garak", "garak", _do_garak)
 
     if config["use_pyrit"]:
         conn.execute("UPDATE tasks SET last_rule_id='Running PyRIT module...' WHERE id=?", (task_id,))
         conn.commit()
-        try:
+
+        def _do_pyrit():
             from engine.pyrit_module import run_pyrit_scan
             objectives = [o.strip() for o in (config["pyrit_objectives"] or "").split(",") if o.strip()]
             run_pyrit_scan(conn, result_id, target, objectives)
-        except Exception:
-            pass
+        _run_optional_module(conn, result_id, "pyrit-module-crash", "The PyRIT module", "PyRIT", "pyrit", _do_pyrit)
 
     if config["enable_canary"]:
         conn.execute("UPDATE tasks SET last_rule_id='Running out-of-band canary checks...' WHERE id=?", (task_id,))
         conn.commit()
-        try:
+
+        def _do_canary():
             from engine.canary_module import run_canary_checks
             run_canary_checks(conn, result_id, target)
-        except Exception:
-            pass
+        _run_optional_module(conn, result_id, "canary-module-crash", "The out-of-band canary check",
+                              "Out-of-band Canary (LLM06)", "canary", _do_canary)
 
     if config["enable_recon"]:
         conn.execute("UPDATE tasks SET last_rule_id='Running AI recon...' WHERE id=?", (task_id,))
         conn.commit()
-        try:
+
+        def _do_recon():
             from engine.recon_module import run_recon, generate_and_run_personalized
             extracted = run_recon(conn, result_id, target)
             if extracted:
                 conn.execute("UPDATE tasks SET last_rule_id='Generating personalized payloads...' WHERE id=?", (task_id,))
                 conn.commit()
                 generate_and_run_personalized(conn, result_id, target, categories, extracted, OWASP_LABELS_FALLBACK)
-        except Exception:
-            pass
+        _run_optional_module(conn, result_id, "ai-recon-module-crash", "The AI recon step", "AI Recon", "ai_recon", _do_recon)
 
     if config["enable_fingerprint"]:
         conn.execute("UPDATE tasks SET last_rule_id='Fingerprinting guardrail...' WHERE id=?", (task_id,))
         conn.commit()
-        try:
+
+        def _do_fingerprint():
             from engine.fingerprint_module import run_fingerprint
             run_fingerprint(conn, result_id, target)
-        except Exception:
-            pass
+        _run_optional_module(conn, result_id, "fingerprint-module-crash", "Guardrail fingerprinting",
+                              "Guardrail Fingerprinting", "fingerprint", _do_fingerprint)
 
     if config["enable_session_isolation"]:
         conn.execute("UPDATE tasks SET last_rule_id='Checking session isolation...' WHERE id=?", (task_id,))
         conn.commit()
-        try:
+
+        def _do_session_isolation():
             from engine.session_isolation_module import run_session_isolation_check
             run_session_isolation_check(conn, result_id, target)
-        except Exception:
-            pass
+        _run_optional_module(conn, result_id, "session-isolation-module-crash", "The session isolation check",
+                              "Session Isolation", "session_isolation", _do_session_isolation)
 
     conn.execute("UPDATE tasks SET last_rule_id='Analyzing attack chains...' WHERE id=?", (task_id,))
     conn.commit()
-    try:
+
+    def _do_chaining():
         from engine.chaining_module import analyze_and_store
         analyze_and_store(conn, result_id)
-    except Exception:
-        pass
+    _run_optional_module(conn, result_id, "chaining-module-crash", "Attack chain analysis", "Attack Chain Analysis",
+                          "chaining", _do_chaining)
 
     rows = conn.execute("SELECT severity, verdict FROM findings WHERE scan_result_id=?", (result_id,)).fetchall()
     total_findings = len([r for r in rows if r["verdict"] == "FAIL"])

@@ -31,13 +31,22 @@ LATENCY_ANOMALY_MIN_BASELINE_MS = 200.0
 def get_baseline(target, timeout=20.0):
     """Never raises: a baseline that fails to establish just means neither
     check below applies for this scan, which is a safe default."""
-    from core.discovery import send_prompt
+    from core.discovery import send_prompt, is_transport_error
     start = time.monotonic()
     try:
         response = send_prompt(target, BASELINE_PROMPT, timeout=timeout)
     except Exception:
         response = ""
     elapsed_ms = (time.monotonic() - start) * 1000
+    if is_transport_error(response):
+        # A failed/retried baseline call is not a usable reference point:
+        # its text is an error message (meaningless for the similarity
+        # check below) and its timing is inflated by send_prompt's own
+        # retry backoff delays, not genuine model latency. Both checks
+        # below already treat an empty baseline as "skip this check" for
+        # the whole scan, which is the honest outcome here rather than a
+        # baseline that would silently corrupt every comparison after it.
+        return {"response": "", "elapsed_ms": 0}
     return {"response": response, "elapsed_ms": elapsed_ms}
 
 

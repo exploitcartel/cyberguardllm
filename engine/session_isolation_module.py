@@ -48,7 +48,7 @@ def run_session_isolation_check(conn, result_id, target, timeout_s=20):
     Inserts one finding (FAIL if the secret leaks back, PASS otherwise) and
     returns the verdict string.
     """
-    from core.discovery import send_prompt
+    from core.discovery import send_prompt, is_transport_error
 
     try:
         plant_response = send_prompt(target, PLANT_PROMPT, timeout=timeout_s)
@@ -59,6 +59,29 @@ def run_session_isolation_check(conn, result_id, target, timeout_s=20):
         probe_response = send_prompt(target, PROBE_PROMPT, timeout=timeout_s)
     except Exception as e:
         probe_response = f"[ERROR] {e}"
+
+    if is_transport_error(plant_response) or is_transport_error(probe_response):
+        # Either the secret was never actually planted, or the probe never
+        # actually reached the target - either way there is no honest
+        # PASS/FAIL to report here. A "not leaked" PASS would be
+        # particularly misleading for this check specifically, since it
+        # would read as "session isolation held" when really the plant step
+        # itself may never have happened.
+        verdict = "ERROR"
+        conn.execute(
+            """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
+               description, module, source, recommendation)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (result_id, RULE_ID, "LLM02", "low", "ERROR",
+             f"{PLANT_PROMPT}  |THEN|  {PROBE_PROMPT}",
+             f"[plant] {plant_response}\n[probe] {probe_response}",
+             "One of the plant/probe prompts in this check was never successfully delivered to the target "
+             "(network/rate-limit issue, already retried). No conclusion can be drawn - this is not a "
+             "security result. Re-run this scan once the target is reachable.",
+             "Session Isolation", "session_isolation", ""),
+        )
+        conn.commit()
+        return verdict
 
     leaked = SECRET_MARKER in (probe_response or "")
 
