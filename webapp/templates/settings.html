@@ -94,7 +94,7 @@
   {% if settings.ai_api_key_encrypted %}
   <div class="warn-box status-banner" onclick="focusSection('scanModeForm', event)" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
     <div>
-      <strong style="color:#22c55e;">&#9679; {{ t('ai_config_status_configured') }}</strong>
+      <strong class="status-dot-ok">&#9679; {{ t('ai_config_status_configured') }}</strong>
       <div style="color:var(--text-muted);font-size:14px;margin-top:4px;">
         {{ t('field_ai_provider') }}: <strong>{{ settings.ai_provider or 'openai_compatible' }}</strong>
         &nbsp;&middot;&nbsp; {{ t('field_model') }}: <strong>{{ settings.ai_model }}</strong>
@@ -224,7 +224,7 @@ if(providerSelect){
   {% if settings.proxy_enabled == '1' and settings.proxy_url %}
   <div class="warn-box status-banner" onclick="focusSection('proxyForm', event)" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
     <div>
-      <strong style="color:#22c55e;">&#9679; {{ t('proxy_status_on') }}</strong>
+      <strong class="status-dot-ok">&#9679; {{ t('proxy_status_on') }}</strong>
       <div style="color:var(--text-muted);font-size:14px;margin-top:4px;">{{ proxy_url_masked }}</div>
     </div>
     <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>
@@ -261,7 +261,7 @@ if(providerSelect){
   {% if settings.stealth_enabled == '1' %}
   <div class="warn-box status-banner" onclick="focusSection('stealthForm', event)" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
     <div>
-      <strong style="color:#22c55e;">&#9679; {{ t('stealth_status_on') }}</strong>
+      <strong class="status-dot-ok">&#9679; {{ t('stealth_status_on') }}</strong>
       <div style="color:var(--text-muted);font-size:14px;margin-top:4px;">{{ settings.stealth_delay_min_ms }}ms &ndash; {{ settings.stealth_delay_max_ms }}ms</div>
     </div>
     <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>
@@ -293,7 +293,7 @@ if(providerSelect){
   {% if settings.canary_base_url %}
   <div class="warn-box status-banner" onclick="focusSection('canaryForm', event)" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
     <div>
-      <strong style="color:#22c55e;">&#9679; {{ t('canary_status_on') }}</strong>
+      <strong class="status-dot-ok">&#9679; {{ t('canary_status_on') }}</strong>
       <div style="color:var(--text-muted);font-size:14px;margin-top:4px;">{{ settings.canary_base_url }}</div>
     </div>
     <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>

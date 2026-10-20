@@ -209,6 +209,8 @@ input[type="checkbox"], input[type="radio"]{
 
 .warn-box{display:flex;gap:10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:10px;padding:13px 16px;margin-bottom:16px;font-size:14.5px;}
 .status-banner{cursor:pointer;transition:box-shadow .15s ease, transform .15s ease;}
+.status-dot-ok{color:#22c55e;}
+body:not(.dark) .status-dot-ok{color:#15803d;}
 .status-banner:hover{box-shadow:0 0 0 2px rgba(37,99,235,0.35);}
 .status-banner .edit-hint{
   color:#fff;background:var(--accent);font-size:15px;font-weight:700;white-space:nowrap;
