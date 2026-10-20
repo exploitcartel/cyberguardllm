@@ -24,7 +24,7 @@
           <button type="submit" class="btn" style="padding:5px 10px;">{{ t('btn_delete') }}</button>
         </form>
         {% else %}
-        <span style="color:var(--text-muted);font-size:12px;">{{ t('view_only') }}</span>
+        <span style="color:var(--text-muted);font-size:14px;">{{ t('view_only') }}</span>
         {% endif %}
       </td>
     </tr>
@@ -32,7 +32,7 @@
     <tr data-group="target-{{ t_row.id }}">
       <td colspan="6" style="padding-top:0;">
         <form method="post" action="/targets/{{ t_row.id }}/context" style="display:flex;gap:8px;align-items:center;">
-          <label style="color:var(--text-muted);font-size:12px;white-space:nowrap;">{{ t('business_context_label') }}</label>
+          <label style="color:var(--text-muted);font-size:14px;white-space:nowrap;">{{ t('business_context_label') }}</label>
           <input type="text" name="business_context" value="{{ t_row.business_context or '' }}" placeholder="{{ t('business_context_placeholder') }}" style="flex:1;">
           <button class="btn" type="submit" style="padding:5px 10px;">{{ t('btn_save') }}</button>
         </form>

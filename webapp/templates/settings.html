@@ -21,7 +21,7 @@
     <h3 style="margin-top:0;">{{ t('your_account_title') }}</h3>
     <div class="field"><label>{{ t('field_username') }}</label><input value="{{ username }}" disabled></div>
     <div class="field"><label>{{ t('field_role') }}</label><input value="{{ t('role_' ~ (user_role or 'operator')) }}" disabled></div>
-    <p style="color:var(--text-muted);font-size:12.5px;">{{ t('role_explanation') }}</p>
+    <p style="color:var(--text-muted);font-size:14px;">{{ t('role_explanation') }}</p>
   </div>
 </div>
 
@@ -63,7 +63,7 @@
               <button class="btn btn-danger" style="padding:5px 10px;" type="submit">{{ t('btn_delete') }}</button>
             </form>
             {% else %}
-            <span style="color:var(--text-muted);font-size:12px;">{{ t('you_label') }}</span>
+            <span style="color:var(--text-muted);font-size:14px;">{{ t('you_label') }}</span>
             {% endif %}
           </td>
         </tr>
@@ -75,7 +75,7 @@
 
 <div class="card" style="margin-top:16px;">
   <h3 style="margin-top:0;">{{ t('scan_engine_mode_title') }} <span class="badge badge-cgllm">{{ t('role_global_administrator') }}</span></h3>
-  <p style="color:var(--text-muted);font-size:13px;">
+  <p style="color:var(--text-muted);font-size:14.5px;">
     {{ t('scan_mode_explanation') }}
   </p>
   <form method="post" action="/settings/scan-mode">
@@ -97,7 +97,7 @@
 
 <div class="card" style="margin-top:16px;">
   <h3 style="margin-top:0;">{{ t('proxy_routing_title') }} <span class="badge badge-cgllm">{{ t('role_global_administrator') }}</span></h3>
-  <p style="color:var(--text-muted);font-size:13px;">
+  <p style="color:var(--text-muted);font-size:14.5px;">
     {{ t('proxy_explanation') }}
   </p>
   <form method="post" action="/settings/proxy">
@@ -118,7 +118,7 @@
 
 <div class="card" style="margin-top:16px;">
   <h3 style="margin-top:0;">{{ t('stealth_mode_title') }} <span class="badge badge-cgllm">{{ t('role_administrator') }}</span></h3>
-  <p style="color:var(--text-muted);font-size:13px;">
+  <p style="color:var(--text-muted);font-size:14.5px;">
     {{ t('stealth_explanation') }}
   </p>
   <form method="post" action="/settings/stealth">
@@ -134,7 +134,7 @@
 
 <div class="card" style="margin-top:16px;">
   <h3 style="margin-top:0;">{{ t('canary_title') }} <span class="badge badge-cgllm">{{ t('role_administrator') }}</span></h3>
-  <p style="color:var(--text-muted);font-size:13px;">
+  <p style="color:var(--text-muted);font-size:14.5px;">
     {{ t('canary_explanation') }}
   </p>
   <form method="post" action="/settings/canary">

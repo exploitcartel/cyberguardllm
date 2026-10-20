@@ -9,25 +9,37 @@
     <form method="post" action="/scan-configs/create">
       <div class="field"><label>{{ t('config_name_label') }}</label><input type="text" name="name" placeholder="Full Audit" required></div>
 
-      <label>Static Scan Level</label>
-      <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">
-        Low runs only the original 128 core payloads. Medium adds a curated proportional subset of the
-        expanded community-sourced library. Aggressive runs everything (~566 payloads across all categories).
-      </p>
-      <div class="checkbox-row"><input type="radio" name="scan_level" value="low" id="scanLevelLow"> Low - core payloads only ({{ counts_by_level.low.values() | sum }} total)</div>
-      <div class="checkbox-row"><input type="radio" name="scan_level" value="medium" id="scanLevelMedium"> Medium - curated expansion ({{ counts_by_level.medium.values() | sum }} total)</div>
-      <div class="checkbox-row"><input type="radio" name="scan_level" value="aggressive" id="scanLevelAggressive" checked> Aggressive - full library ({{ counts_by_level.aggressive.values() | sum }} total)</div>
+      <details open class="config-section">
+        <summary>Static Payload Scan (OWASP Library)</summary>
+        <div class="checkbox-row" style="margin-top:6px;">
+          <input type="checkbox" name="enable_static" id="enableStatic" checked> Enable static payload scan
+        </div>
+        <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">
+          Uncheck this if you want this config to run AI-Powered mode and/or garak/PyRIT only, with no static
+          OWASP payloads at all - no need to uncheck every category below one by one.
+        </p>
+        <div id="staticScanOptions">
+          <label>Static Scan Level</label>
+          <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">
+            Low runs only the original 128 core payloads. Medium adds a curated proportional subset of the
+            expanded community-sourced library. Aggressive runs everything (~566 payloads across all categories).
+          </p>
+          <div class="checkbox-row"><input type="radio" name="scan_level" value="low" id="scanLevelLow"> Low - core payloads only ({{ counts_by_level.low.values() | sum }} total)</div>
+          <div class="checkbox-row"><input type="radio" name="scan_level" value="medium" id="scanLevelMedium"> Medium - curated expansion ({{ counts_by_level.medium.values() | sum }} total)</div>
+          <div class="checkbox-row"><input type="radio" name="scan_level" value="aggressive" id="scanLevelAggressive" checked> Aggressive - full library ({{ counts_by_level.aggressive.values() | sum }} total)</div>
 
-      <label style="margin-top:14px;display:block;">{{ t('owasp_categories_label') }}</label>
-      {% for code, label, count in categories %}
-      <div class="checkbox-row"><input type="checkbox" name="categories" value="{{ code }}" checked> {{ code }} - {{ label }} (<span class="cat-count" data-code="{{ code }}">{{ count }}</span> payloads)</div>
-      {% endfor %}
+          <label style="margin-top:14px;display:block;">{{ t('owasp_categories_label') }}</label>
+          {% for code, label, count in categories %}
+          <div class="checkbox-row"><input type="checkbox" name="categories" value="{{ code }}" checked> {{ code }} - {{ label }} (<span class="cat-count" data-code="{{ code }}">{{ count }}</span> payloads)</div>
+          {% endfor %}
+        </div>
+      </details>
       <details open class="config-section">
         <summary>{{ t('section_ai_powered') }}</summary>
         <div class="checkbox-row" style="margin-top:6px;">
           <input type="checkbox" name="ai_powered"> {{ t('ai_powered_checkbox_label') }}
         </div>
-        <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">{{ t('ai_freestyle_explanation') }}</p>
+        <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('ai_freestyle_explanation') }}</p>
         <div class="field"><label>{{ t('field_ai_max_attempts') }}</label>
           <input type="number" name="ai_max_attempts" min="1" max="10" value="3" style="max-width:100px;">
         </div>
@@ -41,7 +53,7 @@
             {{ t('use_garak_checkbox_label') }}
             {% if not garak_ok %}<span class="badge badge-triage-false_positive">{{ t('tool_not_installed') }}</span>{% endif %}
           </div>
-          <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">{{ t('garak_module_explanation') }}</p>
+          <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('garak_module_explanation') }}</p>
           {% for p in garak_probes %}
           <div class="checkbox-row"><input type="checkbox" name="garak_probes" value="{{ p }}" {% if not garak_ok %}disabled{% endif %}> {{ p }}</div>
           {% endfor %}
@@ -56,7 +68,7 @@
             {{ t('use_pyrit_checkbox_label') }}
             {% if not pyrit_ok %}<span class="badge badge-triage-false_positive">{{ t('tool_not_installed') }}</span>{% endif %}
           </div>
-          <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">{{ t('pyrit_module_explanation') }}</p>
+          <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('pyrit_module_explanation') }}</p>
           {% for key, (text, owasp) in pyrit_objectives.items() %}
           <div class="checkbox-row"><input type="checkbox" name="pyrit_objectives" value="{{ key }}" {% if not pyrit_ok %}disabled{% endif %}> {{ owasp }}: {{ text }}</div>
           {% endfor %}
@@ -67,14 +79,14 @@
         <summary>{{ t('section_reliability') }}</summary>
         <div style="margin-top:10px;">
           <div class="checkbox-row"><input type="checkbox" name="enable_retest"> {{ t('enable_retest_checkbox') }}</div>
-          <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">{{ t('retest_explanation') }}</p>
+          <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('retest_explanation') }}</p>
           <div class="field"><label>{{ t('field_retest_count') }}</label>
             <input type="number" name="retest_count" min="2" max="10" value="3" style="max-width:100px;">
           </div>
         </div>
         <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
           <label>{{ t('mutations_label') }}</label>
-          <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">{{ t('mutations_explanation') }}</p>
+          <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('mutations_explanation') }}</p>
           {% for key, label in mutation_labels.items() %}
           <div class="checkbox-row"><input type="checkbox" name="mutation_techniques" value="{{ key }}"> {{ label }}</div>
           {% endfor %}
@@ -85,19 +97,19 @@
         <summary>{{ t('section_extra_modules') }}</summary>
         <div style="margin-top:10px;">
           <div class="checkbox-row"><input type="checkbox" name="enable_canary"> {{ t('enable_canary_checkbox') }}</div>
-          <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">{{ t('canary_scan_explanation') }}</p>
+          <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('canary_scan_explanation') }}</p>
         </div>
         <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
           <div class="checkbox-row"><input type="checkbox" name="enable_recon"> {{ t('enable_recon_checkbox') }}</div>
-          <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">{{ t('recon_explanation') }}</p>
+          <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('recon_explanation') }}</p>
         </div>
         <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
           <div class="checkbox-row"><input type="checkbox" name="enable_fingerprint"> {{ t('enable_fingerprint_checkbox') }}</div>
-          <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">{{ t('fingerprint_explanation') }}</p>
+          <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('fingerprint_explanation') }}</p>
         </div>
         <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
           <div class="checkbox-row"><input type="checkbox" name="enable_session_isolation"> {{ t('enable_session_isolation_checkbox') }}</div>
-          <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">{{ t('session_isolation_explanation') }}</p>
+          <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('session_isolation_explanation') }}</p>
         </div>
       </details>
 
@@ -112,7 +124,11 @@
       {% for c in configs %}
       <tr><td>{{ c.name }}</td><td>{{ c.categories }}</td><td>
         {% if c.ai_powered %}<span class="badge badge-cgllm">AI-Powered</span>{% else %}<span class="badge badge-source">Offline</span>{% endif %}
-        <span class="badge badge-{{ 'critical' if c.scan_level == 'aggressive' else ('high' if c.scan_level == 'medium' else 'low') }}">{{ (c.scan_level or 'low') | capitalize }}</span>
+        {% if c.enable_static is none or c.enable_static %}
+        <span class="badge badge-{{ 'critical' if c.scan_level == 'aggressive' else ('high' if c.scan_level == 'medium' else 'low') }}">Static: {{ (c.scan_level or 'low') | capitalize }}</span>
+        {% else %}
+        <span class="badge badge-pending">Static: Off</span>
+        {% endif %}
         {% if c.use_garak %}<span class="badge badge-triage-accepted_risk">Garak</span>{% endif %}
         {% if c.use_pyrit %}<span class="badge badge-triage-accepted_risk">PyRIT</span>{% endif %}
         {% if c.mutation_techniques %}<span class="badge badge-triage-accepted_risk">Mutations</span>{% endif %}
@@ -141,5 +157,17 @@ function updateCategoryCounts(level){
 document.querySelectorAll('input[name="scan_level"]').forEach(function(radio){
   radio.addEventListener('change', function(){ updateCategoryCounts(this.value); });
 });
+
+const enableStaticEl = document.getElementById('enableStatic');
+const staticOptionsEl = document.getElementById('staticScanOptions');
+function applyStaticToggle(){
+  const on = enableStaticEl.checked;
+  staticOptionsEl.style.opacity = on ? '1' : '0.4';
+  staticOptionsEl.querySelectorAll('input').forEach(function(el){ el.disabled = !on; });
+}
+if(enableStaticEl){
+  enableStaticEl.addEventListener('change', applyStaticToggle);
+  applyStaticToggle();
+}
 </script>
 {% endblock %}

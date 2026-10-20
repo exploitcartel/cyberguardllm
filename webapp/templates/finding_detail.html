@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="page-header"><div><h1>{{ finding.rule_id }} - {{ finding.owasp }}</h1><p>{{ t('severity_label') }} <span class="badge badge-{{ finding.severity }}">{{ finding.severity }}</span> {{ t('verdict_label') }} <span class="badge badge-{{ 'fail' if finding.verdict=='FAIL' else ('review' if finding.verdict=='REVIEW' else 'pass') }}">{{ finding.verdict }}</span>{% if finding.confidence is not none %} <span style="color:var(--text-muted);font-size:12px;">({{ finding.confidence }}% {{ t('confidence_label') }})</span>{% endif %}{% if finding.reproducibility_total %} <span style="color:var(--text-muted);font-size:12px;">({{ finding.reproducibility_hits }}/{{ finding.reproducibility_total }} {{ t('reproducibility_label') }})</span>{% endif %}</p></div></div>
+<div class="page-header"><div><h1>{{ finding.rule_id }} - {{ finding.owasp }}</h1><p>{{ t('severity_label') }} <span class="badge badge-{{ finding.severity }}">{{ finding.severity }}</span> {{ t('verdict_label') }} <span class="badge badge-{{ 'fail' if finding.verdict=='FAIL' else ('review' if finding.verdict=='REVIEW' else 'pass') }}">{{ finding.verdict }}</span>{% if finding.confidence is not none %} <span style="color:var(--text-muted);font-size:14px;">({{ finding.confidence }}% {{ t('confidence_label') }})</span>{% endif %}{% if finding.reproducibility_total %} <span style="color:var(--text-muted);font-size:14px;">({{ finding.reproducibility_hits }}/{{ finding.reproducibility_total }} {{ t('reproducibility_label') }})</span>{% endif %}</p></div></div>
 <div class="card" style="margin-bottom:16px;">
   <h3 style="margin-top:0;">{{ t('description_title') }}</h3>
   <p>{{ finding.description }}</p>
@@ -18,7 +18,7 @@
 {% if finding.verdict == 'FAIL' %}
 <div class="card" style="margin-top:16px;">
   <h3 style="margin-top:0;">{{ t('triage_title') }}</h3>
-  <p style="color:var(--text-muted);font-size:13px;">
+  <p style="color:var(--text-muted);font-size:14.5px;">
     {{ t('current_status_label') }} <span class="badge badge-triage-{{ finding.triage_status or 'open' }}">{{ t('triage_' ~ (finding.triage_status or 'open')) }}</span>
     {% if finding.triaged_by %} - {{ t('triaged_by_label') }} {{ finding.triaged_by }} ({{ finding.triaged_at|fmtdate }}){% endif %}
   </p>
