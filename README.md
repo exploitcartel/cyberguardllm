@@ -568,7 +568,7 @@ do when something in that path doesn't go smoothly.
 
 ```bash
 source venv/bin/activate
-pip install --only-binary :all: greenlet && pip install playwright==1.47.0 --no-deps
+pip install --only-binary :all: greenlet pyee && pip install playwright==1.47.0 --no-deps
 # if that still fails, try the newer unpinned release instead:
 #   pip install playwright
 playwright install chromium
