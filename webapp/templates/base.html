@@ -90,10 +90,7 @@
     </div>
     {% endif %}
     {% endwith %}
-    {% block content %}{% endblock %}
-  </div>
-</div>
-<script>
+    <script>
 function setTheme(mode){
   document.cookie = "theme=" + mode + "; path=/; max-age=31536000";
   location.reload();
@@ -211,5 +208,8 @@ function initBulkSelect(opts){
   });
 })();
 </script>
+    {% block content %}{% endblock %}
+  </div>
+</div>
 </body>
 </html>
