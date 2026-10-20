@@ -8,9 +8,19 @@
     <h3 style="margin-top:0;">{{ t('new_config') }}</h3>
     <form method="post" action="/scan-configs/create">
       <div class="field"><label>{{ t('config_name_label') }}</label><input type="text" name="name" placeholder="Full Audit" required></div>
-      <label>{{ t('owasp_categories_label') }}</label>
+
+      <label>Static Scan Level</label>
+      <p style="color:var(--text-muted);font-size:12px;margin:4px 0 8px;">
+        Low runs only the original 128 core payloads. Medium adds a curated proportional subset of the
+        expanded community-sourced library. Aggressive runs everything (~566 payloads across all categories).
+      </p>
+      <div class="checkbox-row"><input type="radio" name="scan_level" value="low" id="scanLevelLow"> Low - core payloads only ({{ counts_by_level.low.values() | sum }} total)</div>
+      <div class="checkbox-row"><input type="radio" name="scan_level" value="medium" id="scanLevelMedium"> Medium - curated expansion ({{ counts_by_level.medium.values() | sum }} total)</div>
+      <div class="checkbox-row"><input type="radio" name="scan_level" value="aggressive" id="scanLevelAggressive" checked> Aggressive - full library ({{ counts_by_level.aggressive.values() | sum }} total)</div>
+
+      <label style="margin-top:14px;display:block;">{{ t('owasp_categories_label') }}</label>
       {% for code, label, count in categories %}
-      <div class="checkbox-row"><input type="checkbox" name="categories" value="{{ code }}" checked> {{ code }} - {{ label }} ({{ count }} payloads)</div>
+      <div class="checkbox-row"><input type="checkbox" name="categories" value="{{ code }}" checked> {{ code }} - {{ label }} (<span class="cat-count" data-code="{{ code }}">{{ count }}</span> payloads)</div>
       {% endfor %}
       <details open class="config-section">
         <summary>{{ t('section_ai_powered') }}</summary>
@@ -102,6 +112,7 @@
       {% for c in configs %}
       <tr><td>{{ c.name }}</td><td>{{ c.categories }}</td><td>
         {% if c.ai_powered %}<span class="badge badge-cgllm">AI-Powered</span>{% else %}<span class="badge badge-source">Offline</span>{% endif %}
+        <span class="badge badge-{{ 'critical' if c.scan_level == 'aggressive' else ('high' if c.scan_level == 'medium' else 'low') }}">{{ (c.scan_level or 'low') | capitalize }}</span>
         {% if c.use_garak %}<span class="badge badge-triage-accepted_risk">Garak</span>{% endif %}
         {% if c.use_pyrit %}<span class="badge badge-triage-accepted_risk">PyRIT</span>{% endif %}
         {% if c.mutation_techniques %}<span class="badge badge-triage-accepted_risk">Mutations</span>{% endif %}
@@ -117,4 +128,18 @@
     </table>
   </div>
 </div>
+
+<script>
+const countsByLevel = {{ counts_by_level | tojson }};
+function updateCategoryCounts(level){
+  const counts = countsByLevel[level] || {};
+  document.querySelectorAll('.cat-count').forEach(function(el){
+    const code = el.getAttribute('data-code');
+    el.textContent = counts[code] || 0;
+  });
+}
+document.querySelectorAll('input[name="scan_level"]').forEach(function(radio){
+  radio.addEventListener('change', function(){ updateCategoryCounts(this.value); });
+});
+</script>
 {% endblock %}

@@ -70,27 +70,50 @@ def load_all_rules():
     return rules
 
 
-def load_rules_by_categories(categories):
+LEVEL_RANK = {"low": 0, "medium": 1, "aggressive": 2}
+
+
+def load_rules_by_categories(categories, level="low"):
     """
     categories: list like ['LLM01','LLM02'].
+    level: 'low' (default, the original 128 hand-written rules only),
+           'medium' (low + a curated proportional subset of the
+           community-sourced expansion, ~350 total), or 'aggressive' (the
+           full ~566-rule library). Cumulative: a rule tagged 'low' runs at
+           every level, one tagged 'medium' runs at medium and aggressive,
+           one tagged 'aggressive' runs only at aggressive.
 
     No categories selected means no static OWASP payloads should run at
     all - a scan config built purely for PyRIT/garak (nothing checked under
     OWASP CATEGORIES) must not silently fall back to running the entire
-    128-payload static library, since that makes the run look unrelated to
-    the tool the operator actually picked. Returns [] in that case instead
-    of defaulting to everything.
+    static library, since that makes the run look unrelated to the tool
+    the operator actually picked. Returns [] in that case instead of
+    defaulting to everything.
     """
     if not categories:
         return []
     all_rules = load_all_rules()
-    return [r for r in all_rules if r.get("owasp") in categories]
+    max_rank = LEVEL_RANK.get(level, 0)
+    return [
+        r for r in all_rules
+        if r.get("owasp") in categories and LEVEL_RANK.get(r.get("level", "low"), 0) <= max_rank
+    ]
 
 
-def count_by_category():
+def count_by_category(level="aggressive"):
     all_rules = load_all_rules()
+    max_rank = LEVEL_RANK.get(level, 2)
     counts = {}
     for r in all_rules:
+        if LEVEL_RANK.get(r.get("level", "low"), 0) > max_rank:
+            continue
         owasp = r.get("owasp", "unknown")
         counts[owasp] = counts.get(owasp, 0) + 1
     return counts
+
+
+def count_by_category_all_levels():
+    """Returns {'low': {owasp: count}, 'medium': {...}, 'aggressive': {...}}, for a UI that
+    shows payload counts per category and updates them live as the operator switches
+    scan level."""
+    return {lvl: count_by_category(lvl) for lvl in ("low", "medium", "aggressive")}
