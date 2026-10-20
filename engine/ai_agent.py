@@ -28,7 +28,7 @@ import requests
 
 PROVIDER_DEFAULTS = {
     "openai_compatible": {"api_base": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
-    "anthropic": {"api_base": "https://api.anthropic.com", "model": "claude-sonnet-4-5-20250929"},
+    "anthropic": {"api_base": "https://api.anthropic.com", "model": "claude-sonnet-5"},
     "gemini": {"api_base": "https://generativelanguage.googleapis.com", "model": "gemini-2.0-flash"},
 }
 
