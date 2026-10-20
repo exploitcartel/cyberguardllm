@@ -41,6 +41,55 @@ CHAT_INPUT_SELECTORS = [
 
 SEND_BUTTON_HINTS = re.compile(r"send|submit|ask|chat", re.IGNORECASE)
 
+# Many chat widgets start collapsed behind a small floating toggle button
+# (a circular icon in a page corner) and only mount/reveal their actual
+# input once that toggle is clicked. These hints cover the common English
+# and Albanian wording seen on real widgets ("chat", "asistent", "ndihm..."
+# covers "ndihmë"/"ndihmo", "bisedo" = "chat/converse").
+CHAT_TOGGLE_HINTS = re.compile(
+    r"chat|asistent|assistant|support|message|bisedo|ndihm|pyet|help",
+    re.IGNORECASE,
+)
+
+
+def _find_chat_toggle(page):
+    """Best-effort search for a closed chat widget's toggle button: a
+    small clickable element (button/link/role=button), fixed-positioned
+    or just visually small like a floating action button, whose text,
+    aria-label or title hints at opening a chat/assistant panel."""
+    try:
+        candidates = page.query_selector_all("button, a, [role='button'], [onclick]")
+    except Exception:
+        return None
+    for el in candidates:
+        try:
+            if not el.is_visible():
+                continue
+            text = (el.inner_text() or "")
+            label = (el.get_attribute("aria-label") or "") + " " + (el.get_attribute("title") or "")
+            hay = text + " " + label
+            box = el.bounding_box()
+            small_fab = bool(box) and box["width"] <= 100 and box["height"] <= 100
+            if CHAT_TOGGLE_HINTS.search(hay) or small_fab:
+                # Prefer an explicit textual/label match; only fall back to
+                # a bare small-floating-button guess if nothing else fits.
+                if CHAT_TOGGLE_HINTS.search(hay):
+                    return el
+        except Exception:
+            continue
+    # Second pass: no labeled match found, try the first small floating
+    # button as a last resort (common for icon-only toggles with no text).
+    for el in candidates:
+        try:
+            if not el.is_visible():
+                continue
+            box = el.bounding_box()
+            if box and box["width"] <= 100 and box["height"] <= 100:
+                return el
+        except Exception:
+            continue
+    return None
+
 
 def _looks_like_chat_input(el) -> bool:
     try:
@@ -207,9 +256,26 @@ def discover_via_browser(url: str, test_message: str = "hello, can you help me",
 
             input_el = _find_chat_input(page)
             if not input_el:
+                # The widget may start collapsed behind a small floating
+                # toggle button (very common pattern) - try clicking a
+                # likely toggle, give the panel a moment to mount/render,
+                # then search again before giving up.
+                toggle = _find_chat_toggle(page)
+                if toggle:
+                    try:
+                        toggle.click()
+                        page.wait_for_timeout(1000)
+                        input_el = _find_chat_input(page)
+                    except Exception:
+                        pass
+            if not input_el:
                 browser.close()
                 return {"status": "failed",
-                        "reason": "Could not find a chat input element on the page (textarea/contenteditable/text input)."}
+                        "reason": "Could not find a chat input element on the page (textarea/contenteditable/text input), "
+                                  "even after trying to click a likely chat-toggle button. If the widget opens from a "
+                                  "button click in your own browser, the button may use wording/markup this heuristic "
+                                  "doesn't recognize - fall back to manual discovery with DevTools, or open the widget "
+                                  "yourself first and send the test message manually to capture the API call."}
 
             try:
                 input_el.click()
