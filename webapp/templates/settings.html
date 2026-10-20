@@ -90,6 +90,29 @@
   <p style="color:var(--text-muted);font-size:14.5px;">
     {{ t('scan_mode_explanation') }}
   </p>
+
+  {% if settings.ai_api_key_encrypted %}
+  <div class="warn-box" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+    <div>
+      <strong style="color:#22c55e;">&#9679; {{ t('ai_config_status_configured') }}</strong>
+      <div style="color:var(--text-muted);font-size:14px;margin-top:4px;">
+        {{ t('field_ai_provider') }}: <strong>{{ settings.ai_provider or 'openai_compatible' }}</strong>
+        &nbsp;&middot;&nbsp; {{ t('field_model') }}: <strong>{{ settings.ai_model }}</strong>
+        &nbsp;&middot;&nbsp; {{ t('field_ai_api_base') }}: <strong>{{ settings.ai_api_base }}</strong>
+      </div>
+    </div>
+    <button type="button" class="btn btn-sm" id="btnCopyConfig"
+      data-provider="{{ settings.ai_provider or 'openai_compatible' }}"
+      data-base="{{ settings.ai_api_base }}"
+      data-model="{{ settings.ai_model }}"
+      onclick="copyAiConfig(this)">{{ t('btn_copy_config') }}</button>
+  </div>
+  {% else %}
+  <div class="warn-box" style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+    <strong style="color:var(--text-muted);">&#9675; {{ t('ai_config_status_not_configured') }}</strong>
+  </div>
+  {% endif %}
+
   <form method="post" action="/settings/scan-mode">
     <div class="field">
       <label>{{ t('field_scan_mode') }}</label>
@@ -109,7 +132,15 @@
     </div>
     <div class="grid grid-2">
       <div class="field"><label>{{ t('field_ai_api_base') }}</label><input type="text" name="ai_api_base" id="aiApiBaseInput" placeholder="https://api.openai.com/v1" value="{{ settings.ai_api_base }}"></div>
-      <div class="field"><label>{{ t('field_model') }}</label><input type="text" name="ai_model" id="aiModelInput" placeholder="gpt-4o-mini" value="{{ settings.ai_model }}"></div>
+      <div class="field">
+        <label>{{ t('field_model') }}</label>
+        <input type="text" name="ai_model" id="aiModelInput" placeholder="gpt-4o-mini" value="{{ settings.ai_model }}">
+        <div id="anthropicModelPicks" style="display:none;gap:6px;flex-wrap:wrap;margin-top:8px;">
+          <button type="button" class="btn btn-sm" onclick="setModel('claude-haiku-5-5')">Haiku 5.5 ({{ t('model_pick_cheap') }})</button>
+          <button type="button" class="btn btn-sm" onclick="setModel('claude-sonnet-5-5')">Sonnet 5.5 ({{ t('model_pick_balanced') }})</button>
+          <button type="button" class="btn btn-sm" onclick="setModel('claude-opus-5-5')">Opus 5.5 ({{ t('model_pick_strongest') }})</button>
+        </div>
+      </div>
     </div>
     <div class="field"><label>{{ t('field_ai_api_key') }}</label><input type="password" name="ai_api_key" placeholder="{{ t('ai_api_key_placeholder_stored') if settings.ai_api_key_encrypted else 'sk-...' }}"></div>
     <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('ai_api_key_hint') }}</p>
@@ -120,15 +151,41 @@
 <script>
 const PROVIDER_DEFAULTS = {
   openai_compatible: {api_base: 'https://api.openai.com/v1', model: 'gpt-4o-mini'},
-  anthropic: {api_base: 'https://api.anthropic.com', model: 'claude-sonnet-4-5-20250929'},
+  anthropic: {api_base: 'https://api.anthropic.com', model: 'claude-sonnet-5'},
   gemini: {api_base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash'},
 };
 const providerSelect = document.getElementById('aiProviderSelect');
 const apiBaseInput = document.getElementById('aiApiBaseInput');
 const modelInput = document.getElementById('aiModelInput');
+const anthropicPicks = document.getElementById('anthropicModelPicks');
+
+function toggleAnthropicPicks(provider){
+  if(!anthropicPicks) return;
+  anthropicPicks.style.display = (provider === 'anthropic') ? 'flex' : 'none';
+}
+function setModel(name){
+  if(modelInput) modelInput.value = name;
+}
+function copyAiConfig(btn){
+  const text = 'provider: ' + btn.dataset.provider + '\nbase_url: ' + btn.dataset.base +
+    '\nmodel: ' + btn.dataset.model + '\napi_key: (hidden, stored encrypted - not exportable)';
+  const original = btn.textContent;
+  function done(ok){
+    btn.textContent = ok ? '✓ Copied' : 'Copy failed';
+    setTimeout(function(){ btn.textContent = original; }, 1500);
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ done(true); }).catch(function(){ done(false); });
+  } else {
+    done(false);
+  }
+}
+
 if(providerSelect){
+  toggleAnthropicPicks(providerSelect.value);
   providerSelect.addEventListener('change', function(){
     const d = PROVIDER_DEFAULTS[this.value];
+    toggleAnthropicPicks(this.value);
     if(!d) return;
     if(!apiBaseInput.value || Object.values(PROVIDER_DEFAULTS).some(p => p.api_base === apiBaseInput.value)){
       apiBaseInput.value = d.api_base;
