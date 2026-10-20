@@ -120,9 +120,9 @@
   <div class="card">
     <h3 style="margin-top:0;">{{ t('existing_configs') }}</h3>
     <table>
-      <tr><th>{{ t('col_name') }}</th><th>{{ t('col_categories') }}</th><th>{{ t('col_mode') }}</th></tr>
+      <tr><th>{{ t('col_name') }}</th><th>{{ t('col_categories') }}</th><th>{{ t('col_mode') }}</th><th style="width:60px;"></th></tr>
       {% for c in configs %}
-      <tr><td>{{ c.name }}</td><td>{{ c.categories }}</td><td>
+      <tr><td id="cfg-name-{{ c.id }}">{{ c.name }}</td><td>{{ c.categories }}</td><td>
         {% if c.ai_powered %}<span class="badge badge-cgllm">AI-Powered</span>{% else %}<span class="badge badge-source">Offline</span>{% endif %}
         {% if c.enable_static is none or c.enable_static %}
         <span class="badge badge-{{ 'critical' if c.scan_level == 'aggressive' else ('high' if c.scan_level == 'medium' else 'low') }}">Static: {{ (c.scan_level or 'low') | capitalize }}</span>
@@ -137,9 +137,27 @@
         {% if c.enable_recon %}<span class="badge badge-triage-accepted_risk">AI Recon</span>{% endif %}
         {% if c.enable_fingerprint %}<span class="badge badge-triage-accepted_risk">Fingerprint</span>{% endif %}
         {% if c.enable_session_isolation %}<span class="badge badge-triage-accepted_risk">Session Isolation</span>{% endif %}
-      </td></tr>
+      </td>
+      <td>
+        {% if user_role in ('administrator','global_administrator') %}
+        <div class="row-menu" id="menu-{{ c.id }}">
+          <button type="button" class="row-menu-btn" onclick="toggleRowMenu({{ c.id }})" title="Actions">⋮</button>
+          <div class="row-menu-dropdown">
+            <button type="button" onclick="startRename({{ c.id }})">Rename</button>
+            <form method="post" action="/scan-configs/{{ c.id }}/delete" onsubmit="return confirm('Delete config &quot;{{ c.name }}&quot;? This cannot be undone.');">
+              <button type="submit" class="danger">Delete</button>
+            </form>
+            <form id="rename-form-{{ c.id }}" class="row-rename-form" method="post" action="/scan-configs/{{ c.id }}/rename">
+              <input type="text" name="name" value="{{ c.name }}" required>
+              <button type="submit" class="btn btn-sm">Save</button>
+            </form>
+          </div>
+        </div>
+        {% endif %}
+      </td>
+      </tr>
       {% else %}
-      <tr><td colspan="3" style="text-align:center;color:var(--text-muted);">{{ t('no_configs_yet') }}</td></tr>
+      <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">{{ t('no_configs_yet') }}</td></tr>
       {% endfor %}
     </table>
   </div>
@@ -169,5 +187,23 @@ if(enableStaticEl){
   enableStaticEl.addEventListener('change', applyStaticToggle);
   applyStaticToggle();
 }
+
+function closeAllRowMenus(except){
+  document.querySelectorAll('.row-menu.open').forEach(function(m){
+    if(m.id !== except) m.classList.remove('open');
+  });
+}
+function toggleRowMenu(id){
+  const menu = document.getElementById('menu-' + id);
+  const isOpen = menu.classList.contains('open');
+  closeAllRowMenus();
+  if(!isOpen) menu.classList.add('open');
+}
+function startRename(id){
+  document.getElementById('rename-form-' + id).classList.add('open');
+}
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.row-menu')) closeAllRowMenus();
+});
 </script>
 {% endblock %}
