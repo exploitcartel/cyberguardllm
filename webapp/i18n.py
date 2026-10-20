@@ -172,16 +172,20 @@ TRANSLATIONS = {
     "garak_module_explanation": {
         "en": "Runs a curated set of garak's own probes directly against this target through its real auth/body "
               "config - a fully standalone test, independent of the static payload scan above (turn that off "
-              "if you want garak only). Purely offline: garak's own detectors here are heuristic/substring "
-              "checks, no AI API key or model of any kind is called. Requires garak installed "
-              "(pip install -r requirements.txt). Findings are marked source 'garak' and should be verified "
-              "manually, since garak's detector heuristics can produce false positives.",
+              "if you want garak only). No AI API configured under Settings: runs purely offline on garak's own "
+              "heuristic/substring detectors, exactly like running garak by itself. AI API configured: each "
+              "result is additionally cross-checked by this tool's own AI judge, and only kept as a finding when "
+              "both agree (a disagreement is flagged REVIEW instead of trusted either way) - this is optional, "
+              "not required, and never blocks garak from running without it. Requires garak installed "
+              "(pip install -r requirements.txt).",
         "al": "Ekzekuton një grup të zgjedhur prob-esh nga vet garak direkt kundrejt këtij targeti, duke "
               "përdorur auth/body config-un real të tij - test krejtësisht i pavarur, pa lidhje me skanimin "
-              "statik më sipër (fike atë nëse don vetëm garak). Tërësisht offline: detektorët e garak këtu janë "
-              "kontrolle heuristike/substring, s'thirret asnjë AI API key apo model. Kërkon garak të instaluar "
-              "(pip install -r requirements.txt). Gjetjet shënohen me burim 'garak' dhe duhen verifikuar "
-              "manualisht, pasi heuristikat e detektorëve të garak mund të prodhojnë false positive."},
+              "statik më sipër (fike atë nëse don vetëm garak). Pa AI API të konfiguruar te Settings: run "
+              "tërësisht offline me detektorët heuristikë/substring të vetë garak, njësoj si ta ekzekutosh garak "
+              "vetë. Me AI API të konfiguruar: çdo rezultat kontrollohet shtesë nga gjykatësi AI i vetë mjetit, "
+              "dhe mbahet si gjetje vetëm kur pajtohen të dy (mospajtimi shënohet REVIEW në vend që t'i besohet "
+              "njërit anash) - kjo është opsionale, jo e detyrueshme, dhe asnjëherë s'e pengon garak të punojë "
+              "pa të. Kërkon garak të instaluar (pip install -r requirements.txt)."},
     "garak_extra_probes_label": {"en": "Advanced: extra garak probe names (comma-separated, any installed probe)",
                                   "al": "Të përparuara: emra shtesë probe-sh garak (ndarë me presje, çdo probe i instaluar)"},
     "use_pyrit_checkbox_label": {"en": "Run PyRIT module (external, Microsoft PyRIT) - requires AI API",
