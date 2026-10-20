@@ -1,15 +1,22 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-header"><div><h1>{{ t('rule_new_title') }}</h1><p>{{ t('rule_new_sub') }}</p></div></div>
+{% if prefill %}
+<div class="warn-box" style="background:rgba(37,99,235,0.08);border-color:rgba(37,99,235,0.25);">
+  <div>Pre-filled from an AI-Powered/PyRIT finding. The prompt that worked is already in place - add Fail
+  Conditions below (text/regex patterns that match when the target's response shows this vulnerability) before
+  saving, since that judgment was made by an AI, not by a fixed pattern this static rule can reuse directly.</div>
+</div>
+{% endif %}
 <div class="card">
   <form method="post" action="/rules/create">
     <div class="grid grid-2">
-      <div class="field"><label>{{ t('field_rule_id') }}</label><input type="text" name="rule_id" placeholder="CUSTOM-001" required></div>
+      <div class="field"><label>{{ t('field_rule_id') }}</label><input type="text" name="rule_id" placeholder="CUSTOM-001" value="{{ prefill.rule_id if prefill else '' }}" required></div>
       <div class="field">
         <label>{{ t('field_owasp') }}</label>
         <select name="owasp">
           {% for code in owasp_categories %}
-          <option value="{{ code }}">{{ code }}</option>
+          <option value="{{ code }}" {{ 'selected' if prefill and prefill.owasp == code }}>{{ code }}</option>
           {% endfor %}
         </select>
       </div>
@@ -18,18 +25,18 @@
       <div class="field">
         <label>{{ t('field_severity') }}</label>
         <select name="severity">
-          <option value="critical">critical</option>
-          <option value="high" selected>high</option>
-          <option value="medium">medium</option>
-          <option value="low">low</option>
+          <option value="critical" {{ 'selected' if prefill and prefill.severity == 'critical' }}>critical</option>
+          <option value="high" {{ 'selected' if not prefill or prefill.severity == 'high' }}>high</option>
+          <option value="medium" {{ 'selected' if prefill and prefill.severity == 'medium' }}>medium</option>
+          <option value="low" {{ 'selected' if prefill and prefill.severity == 'low' }}>low</option>
         </select>
       </div>
-      <div class="field"><label>{{ t('field_module') }}</label><input type="text" name="module" placeholder="e.g. My Client Engagement"></div>
+      <div class="field"><label>{{ t('field_module') }}</label><input type="text" name="module" placeholder="e.g. My Client Engagement" value="{{ prefill.module if prefill else '' }}"></div>
     </div>
-    <div class="field"><label>{{ t('field_technique') }}</label><input type="text" name="technique" placeholder="short_technique_name"></div>
+    <div class="field"><label>{{ t('field_technique') }}</label><input type="text" name="technique" placeholder="short_technique_name" value="{{ prefill.technique if prefill else '' }}"></div>
     <div class="field">
       <label>{{ t('field_rule_prompt') }}</label>
-      <textarea name="prompt" rows="7" placeholder="{{ t('rule_prompt_placeholder') }}" required></textarea>
+      <textarea name="prompt" rows="7" placeholder="{{ t('rule_prompt_placeholder') }}" required>{{ prefill.prompt if prefill else '' }}</textarea>
       <p style="color:var(--text-muted);font-size:14px;margin-top:4px;">{{ t('rule_prompt_hint') }}</p>
     </div>
     <div class="grid grid-2">
