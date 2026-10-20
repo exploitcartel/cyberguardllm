@@ -382,10 +382,33 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 prompt = ai_agent.generate_adversarial_prompt(
                     api_base, api_key, model, owasp_code, label, prev_prompt, prev_response)
             except Exception as e:
+                # A broken provider/model/key would otherwise fail the exact
+                # same way on every remaining attempt and category, silently
+                # producing a scan with zero findings and no explanation of
+                # why. Surface the real error (including the provider's own
+                # response body, e.g. Anthropic's "invalid x-api-key") as a
+                # single finding and abort the rest of this run instead of
+                # burning through every attempt with nothing to show for it.
+                err_detail = str(e)
+                resp_obj = getattr(e, "response", None)
+                if resp_obj is not None:
+                    try:
+                        err_detail = f"{e} | provider response: {resp_obj.text[:300]}"
+                    except Exception:
+                        pass
+                conn.execute(
+                    """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response, description, module, source, recommendation)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (result_id, "ai-call-error", owasp_code, "low", "PASS", "", "",
+                     f"AI-Powered scan stopped: the attacking AI agent call failed ({err_detail}). "
+                     "Check the AI provider, model name and API key under Settings, then re-run this scan.",
+                     "ai_agent", "ai_agent",
+                     "Fix the AI API configuration under Settings and re-run this scan."),
+                )
                 conn.execute("UPDATE tasks SET progress_done=?, progress_findings=?, last_rule_id=? WHERE id=?",
-                             (step, findings_count, rule_id, task_id))
+                             (total, findings_count, "ai-call-error", task_id))
                 conn.commit()
-                continue
+                return False
 
             response_text = send_prompt(target, prompt)
 
