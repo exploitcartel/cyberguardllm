@@ -19,6 +19,31 @@ OWASP_LABELS_FALLBACK = {
 AI_ATTEMPTS_PER_CATEGORY = 3
 
 
+def _check_control(conn, task_id):
+    """
+    Reads the operator control signal for this task (tasks.control: 'run',
+    'pause', or 'stop') between payloads, so a long scan can be paused or
+    stopped mid-run from the UI instead of only ever being waited out.
+
+    While 'pause' is set, this blocks here, re-polling the DB every second,
+    so no further payload is sent until an operator resumes it (or stops
+    it). Everything up through the previous payload is already committed
+    to the DB, so pausing never loses progress.
+
+    Returns True if the scan should stop now (operator clicked Stop, or
+    clicked Stop while paused) - the caller should end the loop early.
+    Returns False to keep going normally ('run', the default).
+    """
+    while True:
+        row = conn.execute("SELECT control FROM tasks WHERE id=?", (task_id,)).fetchone()
+        control = row["control"] if row and row["control"] else "run"
+        if control == "stop":
+            return True
+        if control != "pause":
+            return False
+        time.sleep(1)
+
+
 def _get_ai_judge_config():
     """
     Returns (api_base, api_key, model) if an AI API is configured in Settings,
@@ -210,6 +235,8 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
                     variants.append((tech, mutated_rule))
 
         for mutation_name, variant_rule in variants:
+            if _check_control(conn, task_id):
+                return True  # operator stopped the scan; everything so far is already saved
             step += 1
             attempt_start = time.monotonic()
             verdict, severity, confidence, prompt_sent, raw_response, judge_note = _evaluate_attempt(
@@ -269,6 +296,8 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
                          (step, findings_count, rule_id, task_id))
             conn.commit()
 
+    return False  # ran to completion, not stopped early
+
 
 def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=None):
     """
@@ -320,13 +349,15 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
         conn.execute("UPDATE tasks SET progress_done=?, progress_findings=?, last_rule_id=? WHERE id=?",
                      (total, 0, "ai-config-error", task_id))
         conn.commit()
-        return
+        return False
 
     for owasp_code in cats:
         label = OWASP_LABELS_FALLBACK.get(owasp_code, owasp_code)
         prev_prompt, prev_response = None, None
         category_confirmed = False
         for attempt in range(1, attempts_budget + 1):
+            if _check_control(conn, task_id):
+                return True  # operator stopped the scan; everything so far is already saved
             step += 1
             rule_id = f"ai-{owasp_code}-{attempt}"
             try:
@@ -391,6 +422,8 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
         if category_confirmed:
             continue
 
+    return False  # ran to completion, not stopped early
+
 
 def _execute(task_id: int):
     conn = get_conn()
@@ -411,14 +444,30 @@ def _execute(task_id: int):
     conn.commit()
     result_id = cur.lastrowid
 
+    stopped = False
     try:
         if ai_powered:
-            _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=config["ai_max_attempts"])
+            stopped = _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=config["ai_max_attempts"])
         else:
-            _run_static(conn, task_id, result_id, target, categories, config)
+            stopped = _run_static(conn, task_id, result_id, target, categories, config)
     except Exception as e:
         conn.execute("UPDATE scan_results SET status='error' WHERE id=?", (result_id,))
         conn.execute("UPDATE tasks SET status='error' WHERE id=?", (task_id,))
+        conn.commit()
+        conn.close()
+        return
+
+    if stopped:
+        # Operator clicked Stop: skip every post-processing module (garak,
+        # PyRIT, canary, recon, fingerprint, session isolation, chaining)
+        # and close out the scan now with whatever findings are already
+        # committed, instead of silently continuing to run them.
+        rows = conn.execute("SELECT severity, verdict FROM findings WHERE scan_result_id=?", (result_id,)).fetchall()
+        total_findings = len([r for r in rows if r["verdict"] == "FAIL"])
+        risk_score = compute_risk_score_rows(rows)
+        conn.execute("UPDATE scan_results SET total_findings=?, risk_score=?, status='stopped', finished_at=? WHERE id=?",
+                     (total_findings, risk_score, now(), result_id))
+        conn.execute("UPDATE tasks SET status='stopped', last_rule_id='Stopped by operator' WHERE id=?", (task_id,))
         conn.commit()
         conn.close()
         return
@@ -526,4 +575,5 @@ def get_task_progress(task_id: int):
         "findings": task["progress_findings"] or 0,
         "last_rule_id": task["last_rule_id"],
         "result_id": task["result_id"],
+        "control": task["control"] if "control" in task.keys() and task["control"] else "run",
     }
