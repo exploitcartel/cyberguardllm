@@ -101,7 +101,11 @@ def _chat_anthropic(api_base, api_key, model, system_prompt, user_prompt, timeou
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_prompt}],
         "max_tokens": 400,
-        "temperature": 0.9,
+        # No "temperature" here: newer Claude models (e.g. claude-haiku-5-5)
+        # reject it outright with a 400 invalid_request_error ("temperature
+        # is deprecated for this model"), unlike older models where it was
+        # accepted. Omitting it uses that model's own default instead of
+        # hardcoding a value some models no longer support.
     }
     resp = requests.post(url, headers=headers, json=body, timeout=timeout)
     resp.raise_for_status()
