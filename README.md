@@ -9,7 +9,6 @@
 <p align="center">
   <a href="#-setup"><img src="https://img.shields.io/badge/python-3.9%2B-3776AB?logo=python&logoColor=white" alt="Python 3.9+"></a>
   <a href="#-setup"><img src="https://img.shields.io/badge/framework-Flask-000000?logo=flask&logoColor=white" alt="Flask"></a>
-  <img src="https://img.shields.io/badge/style-GVM%2FOpenVAS--style-0A66C2" alt="GVM/OpenVAS-style">
   <img src="https://img.shields.io/badge/OWASP-LLM%20Top%2010-FF4500" alt="OWASP LLM Top 10">
   <img src="https://img.shields.io/badge/deployment-self--hosted-brightgreen" alt="Self-hosted">
   <img src="https://img.shields.io/badge/OS-Linux%20%7C%20macOS%20%7C%20Windows-0078D4" alt="OS support">
@@ -19,8 +18,8 @@
 
 You give CYBERGUARD LLM a target URL and a session token, nothing else. It figures out how to talk to the target,
 runs a library of adversarial payloads mapped to the OWASP Top 10 for Large Language Model Applications, scores the
-result, and produces a detailed PDF report. It is built as a GVM/OpenVAS-style self-hosted web application: you run
-it locally (or on a server you control) and operate it entirely from the browser.
+result, and produces a detailed PDF report. It is a self-hosted web application: you run it locally (or on a
+server you control) and operate it entirely from the browser.
 
 Built by [exploitcartel](https://github.com/exploitcartel).
 
