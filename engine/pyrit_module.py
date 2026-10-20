@@ -29,6 +29,17 @@ as CrescendoAttack (multi-turn, adaptive) first and falls back to a plain
 single-turn PromptSendingAttack, then to a direct call with no PyRIT attack
 class at all, if construction fails for any reason, so a version mismatch
 degrades gracefully instead of crashing the scan.
+
+Provider note: PyRIT's own OpenAIChatTarget only speaks the OpenAI
+chat-completions format, so it is only used for Crescendo's adversarial
+model when Settings has "openai_compatible" selected. For Anthropic or
+Gemini, PyRIT has no dedicated native target class, so this routes through
+PyRIT's LiteLLMChatTarget instead (provider-agnostic, backed by litellm).
+If that still fails (unsupported PyRIT/litellm version, etc.), the run
+degrades to a single-turn send same as any other failure, but - unlike a
+silent fallback - the stored finding explicitly says Crescendo did not run
+and why, instead of presenting a single blunt prompt as if it were the
+full adaptive multi-turn attack.
 """
 import asyncio
 import os
@@ -87,12 +98,18 @@ def _insert_explainer(conn, result_id, rule_id, message, recommendation=""):
     conn.commit()
 
 
-async def _run_one_objective_async(target_id, objective_text, ai_api_base, ai_api_key, ai_model):
+async def _run_one_objective_async(target_id, objective_text, ai_api_base, ai_api_key, ai_model,
+                                    ai_provider="openai_compatible"):
     """
     Runs one PyRIT attack (Crescendo, falling back to single-turn) against
-    the given target, through CyberGuardTarget, and returns the captured
-    (prompt, response) transcript as a list of dicts. Never raises except on
-    total failure to even send one prompt.
+    the given target, through CyberGuardTarget, and returns
+    (transcript, degraded_reason): the captured (prompt, response) list, and
+    None if the full multi-turn Crescendo attack actually ran, or a short
+    string explaining why it fell back to a single blunt prompt instead (so
+    callers can be honest about what really happened rather than silently
+    presenting a degraded single-turn send as if it were the adaptive
+    multi-turn attack). Never raises except on total failure to even send
+    one prompt.
     """
     if PROJECT_ROOT not in sys.path:
         sys.path.insert(0, PROJECT_ROOT)
@@ -115,14 +132,36 @@ async def _run_one_objective_async(target_id, objective_text, ai_api_base, ai_ap
         pass  # older/newer PyRIT may not need or expose this; continue regardless
 
     ran = False
+    degraded_reason = None
 
     # Attempt 1: multi-turn adaptive Crescendo attack, using this tool's own
     # configured AI model as the adversarial, escalation-generating chat.
+    #
+    # PyRIT's OpenAIChatTarget only speaks the OpenAI chat-completions
+    # format, so it only works when the configured provider actually is
+    # "openai_compatible" (OpenAI, DeepSeek, Groq, local vLLM/Ollama, etc.)
+    # - pointing it at Anthropic's or Gemini's native API would just fail.
+    # PyRIT has no dedicated native Anthropic/Gemini target class, so for
+    # those two providers this routes through LiteLLMChatTarget instead
+    # (PyRIT's provider-agnostic target, backed by the litellm package),
+    # which understands "<provider>/<model>" style model names. If that
+    # class or the litellm package isn't available in the installed PyRIT
+    # version, this falls through to attempt 2 like any other failure.
     try:
         from pyrit.executor.attack import AttackAdversarialConfig, CrescendoAttack
-        from pyrit.prompt_target import OpenAIChatTarget
 
-        adversarial_target = OpenAIChatTarget(endpoint=ai_api_base, api_key=ai_api_key, model_name=ai_model)
+        if ai_provider == "openai_compatible":
+            from pyrit.prompt_target import OpenAIChatTarget
+            adversarial_target = OpenAIChatTarget(endpoint=ai_api_base, api_key=ai_api_key, model_name=ai_model)
+        else:
+            import os
+            from pyrit.prompt_target import LiteLLMChatTarget
+            if ai_provider == "anthropic":
+                os.environ["ANTHROPIC_API_KEY"] = ai_api_key
+            elif ai_provider == "gemini":
+                os.environ["GEMINI_API_KEY"] = ai_api_key
+            adversarial_target = LiteLLMChatTarget(model_name=f"{ai_provider}/{ai_model}")
+
         attack = CrescendoAttack(
             objective_target=objective_target,
             attack_adversarial_config=AttackAdversarialConfig(target=adversarial_target),
@@ -131,8 +170,12 @@ async def _run_one_objective_async(target_id, objective_text, ai_api_base, ai_ap
         )
         await attack.execute_async(objective=objective_text)
         ran = True
-    except Exception:
+    except Exception as e:
         ran = False
+        degraded_reason = (
+            f"Multi-turn Crescendo attack could not run ({e}); this objective was sent as a single plain "
+            f"prompt instead, with no adaptive escalation."
+        )
 
     # Attempt 2: plain single-turn send, still through PyRIT.
     if not ran:
@@ -140,17 +183,13 @@ async def _run_one_objective_async(target_id, objective_text, ai_api_base, ai_ap
             from pyrit.executor.attack import PromptSendingAttack
             attack = PromptSendingAttack(objective_target=objective_target)
             await attack.execute_async(objective=objective_text)
-            ran = True
         except Exception:
-            ran = False
+            # Attempt 3: no PyRIT attack class at all, direct single call, so
+            # a version mismatch in PyRIT's attack API still yields a real
+            # result instead of nothing.
+            objective_target._send_text(objective_text)
 
-    # Attempt 3: no PyRIT attack class at all, direct single call, so a
-    # version mismatch in PyRIT's attack API still yields a real result
-    # instead of nothing.
-    if not ran:
-        objective_target._send_text(objective_text)
-
-    return transcript
+    return transcript, degraded_reason
 
 
 def run_pyrit_scan(conn, result_id, target_row, objective_keys, timeout_s=300):
@@ -179,6 +218,7 @@ def run_pyrit_scan(conn, result_id, target_row, objective_keys, timeout_s=300):
     ai_api_base = get_setting("ai_api_base", "")
     ai_api_key_enc = get_setting("ai_api_key_encrypted", "")
     ai_model = get_setting("ai_model", "gpt-4o-mini")
+    ai_provider = get_setting("ai_provider", "openai_compatible") or "openai_compatible"
     ai_api_key = ""
     if ai_api_key_enc:
         try:
@@ -203,8 +243,9 @@ def run_pyrit_scan(conn, result_id, target_row, objective_keys, timeout_s=300):
         objective_text, owasp = OBJECTIVES[key]
         label = OWASP_LABELS.get(owasp, owasp)
         try:
-            transcript = asyncio.run(asyncio.wait_for(
-                _run_one_objective_async(target_row["id"], objective_text, ai_api_base, ai_api_key, ai_model),
+            transcript, degraded_reason = asyncio.run(asyncio.wait_for(
+                _run_one_objective_async(target_row["id"], objective_text, ai_api_base, ai_api_key, ai_model,
+                                          ai_provider=ai_provider),
                 timeout=timeout_s,
             ))
         except Exception as e:
@@ -236,7 +277,8 @@ def run_pyrit_scan(conn, result_id, target_row, objective_keys, timeout_s=300):
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (result_id, f"PYRIT-{key}", owasp, severity, verdict, prompt_sent, raw_response,
              f"External PyRIT adaptive attack ({len(transcript)} turn(s)) toward objective: {objective_text}. "
-             f"Judge reasoning: {reasoning}",
+             f"Judge reasoning: {reasoning}"
+             + (f" NOTE: {degraded_reason}" if degraded_reason else ""),
              "PyRIT (external)", "pyrit",
              "Review this multi-turn transcript manually; harden system instructions and add output filtering "
              "for this category, then re-test." if verdict == "FAIL" else "",
