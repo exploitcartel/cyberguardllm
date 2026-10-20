@@ -148,18 +148,36 @@ def discover_socketio(url: str, token: str, timeout: float = 10.0):
     return {"status": "failed", "log": results_log}
 
 
-def send_prompt_socketio(target_row, prompt: str, timeout: float = 20.0):
+def send_prompt_socketio(target_row, prompt: str, timeout: float = 20.0, max_retries: int = 2):
+    """
+    Retries up to max_retries additional times (exponential backoff: 2s,
+    4s, ...) on a connection/exchange failure, matching the retry behavior
+    core/discovery.py's HTTP send_prompt() already has - see
+    core/ws_discovery.py's send_prompt_ws() for the same fix and rationale.
+    """
     if not _available():
         return "[ERROR] the 'python-socketio' package is not installed (pip install -r requirements.txt)"
 
-    from core.crypto import decrypt_token
-    token = decrypt_token(target_row["token_encrypted"])
+    from core.crypto import decrypt_token, TokenDecryptionError
+    try:
+        token = decrypt_token(target_row["token_encrypted"])
+    except TokenDecryptionError as e:
+        return f"[ERROR] {e}"
     event = target_row["ws_event_name"] or "message"
     shape = target_row["body_format"] or "plain"
     payload = SHAPE_BUILDERS.get(shape, SHAPE_BUILDERS["plain"])(prompt)
 
-    try:
-        reply = _run_exchange(target_row["url"], token, event, payload, window_s=min(timeout, WINDOW_S))
-        return reply or "(no reply received)"
-    except Exception as e:
-        return f"[ERROR] {e}"
+    delay = 2.0
+    last_error = "[ERROR] unknown failure"
+    for attempt in range(max_retries + 1):
+        try:
+            reply = _run_exchange(target_row["url"], token, event, payload, window_s=min(timeout, WINDOW_S))
+            return reply or "(no reply received)"
+        except Exception as e:
+            last_error = f"[ERROR] {e}"
+            if attempt < max_retries:
+                time.sleep(delay)
+                delay *= 2
+                continue
+            return last_error
+    return last_error

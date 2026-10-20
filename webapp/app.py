@@ -8,6 +8,7 @@ from flask import (Flask, request, render_template, redirect, make_response, sen
                     flash, get_flashed_messages)
 from storage.db import init_db, get_conn, now, get_setting, set_setting, get_all_settings
 from auth.auth import (seed_admin, verify_password, hash_password, make_session_cookie, read_session_cookie,
+                        validate_session_cookie, invalidate_sessions, DUMMY_PASSWORD_HASH,
                         log_activity, get_user_role, role_at_least, ROLES, ROLE_LABELS)
 from core.discovery import discover_target, get_proxies, test_proxy_connectivity
 from core.crypto import encrypt_token, decrypt_token
@@ -89,7 +90,7 @@ def current_user():
     cookie = request.cookies.get("session")
     if not cookie:
         return None
-    return read_session_cookie(cookie)
+    return validate_session_cookie(cookie)
 
 
 def theme():
@@ -153,7 +154,14 @@ def login():
     conn = get_conn()
     user = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
     conn.close()
-    if not user or not verify_password(password, user["password_hash"]):
+    # Always run a hash comparison, even when the username doesn't exist at
+    # all (against a dummy hash with no real password), so a nonexistent
+    # username doesn't return measurably faster than a real one - that
+    # timing gap is enough to enumerate valid usernames even though the
+    # error message is identical either way. See DUMMY_PASSWORD_HASH.
+    password_hash = user["password_hash"] if user else DUMMY_PASSWORD_HASH
+    password_ok = verify_password(password or "", password_hash)
+    if not user or not password_ok:
         return render_template("login.html", error="Invalid username or password.", lang=current_lang())
     resp = make_response(redirect("/dashboard"))
     resp.set_cookie("session", make_session_cookie(username), httponly=True, max_age=86400)
@@ -163,6 +171,16 @@ def login():
 
 @app.route("/logout")
 def logout():
+    username = current_user()
+    if username:
+        # Revokes this (and every other) session cookie issued for this
+        # user server-side, not just the browser's copy - a cookie signed
+        # with the itsdangerous serializer has no server-side revocation of
+        # its own, so without this, a copy of the cookie taken before
+        # logout (XSS, a shared machine, a log) would keep working
+        # indefinitely.
+        invalidate_sessions(username)
+        log_activity(username, "Logout", "")
     resp = make_response(redirect("/login"))
     resp.delete_cookie("session")
     return resp
@@ -170,27 +188,52 @@ def logout():
 
 @app.route("/dashboard")
 def dashboard():
+    # Computed with SQL-side aggregation (COUNT/GROUP BY/AVG) and a direct
+    # LIMIT, instead of loading every scan_results/targets/findings row in
+    # the whole database into Python on every dashboard view just to count
+    # and slice them here - that used to be an unbounded full-table load
+    # (and a full table scan on findings, since scan_result_id/verdict had
+    # no index - see storage/db.py's _INDEXES) that only gets slower as scan
+    # history grows. Output shape matches the old Python-side computation
+    # exactly (verified against engine/scorer.py's severity_breakdown_rows/
+    # owasp_breakdown_rows against a seeded dataset).
     username, err = require_login()
     if err: return err
     conn = get_conn()
-    scans = conn.execute("""SELECT sr.*, t.name as target_name FROM scan_results sr
-                             LEFT JOIN targets t ON sr.target_id = t.id
-                             ORDER BY sr.timestamp DESC""").fetchall()
-    targets = conn.execute("SELECT * FROM targets").fetchall()
-    findings = conn.execute("SELECT * FROM findings").fetchall()
-    conn.close()
 
-    sev = severity_breakdown_rows(findings)
-    owasp_b = owasp_breakdown_rows(findings)
+    total_scans = conn.execute("SELECT COUNT(*) as c FROM scan_results").fetchone()["c"]
+    total_targets = conn.execute("SELECT COUNT(*) as c FROM targets").fetchone()["c"]
+
+    avg_risk_row = conn.execute("SELECT AVG(risk_score) as avg_risk FROM scan_results").fetchone()
+    avg_risk = round(avg_risk_row["avg_risk"]) if avg_risk_row["avg_risk"] is not None else 0
+
+    high_critical = conn.execute(
+        "SELECT COUNT(*) as c FROM findings WHERE verdict='FAIL' AND severity IN ('high','critical')"
+    ).fetchone()["c"]
+
+    sev = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    for r in conn.execute("SELECT severity, COUNT(*) as cnt FROM findings WHERE verdict='FAIL' GROUP BY severity"):
+        if r["severity"] in sev:
+            sev[r["severity"]] = r["cnt"]
+
+    owasp_b = {}
+    for r in conn.execute(
+        "SELECT owasp, COUNT(*) as total, SUM(CASE WHEN verdict='FAIL' THEN 1 ELSE 0 END) as failed "
+        "FROM findings GROUP BY owasp"
+    ):
+        owasp_b[r["owasp"]] = {"total": r["total"], "failed": r["failed"] or 0}
     owasp_labels = list(owasp_b.keys()) or list(OWASP_LABELS.keys())
     owasp_values = [owasp_b.get(k, {}).get("failed", 0) for k in owasp_labels]
-    high_critical = sum(1 for f in findings if f["verdict"] == "FAIL" and f["severity"] in ("high", "critical"))
-    avg_risk = round(sum(s["risk_score"] for s in scans) / len(scans)) if scans else 0
+
+    recent_scans = conn.execute("""SELECT sr.*, t.name as target_name FROM scan_results sr
+                                    LEFT JOIN targets t ON sr.target_id = t.id
+                                    ORDER BY sr.timestamp DESC LIMIT 8""").fetchall()
+    conn.close()
 
     return render_template("dashboard.html", **ctx(
-        active="dashboard", total_scans=len(scans), total_targets=len(targets),
+        active="dashboard", total_scans=total_scans, total_targets=total_targets,
         high_critical=high_critical, avg_risk=avg_risk, severity=sev,
-        owasp_labels=owasp_labels, owasp_values=owasp_values, recent_scans=scans[:8],
+        owasp_labels=owasp_labels, owasp_values=owasp_values, recent_scans=recent_scans,
     ))
 
 
@@ -1126,8 +1169,16 @@ def change_password():
     conn.commit()
     conn.close()
     log_activity(username, "Password Changed", "")
+    # Revoke every session cookie issued before this change (the whole
+    # point of changing a password after a suspected compromise is that
+    # any session someone else already has should stop working), then
+    # issue a fresh cookie for THIS browser so the user who just changed
+    # it isn't logged out by their own action.
+    invalidate_sessions(username)
+    resp = make_response(redirect("/settings?tab=account"))
+    resp.set_cookie("session", make_session_cookie(username), httponly=True, max_age=86400)
     flash_t("flash_password_changed")
-    return redirect("/settings?tab=account")
+    return resp
 
 
 @app.route("/settings/users/create", methods=["POST"])

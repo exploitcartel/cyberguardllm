@@ -156,7 +156,32 @@ def init_db():
     conn.executescript(SCHEMA)
     conn.commit()
     _migrate(conn)
+    _create_indexes(conn)
     conn.close()
+
+
+# SQLite does not automatically index foreign-key columns, and every one of
+# these is filtered on constantly (a scan-result detail page loading its
+# findings, the dashboard aggregating findings/scan history per target or
+# task, deletion routes checking "is this still in use"). Without these,
+# each of those queries does a full table scan that gets slower every time
+# a new scan runs. CREATE INDEX IF NOT EXISTS is itself idempotent, so this
+# can just run on every init_db() the same as the SCHEMA executescript does.
+_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS idx_findings_scan_result_id ON findings(scan_result_id)",
+    "CREATE INDEX IF NOT EXISTS idx_findings_verdict ON findings(verdict)",
+    "CREATE INDEX IF NOT EXISTS idx_attack_chains_scan_result_id ON attack_chains(scan_result_id)",
+    "CREATE INDEX IF NOT EXISTS idx_scan_results_task_id ON scan_results(task_id)",
+    "CREATE INDEX IF NOT EXISTS idx_scan_results_target_id ON scan_results(target_id)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_target_id ON tasks(target_id)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_scan_config_id ON tasks(scan_config_id)",
+]
+
+
+def _create_indexes(conn):
+    for stmt in _INDEXES:
+        conn.execute(stmt)
+    conn.commit()
 
 
 # Columns added after the initial release, kept here instead of in SCHEMA so
@@ -209,6 +234,13 @@ _MIGRATIONS = [
     # with static payloads - e.g. static on everything, AI-Powered only on
     # the categories worth the extra API cost.
     ("scan_configs", "ai_categories", "TEXT"),
+    # Session invalidation: bumped on logout and on password change so a
+    # previously-issued session cookie (signed, but with no server-side
+    # revocation before this) stops being accepted immediately, instead of
+    # staying valid indefinitely (the signer had no expiry of its own and
+    # the cookie's own max_age only limits the BROWSER, not the server).
+    # See auth/auth.py make_session_cookie()/validate_session_cookie().
+    ("users", "session_version", "INTEGER DEFAULT 0"),
 ]
 
 
