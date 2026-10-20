@@ -529,14 +529,26 @@ def scan_config_delete(config_id):
     if err: return err
     conn = get_conn()
     row = conn.execute("SELECT * FROM scan_configs WHERE id=?", (config_id,)).fetchone()
-    in_use = conn.execute("SELECT COUNT(*) AS c FROM tasks WHERE scan_config_id=?", (config_id,)).fetchone()["c"]
+    # Only a task that's still actively running or queued to run blocks
+    # deletion; a completed/stopped/errored task already has its results
+    # saved independently (scan_results doesn't reference scan_configs), so
+    # there's nothing left for it to lose by the config going away.
+    in_use = conn.execute(
+        "SELECT COUNT(*) AS c FROM tasks WHERE scan_config_id=? AND status IN ('running','pending')",
+        (config_id,)).fetchone()["c"]
     if row and in_use == 0:
+        # tasks.scan_config_id has a FOREIGN KEY against scan_configs, so any
+        # finished task still pointing at this config must be detached first
+        # (its own data - target, findings, scan_results - is untouched and
+        # the task keeps showing in Tasks history with no config name).
+        conn.execute("UPDATE tasks SET scan_config_id=NULL WHERE scan_config_id=?", (config_id,))
         conn.execute("DELETE FROM scan_configs WHERE id=?", (config_id,))
         conn.commit()
         log_activity(username, "Config Deleted", row["name"])
         flash(f"Config '{row['name']}' deleted.", "success")
     elif row and in_use > 0:
-        flash(f"Cannot delete '{row['name']}': {in_use} task(s) reference it. Delete those tasks first.", "error")
+        flash(f"Cannot delete '{row['name']}': {in_use} scan(s) using it are still running or queued. "
+              f"Wait for them to finish, or stop them first.", "error")
     conn.close()
     return redirect("/scan-configs")
 
@@ -554,21 +566,30 @@ def scan_configs_bulk_delete():
     rows = conn.execute(f"SELECT id, name FROM scan_configs WHERE id IN ({placeholders})", ids).fetchall()
     deletable, blocked = [], []
     for row in rows:
-        in_use = conn.execute("SELECT COUNT(*) AS c FROM tasks WHERE scan_config_id=?", (row["id"],)).fetchone()["c"]
+        # Same rule as the single-delete route: only a still-running or
+        # queued scan blocks deletion, not a config's finished scan history.
+        in_use = conn.execute(
+            "SELECT COUNT(*) AS c FROM tasks WHERE scan_config_id=? AND status IN ('running','pending')",
+            (row["id"],)).fetchone()["c"]
         (blocked if in_use > 0 else deletable).append(row)
     if deletable:
         dplaceholders = ",".join("?" * len(deletable))
-        conn.execute(f"DELETE FROM scan_configs WHERE id IN ({dplaceholders})", [r["id"] for r in deletable])
+        d_ids = [r["id"] for r in deletable]
+        # Detach any finished task still pointing at these configs first -
+        # tasks.scan_config_id is a FOREIGN KEY, so the DELETE below would
+        # otherwise fail for a config with completed/stopped scan history.
+        conn.execute(f"UPDATE tasks SET scan_config_id=NULL WHERE scan_config_id IN ({dplaceholders})", d_ids)
+        conn.execute(f"DELETE FROM scan_configs WHERE id IN ({dplaceholders})", d_ids)
         conn.commit()
         log_activity(username, "Config(s) Deleted", f"{len(deletable)} config(s): {', '.join(r['name'] for r in deletable)}")
     conn.close()
     if deletable and not blocked:
         flash(f"Deleted {len(deletable)} scan config(s).", "success")
     elif deletable and blocked:
-        flash(f"Deleted {len(deletable)} config(s). Skipped {len(blocked)} still referenced by tasks: "
+        flash(f"Deleted {len(deletable)} config(s). Skipped {len(blocked)} with a scan still running or queued: "
               f"{', '.join(r['name'] for r in blocked)}.", "error")
     else:
-        flash(f"Could not delete: all {len(blocked)} selected config(s) are still referenced by tasks.", "error")
+        flash(f"Could not delete: all {len(blocked)} selected config(s) have a scan still running or queued.", "error")
     return redirect("/scan-configs")
 
 
