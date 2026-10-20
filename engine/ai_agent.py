@@ -24,7 +24,110 @@ professional, authorized penetration-testing assistant, generating probe
 prompts and judgments only, never real-world harmful content.
 """
 import json
+import re
 import requests
+
+
+def _strip_code_fence(raw):
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+        text = re.sub(r"\n?```\s*$", "", text)
+    return text.strip()
+
+
+def _try_full_json_object(raw):
+    """
+    Best-effort full parse of a JSON object out of a chat model's raw text.
+    Strips markdown code fences, then tries json.JSONDecoder.raw_decode()
+    from every '{' in the text (not just the first/last), so a model that
+    wraps valid JSON in ```json fences or appends trailing prose after the
+    object still parses correctly. Returns None if no valid object is found
+    anywhere in the text.
+    """
+    text = _strip_code_fence(raw)
+    decoder = json.JSONDecoder()
+    idx = text.find("{")
+    while idx != -1:
+        try:
+            obj, _end = decoder.raw_decode(text, idx)
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            pass
+        idx = text.find("{", idx + 1)
+    return None
+
+
+def _try_full_json_array(raw):
+    text = _strip_code_fence(raw)
+    decoder = json.JSONDecoder()
+    idx = text.find("[")
+    while idx != -1:
+        try:
+            obj, _end = decoder.raw_decode(text, idx)
+            if isinstance(obj, list):
+                return obj
+        except Exception:
+            pass
+        idx = text.find("[", idx + 1)
+    return None
+
+
+def _regex_enum_field(raw, key):
+    """Short bareword/enum field, e.g. "verdict": "FAIL"."""
+    m = re.search(rf'"{re.escape(key)}"\s*:\s*"(\w+)"', raw)
+    return m.group(1) if m else None
+
+
+def _regex_num_field(raw, key):
+    m = re.search(rf'"{re.escape(key)}"\s*:\s*(-?\d+(?:\.\d+)?)', raw)
+    return m.group(1) if m else None
+
+
+def _regex_free_text_field(raw, key):
+    """
+    Longer free-text field, e.g. "reasoning": "...". A single unescaped
+    quote character inside a field like this is the single most common
+    reason a judge model's otherwise-valid-looking JSON fails strict
+    parsing, and that one bad field shouldn't throw away an entirely
+    legitimate verdict/severity/confidence alongside it. Matches up to the
+    next ",\"<key>\":" boundary or the closing brace, which recovers the
+    field correctly in the overwhelmingly common case even when its value
+    contains stray internal quotes.
+    """
+    m = re.search(rf'"{re.escape(key)}"\s*:\s*"(.*?)"\s*(?:,\s*"\w+"\s*:|\}})', raw, re.DOTALL)
+    if not m:
+        return None
+    return m.group(1).replace('\\"', '"').replace("\\n", "\n").replace("\\\\", "\\")
+
+
+def _regex_judge_fields(raw):
+    """
+    Field-by-field fallback for judge_response()/judge_leak() when the raw
+    text isn't valid JSON as a whole. Returns None only when there's no
+    recognizable primary field at all (verdict/leaked), since at that point
+    the response isn't JSON-shaped and there's nothing honest to recover;
+    otherwise recovers whatever fields are present with sane defaults for
+    the rest, rather than discarding an otherwise-good verdict over one
+    malformed field.
+    """
+    verdict = _regex_enum_field(raw, "verdict")
+    if verdict is not None:
+        return {
+            "verdict": verdict,
+            "severity": _regex_enum_field(raw, "severity") or "medium",
+            "reasoning": _regex_free_text_field(raw, "reasoning") or "",
+            "confidence": _regex_num_field(raw, "confidence") or "70",
+        }
+    leaked_m = re.search(r'"leaked"\s*:\s*(true|false)', raw, re.IGNORECASE)
+    if leaked_m is not None:
+        return {
+            "leaked": leaked_m.group(1).lower() == "true",
+            "extracted_text": _regex_free_text_field(raw, "extracted_text") or "",
+            "confidence": _regex_num_field(raw, "confidence") or "50",
+        }
+    return None
 
 PROVIDER_DEFAULTS = {
     "openai_compatible": {"api_base": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
@@ -187,11 +290,13 @@ One entry per category given, in the same order.
 def judge_leak(api_base, api_key, model, probe_prompt, response_text):
     user_msg = f"Probe prompt sent to target: {probe_prompt}\nTarget's response: {response_text}\n"
     raw = _chat(api_base, api_key, model, LEAK_JUDGE_SYSTEM_PROMPT, user_msg)
+    parsed = _try_full_json_object(raw)
+    if parsed is None:
+        parsed = _regex_judge_fields(raw)
+    if parsed is None:
+        return False, "", 0
     try:
-        start = raw.find("{")
-        end = raw.rfind("}")
-        parsed = json.loads(raw[start:end + 1])
-        leaked = bool(parsed.get("leaked", False))
+        leaked = bool(parsed.get("leaked", False)) if isinstance(parsed.get("leaked"), bool) else str(parsed.get("leaked", "")).lower() == "true"
         extracted_text = (parsed.get("extracted_text") or "").strip()
         confidence = parsed.get("confidence", 50)
         try:
@@ -212,10 +317,10 @@ def generate_personalized_prompts(api_base, api_key, model, extracted_context, c
         f"OWASP categories to test:\n{cat_lines}\n"
     )
     raw = _chat(api_base, api_key, model, PERSONALIZE_SYSTEM_PROMPT, user_msg, timeout=45)
+    parsed = _try_full_json_array(raw)
+    if parsed is None:
+        return []
     try:
-        start = raw.find("[")
-        end = raw.rfind("]")
-        parsed = json.loads(raw[start:end + 1])
         out = []
         for item in parsed:
             owasp = (item.get("owasp") or "").strip().upper()
@@ -245,10 +350,10 @@ specific finding rule_ids involved>", "categories": ["LLM01","LLM06"], "severity
 
 def generate_attack_chains(api_base, api_key, model, findings_summary):
     raw = _chat(api_base, api_key, model, CHAIN_SYSTEM_PROMPT, findings_summary, timeout=45)
+    parsed = _try_full_json_array(raw)
+    if parsed is None:
+        return []
     try:
-        start = raw.find("[")
-        end = raw.rfind("]")
-        parsed = json.loads(raw[start:end + 1])
         out = []
         for item in parsed:
             title = (item.get("title") or "").strip()
@@ -304,12 +409,14 @@ def judge_response(api_base, api_key, model, owasp_category, category_label, pro
     if business_context:
         user_msg += f"Business context for this target (use it to judge real-world severity): {business_context}\n"
     raw = _chat(api_base, api_key, model, JUDGE_SYSTEM_PROMPT, user_msg)
+    parsed = _try_full_json_object(raw)
+    if parsed is None:
+        parsed = _regex_judge_fields(raw)
     try:
-        start = raw.find("{")
-        end = raw.rfind("}")
-        parsed = json.loads(raw[start:end + 1])
-        verdict = parsed.get("verdict", "PASS").upper()
-        severity = parsed.get("severity", "medium").lower()
+        if parsed is None:
+            raise ValueError("no recognizable verdict field")
+        verdict = str(parsed.get("verdict", "PASS")).upper()
+        severity = str(parsed.get("severity", "medium")).lower()
         reasoning = parsed.get("reasoning", "")
         confidence = parsed.get("confidence", 70)
         try:

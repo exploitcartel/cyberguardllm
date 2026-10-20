@@ -168,6 +168,7 @@ tr:hover td{background:rgba(37,99,235,0.05);}
 .badge-fail{background:rgba(239,68,68,0.15);color:#ef4444;}
 .badge-pass{background:rgba(34,197,94,0.15);color:#22c55e;}
 .badge-review{background:rgba(245,158,11,0.15);color:#f59e0b;}
+.badge-error{background:rgba(107,114,128,0.18);color:#9ca3af;}
 .badge-triage-open{background:rgba(59,130,246,0.15);color:#3b82f6;}
 .badge-triage-false_positive{background:rgba(148,163,184,0.18);color:#94a3b8;}
 .badge-triage-accepted_risk{background:rgba(124,58,237,0.15);color:#a78bfa;}
@@ -192,6 +193,7 @@ body:not(.dark) .badge-pending{background:rgba(148,163,184,0.16);color:#475569;}
 body:not(.dark) .badge-fail{background:rgba(239,68,68,0.12);color:#b91c1c;}
 body:not(.dark) .badge-pass{background:rgba(34,197,94,0.14);color:#15803d;}
 body:not(.dark) .badge-review{background:rgba(245,158,11,0.16);color:#b45309;}
+body:not(.dark) .badge-error{background:rgba(107,114,128,0.16);color:#4b5563;}
 body:not(.dark) .badge-triage-open{background:rgba(59,130,246,0.14);color:#1d4ed8;}
 body:not(.dark) .badge-triage-false_positive{background:rgba(148,163,184,0.22);color:#475569;}
 body:not(.dark) .badge-triage-accepted_risk{background:rgba(124,58,237,0.14);color:#6d28d9;}
