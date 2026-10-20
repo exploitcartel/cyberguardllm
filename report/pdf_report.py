@@ -135,6 +135,66 @@ def make_brain_graphic(out_path, seed=7, accent="#2563eb", accent2="#7c3aed", gl
     plt.close(fig)
 
 
+def _draw_circuit_corner(c, x0, y0, corner, accent, accent2, seed=0, scale=1.0):
+    """
+    Draws one small right-angle "circuit trace" with a couple of connector
+    pads, anchored just inside a page corner. Purely decorative, vector-only
+    (no raster image), thin and low-opacity so it never competes with body
+    text, and always stays inside the page margin since it only grows
+    inward from the corner it is given.
+
+    `corner` is one of "tl"/"tr"/"bl"/"br" and controls which way the trace
+    extends: toward the content area, away from the edges it sits against.
+    Colors reuse the same accent/accent2 palette as make_brain_graphic() so
+    these read as part of the same visual language as the report's other
+    AI/circuit imagery rather than a mismatched add-on.
+    """
+    rnd = random.Random(seed)
+    sx = -1 if "r" in corner else 1
+    sy = -1 if "t" in corner else 1
+    unit = 6.5 * scale
+
+    c.saveState()
+    c.translate(x0, y0)
+    c.setLineWidth(0.9)
+    c.setStrokeColor(colors.HexColor(accent))
+    c.setStrokeAlpha(0.3)
+
+    # A short deterministic "staircase" trace of 3-4 right-angle hops,
+    # alternating horizontal/vertical like a PCB trace.
+    px, py = 0, 0
+    pts = [(px, py)]
+    for i in range(rnd.choice([3, 4])):
+        if i % 2 == 0:
+            px += sx * unit * rnd.uniform(1.6, 2.3)
+        else:
+            py += sy * unit * rnd.uniform(1.1, 1.8)
+        pts.append((px, py))
+
+    path = c.beginPath()
+    path.moveTo(*pts[0])
+    for p in pts[1:]:
+        path.lineTo(*p)
+    c.drawPath(path, stroke=1, fill=0)
+
+    # Small connector pads at the trace's joints.
+    c.setFillColor(colors.HexColor(accent))
+    c.setFillAlpha(0.4)
+    for (jx, jy) in pts[1:-1]:
+        c.circle(jx, jy, 1.2 * scale, stroke=0, fill=1)
+
+    # A brighter "lit" pad at the far end, echoing the firing-neuron accent
+    # used in make_brain_graphic()'s highlighted nodes.
+    ex, ey = pts[-1]
+    c.setFillColor(colors.HexColor(accent2))
+    c.setFillAlpha(0.55)
+    c.circle(ex, ey, 1.9 * scale, stroke=0, fill=1)
+    c.setFillAlpha(0.16)
+    c.circle(ex, ey, 4.0 * scale, stroke=0, fill=1)
+
+    c.restoreState()
+
+
 def make_severity_pie(breakdown, out_path):
     labels = [k for k, v in breakdown.items() if v > 0]
     values = [v for v in breakdown.values() if v > 0]
@@ -512,6 +572,19 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
         canvas.drawString(2 * cm, 1.3 * cm, "CYBERGUARD LLM - AI Security Assessment Report")
         canvas.drawRightString(A4[0] - 2 * cm, 1.3 * cm, f"Page {doc_.page}")
         canvas.restoreState()
+
+        # Small circuit-trace flourishes tucked just inside the top-left and
+        # top-right corners of every page -- subtle, vector-drawn accents in
+        # the report's existing blue/purple palette, giving each page a touch
+        # of the app's AI/circuit visual identity without a large illustration
+        # competing with the page content. Kept to the top corners only: the
+        # bottom corners already carry the footer text, and a trace reaching
+        # up from there risked crossing straight through it.
+        page_w, page_h = A4
+        _draw_circuit_corner(canvas, page_w - 1.3 * cm, page_h - 1.0 * cm, "tr", "#2563eb", "#7c3aed",
+                              seed=doc_.page * 17 + 3)
+        _draw_circuit_corner(canvas, 1.3 * cm, page_h - 1.0 * cm, "tl", "#2563eb", "#7c3aed",
+                              seed=doc_.page * 31 + 11)
 
     doc.build(elements, onFirstPage=_footer, onLaterPages=_footer)
 
