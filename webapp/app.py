@@ -45,6 +45,18 @@ def _row_get_app(row, key, default=None):
         return default
 
 
+def _mask_proxy_url(url):
+    """For the Settings status banner: show scheme+host, hide any user:pass
+    credentials embedded in the proxy URL (http://user:pass@host:port)."""
+    if not url:
+        return ""
+    if "@" in url and "://" in url:
+        scheme, rest = url.split("://", 1)
+        _, _, host_part = rest.rpartition("@")
+        return f"{scheme}://***:***@{host_part}"
+    return url
+
+
 def current_lang():
     lang = request.cookies.get("lang", "en")
     return lang if lang in ("en", "al") else "en"
@@ -911,7 +923,7 @@ def settings_page():
     return render_template("settings.html", **ctx(
         active="settings", active_tab=active_tab, must_change=bool(user["must_change_password"]) if user else False,
         users=users, roles=ROLES, role_labels=ROLE_LABELS, settings=settings,
-        proxy_test_result=None,
+        proxy_test_result=None, proxy_url_masked=_mask_proxy_url(settings.get("proxy_url", "")),
     ))
 
 
@@ -1096,7 +1108,7 @@ def settings_proxy_test():
     return render_template("settings.html", **ctx(
         active="settings", active_tab="scan", must_change=bool(user["must_change_password"]) if user else False,
         users=users, roles=ROLES, role_labels=ROLE_LABELS, settings=settings,
-        proxy_test_result={"ok": ok, "info": info},
+        proxy_test_result={"ok": ok, "info": info}, proxy_url_masked=_mask_proxy_url(settings.get("proxy_url", "")),
     ))
 
 

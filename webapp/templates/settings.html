@@ -92,7 +92,7 @@
   </p>
 
   {% if settings.ai_api_key_encrypted %}
-  <div class="warn-box" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+  <div class="warn-box status-banner" onclick="focusSection('scanModeForm', event)" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
     <div>
       <strong style="color:#22c55e;">&#9679; {{ t('ai_config_status_configured') }}</strong>
       <div style="color:var(--text-muted);font-size:14px;margin-top:4px;">
@@ -101,19 +101,23 @@
         &nbsp;&middot;&nbsp; {{ t('field_ai_api_base') }}: <strong>{{ settings.ai_api_base }}</strong>
       </div>
     </div>
-    <button type="button" class="btn btn-sm" id="btnCopyConfig"
-      data-provider="{{ settings.ai_provider or 'openai_compatible' }}"
-      data-base="{{ settings.ai_api_base }}"
-      data-model="{{ settings.ai_model }}"
-      onclick="copyAiConfig(this)">{{ t('btn_copy_config') }}</button>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>
+      <button type="button" class="btn btn-sm" id="btnCopyConfig"
+        data-provider="{{ settings.ai_provider or 'openai_compatible' }}"
+        data-base="{{ settings.ai_api_base }}"
+        data-model="{{ settings.ai_model }}"
+        onclick="event.stopPropagation(); copyAiConfig(this)">{{ t('btn_copy_config') }}</button>
+    </div>
   </div>
   {% else %}
-  <div class="warn-box" style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+  <div class="warn-box status-banner" onclick="focusSection('scanModeForm', event)" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;">
     <strong style="color:var(--text-muted);">&#9675; {{ t('ai_config_status_not_configured') }}</strong>
+    <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>
   </div>
   {% endif %}
 
-  <form method="post" action="/settings/scan-mode">
+  <form method="post" action="/settings/scan-mode" id="scanModeForm">
     <div class="field">
       <label>{{ t('field_scan_mode') }}</label>
       <select name="scan_mode">
@@ -166,6 +170,18 @@ function toggleAnthropicPicks(provider){
 function setModel(name){
   if(modelInput) modelInput.value = name;
 }
+function focusSection(formId, evt){
+  if(evt) evt.stopPropagation();
+  const form = document.getElementById(formId);
+  if(!form) return;
+  form.scrollIntoView({behavior:'smooth', block:'center'});
+  setTimeout(function(){
+    const field = form.querySelector('input, select, textarea');
+    if(field) field.focus();
+    form.classList.add('flash-highlight');
+    setTimeout(function(){ form.classList.remove('flash-highlight'); }, 1100);
+  }, 350);
+}
 function copyAiConfig(btn){
   const text = 'provider: ' + btn.dataset.provider + '\nbase_url: ' + btn.dataset.base +
     '\nmodel: ' + btn.dataset.model + '\napi_key: (hidden, stored encrypted - not exportable)';
@@ -204,7 +220,23 @@ if(providerSelect){
   <p style="color:var(--text-muted);font-size:14.5px;">
     {{ t('proxy_explanation') }}
   </p>
-  <form method="post" action="/settings/proxy">
+
+  {% if settings.proxy_enabled == '1' and settings.proxy_url %}
+  <div class="warn-box status-banner" onclick="focusSection('proxyForm', event)" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <strong style="color:#22c55e;">&#9679; {{ t('proxy_status_on') }}</strong>
+      <div style="color:var(--text-muted);font-size:14px;margin-top:4px;">{{ proxy_url_masked }}</div>
+    </div>
+    <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>
+  </div>
+  {% else %}
+  <div class="warn-box status-banner" onclick="focusSection('proxyForm', event)" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <strong style="color:var(--text-muted);">&#9675; {{ t('proxy_status_off') }}</strong>
+    <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/settings/proxy" id="proxyForm">
     <div class="checkbox-row"><input type="checkbox" name="proxy_enabled" {{ 'checked' if settings.proxy_enabled=='1' }}> {{ t('enable_proxy_checkbox') }}</div>
     <div class="field"><label>{{ t('field_proxy_url') }}</label><input type="text" name="proxy_url" placeholder="socks5://user:pass@host:1080" value="{{ settings.proxy_url }}"></div>
     <button class="btn btn-primary" type="submit">{{ t('btn_save_proxy') }}</button>
@@ -225,7 +257,23 @@ if(providerSelect){
   <p style="color:var(--text-muted);font-size:14.5px;">
     {{ t('stealth_explanation') }}
   </p>
-  <form method="post" action="/settings/stealth">
+
+  {% if settings.stealth_enabled == '1' %}
+  <div class="warn-box status-banner" onclick="focusSection('stealthForm', event)" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <strong style="color:#22c55e;">&#9679; {{ t('stealth_status_on') }}</strong>
+      <div style="color:var(--text-muted);font-size:14px;margin-top:4px;">{{ settings.stealth_delay_min_ms }}ms &ndash; {{ settings.stealth_delay_max_ms }}ms</div>
+    </div>
+    <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>
+  </div>
+  {% else %}
+  <div class="warn-box status-banner" onclick="focusSection('stealthForm', event)" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <strong style="color:var(--text-muted);">&#9675; {{ t('stealth_status_off') }}</strong>
+    <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/settings/stealth" id="stealthForm">
     <div class="checkbox-row"><input type="checkbox" name="stealth_enabled" {{ 'checked' if settings.stealth_enabled=='1' }}> {{ t('enable_stealth_checkbox') }}</div>
     <div class="checkbox-row"><input type="checkbox" name="stealth_rotate_ua" {{ 'checked' if settings.stealth_rotate_ua=='1' }}> {{ t('rotate_ua_checkbox') }}</div>
     <div class="grid grid-2">
@@ -241,7 +289,23 @@ if(providerSelect){
   <p style="color:var(--text-muted);font-size:14.5px;">
     {{ t('canary_explanation') }}
   </p>
-  <form method="post" action="/settings/canary">
+
+  {% if settings.canary_base_url %}
+  <div class="warn-box status-banner" onclick="focusSection('canaryForm', event)" style="background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div>
+      <strong style="color:#22c55e;">&#9679; {{ t('canary_status_on') }}</strong>
+      <div style="color:var(--text-muted);font-size:14px;margin-top:4px;">{{ settings.canary_base_url }}</div>
+    </div>
+    <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>
+  </div>
+  {% else %}
+  <div class="warn-box status-banner" onclick="focusSection('canaryForm', event)" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+    <strong style="color:var(--text-muted);">&#9675; {{ t('canary_status_off') }}</strong>
+    <span class="edit-hint">&#9998; {{ t('click_to_edit_hint') }}</span>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/settings/canary" id="canaryForm">
     <div class="field"><label>{{ t('field_canary_base_url') }}</label>
       <input type="text" name="canary_base_url" placeholder="http://203.0.113.10:8000" value="{{ settings.canary_base_url }}">
     </div>
