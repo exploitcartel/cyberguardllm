@@ -984,14 +984,37 @@ def reap_orphaned_tasks():
     own Stop button produces) so it leaves the "running" state and its
     Watch-live / Stop controls stop appearing for a scan nobody is running.
     Whatever findings it had already saved before the process died are
-    untouched - only the task's own status/control columns are touched.
+    untouched - only the task's own status/control columns are touched,
+    AND its linked scan_results row (Results page shows this one, not the
+    tasks table) - found live: Edison saw Tasks correctly show a reaped
+    task as "stopped", but its scan on the Results page still said
+    "running" forever, because scan_results.status is normally only ever
+    set to its terminal value from inside the scan's own completion code in
+    _execute() (see the plain 'UPDATE scan_results SET status=...' calls
+    below) - which, for an orphaned task, never runs at all.
     Returns how many tasks were reaped, for a one-line startup log message.
     """
     conn = get_conn()
-    orphaned = conn.execute("SELECT id FROM tasks WHERE status='running'").fetchall()
+    orphaned = conn.execute("SELECT id, result_id FROM tasks WHERE status='running'").fetchall()
     for row in orphaned:
         conn.execute("UPDATE tasks SET status='stopped', control='stop' WHERE id=?", (row["id"],))
+        if row["result_id"] is not None:
+            conn.execute("UPDATE scan_results SET status='stopped' WHERE id=? AND status='running'",
+                         (row["result_id"],))
     if orphaned:
+        conn.commit()
+
+    # Covers scan_results rows left over from BEFORE this function started
+    # also touching scan_results (a task reaped by an older build already
+    # has status='stopped' and so no longer matches the WHERE clause above,
+    # but its scan_results row was never updated and is still stuck showing
+    # "running" on the Results page) - same reasoning as above: nothing can
+    # legitimately still be running the instant this process starts, so any
+    # scan_results row still marked 'running' at this point is stale.
+    stale_results = conn.execute("SELECT id FROM scan_results WHERE status='running'").fetchall()
+    for row in stale_results:
+        conn.execute("UPDATE scan_results SET status='stopped' WHERE id=?", (row["id"],))
+    if stale_results:
         conn.commit()
     conn.close()
     return len(orphaned)
@@ -1006,15 +1029,23 @@ def force_stop_task(task_id: int):
     unexpected exception without reaching its own error handling). Unlike
     _set_task_control() in webapp/app.py, this does not require the task
     to currently be 'running' and does not rely on a live loop noticing a
-    control flag - it sets the terminal status directly. Returns True if a
-    task with this id existed (whatever its previous status was).
+    control flag - it sets the terminal status directly. Also clears the
+    linked scan_results row's own status (see reap_orphaned_tasks()'s
+    docstring for why that second update is needed - the Results page
+    reads scan_results, not tasks, and nothing else would ever update it
+    for a task that never reaches its own normal completion code).
+    Returns True if a task with this id existed (whatever its previous
+    status was).
     """
     conn = get_conn()
-    task = conn.execute("SELECT id FROM tasks WHERE id=?", (task_id,)).fetchone()
+    task = conn.execute("SELECT id, result_id FROM tasks WHERE id=?", (task_id,)).fetchone()
     if not task:
         conn.close()
         return False
     conn.execute("UPDATE tasks SET status='stopped', control='stop' WHERE id=?", (task_id,))
+    if task["result_id"] is not None:
+        conn.execute("UPDATE scan_results SET status='stopped' WHERE id=? AND status='running'",
+                     (task["result_id"],))
     conn.commit()
     conn.close()
     return True
