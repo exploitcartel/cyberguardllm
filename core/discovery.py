@@ -432,9 +432,9 @@ def discover_target(url: str, token: str, timeout: float = 25.0):
                                  "status": resp.status_code, "note": "200 OK but not JSON"}
                         try:
                             from bs4 import BeautifulSoup
-                            snippet = BeautifulSoup(resp.text, "html.parser").get_text(" ", strip=True)[:300]
+                            snippet = BeautifulSoup(resp.text, "html.parser").get_text(" ", strip=True)[:3000]
                         except Exception:
-                            snippet = resp.text[:300]
+                            snippet = resp.text[:3000]
                         if snippet:
                             entry["snippet"] = snippet
                         results_log.append(entry)
