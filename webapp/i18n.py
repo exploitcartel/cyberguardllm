@@ -298,6 +298,9 @@ TRANSLATIONS = {
     "col_config": {"en": "Config", "al": "Konfigurimi"},
     "no_tasks_yet": {"en": "No tasks yet.", "al": "S'ka detyra ende."},
     "btn_watch_live": {"en": "Watch live", "al": "Shiko live"},
+    "btn_force_stop": {"en": "Force stop", "al": "Ndalo me force"},
+    "confirm_force_stop": {"en": "Force-stop this task? Use this only if it is stuck showing \"running\" with the normal Stop having no effect.",
+                            "al": "Ta ndalosh me force kete task? Perdore vetem nese ka mbetur \"running\" dhe Stop normal nuk ka efekt."},
     "col_action": {"en": "Action", "al": "Veprim"},
 
     # ---- results.html ----
