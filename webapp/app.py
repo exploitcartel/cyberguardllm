@@ -13,7 +13,7 @@ from auth.auth import (seed_admin, verify_password, hash_password, make_session_
 from core.discovery import discover_target, get_proxies, test_proxy_connectivity
 from core.crypto import encrypt_token, decrypt_token
 from engine.loader import load_all_rules, count_by_category, count_by_category_all_levels
-from engine.runner import run_scan_async, get_task_progress, reap_orphaned_tasks, force_stop_task
+from engine.runner import run_scan_async, get_task_progress, reap_orphaned_tasks, force_stop_task, AI_INTENSITY_LEVELS, AI_INTENSITY_ORDER
 from engine.scorer import severity_breakdown_rows, owasp_breakdown_rows
 from report.pdf_report import generate_pdf_report
 from webapp.i18n import translate
@@ -550,7 +550,8 @@ def scan_configs_page():
         active="scan_configs", categories=categories, configs=configs,
         garak_probes=garak_probes, pyrit_objectives=pyrit_objectives,
         garak_ok=garak_ok, pyrit_ok=pyrit_ok, mutation_labels=MUTATION_LABELS,
-        counts_by_level=counts_by_level,
+        counts_by_level=counts_by_level, ai_intensity_levels=AI_INTENSITY_LEVELS,
+        ai_intensity_order=AI_INTENSITY_ORDER,
     ))
 
 
@@ -586,22 +587,27 @@ def scan_config_create():
     enable_recon = 1 if request.form.get("enable_recon") == "on" else 0
     enable_fingerprint = 1 if request.form.get("enable_fingerprint") == "on" else 0
     enable_session_isolation = 1 if request.form.get("enable_session_isolation") == "on" else 0
-    try:
-        ai_max_attempts = max(1, min(10, int(request.form.get("ai_max_attempts", "3"))))
-    except (TypeError, ValueError):
-        ai_max_attempts = 3
+    ai_intensity = request.form.get("ai_intensity", "low")
+    if ai_intensity not in AI_INTENSITY_LEVELS:
+        ai_intensity = "low"
+    # ai_max_attempts is derived straight from the chosen level and kept in
+    # sync with it, purely so anything still reading the older numeric
+    # column (reports, older code paths) keeps seeing a sensible value -
+    # the engine itself now reads ai_intensity directly, see
+    # engine/runner.py:_run_ai_powered.
+    ai_max_attempts = AI_INTENSITY_LEVELS[ai_intensity]
 
     conn = get_conn()
     conn.execute(
         """INSERT INTO scan_configs (name, categories, ai_powered, use_garak, garak_probes, use_pyrit,
            pyrit_objectives, mutation_techniques, enable_retest, retest_count, enable_canary, enable_recon,
-           ai_max_attempts, enable_fingerprint, enable_session_isolation, scan_level, enable_static, ai_categories,
-           created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           ai_max_attempts, ai_intensity, enable_fingerprint, enable_session_isolation, scan_level, enable_static,
+           ai_categories, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (name, ",".join(categories), ai_powered, use_garak, ",".join(garak_probes), use_pyrit,
          ",".join(pyrit_objectives), ",".join(mutation_techniques), enable_retest, retest_count, enable_canary,
-         enable_recon, ai_max_attempts, enable_fingerprint, enable_session_isolation, scan_level, enable_static,
-         ",".join(ai_categories), now()),
+         enable_recon, ai_max_attempts, ai_intensity, enable_fingerprint, enable_session_isolation, scan_level,
+         enable_static, ",".join(ai_categories), now()),
     )
     conn.commit()
     conn.close()

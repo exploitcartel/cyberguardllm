@@ -40,8 +40,20 @@
           <input type="checkbox" name="ai_powered"> {{ t('ai_powered_checkbox_label') }}
         </div>
         <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('ai_freestyle_explanation') }}</p>
-        <div class="field"><label>{{ t('field_ai_max_attempts') }}</label>
-          <input type="number" name="ai_max_attempts" min="1" max="10" value="3" style="max-width:100px;">
+        <div class="field">
+          <label>{{ t('field_ai_intensity') }}</label>
+          <p style="color:var(--text-muted);font-size:13px;margin:0 0 8px;">{{ t('ai_intensity_shared_tip') }}</p>
+          {% for level in ai_intensity_order %}
+          <div class="checkbox-row">
+            <input type="radio" name="ai_intensity" value="{{ level }}" id="aiIntensity{{ level|capitalize }}" {% if level == 'low' %}checked{% endif %}>
+            <label for="aiIntensity{{ level|capitalize }}" style="cursor:pointer;">
+              {{ t('ai_intensity_' + level + '_label') }} ({{ ai_intensity_levels[level] }})
+            </label>
+            <span class="intensity-tip">?
+              <span class="intensity-tip-panel">{{ t('ai_intensity_' + level + '_tip') }}</span>
+            </span>
+          </div>
+          {% endfor %}
         </div>
         <label style="margin-top:14px;display:block;">OWASP Categories for AI-Powered attacks</label>
         <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">
@@ -142,7 +154,7 @@
       <tr>
         {% if user_role in ('administrator','global_administrator') %}<td><input type="checkbox" class="config-check" value="{{ c.id }}"></td>{% endif %}
         <td id="cfg-name-{{ c.id }}">{{ c.name }}</td><td>{{ c.categories }}</td><td>
-        {% if c.ai_powered %}<span class="badge badge-cgllm">AI-Powered</span>{% else %}<span class="badge badge-source">Offline</span>{% endif %}
+        {% if c.ai_powered %}<span class="badge badge-cgllm">AI-Powered: {{ (c.ai_intensity or 'low') | capitalize }}</span>{% else %}<span class="badge badge-source">Offline</span>{% endif %}
         {% if c.enable_static is none or c.enable_static %}
         <span class="badge badge-{{ 'critical' if c.scan_level == 'aggressive' else ('high' if c.scan_level == 'medium' else 'low') }}">Static: {{ (c.scan_level or 'low') | capitalize }}</span>
         {% else %}
