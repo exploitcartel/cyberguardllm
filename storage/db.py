@@ -252,6 +252,15 @@ _MIGRATIONS = [
     # same encoding discovery found. Defaults to 'json' so every target
     # saved before this column existed keeps behaving exactly as before.
     ("targets", "body_encoding", "TEXT DEFAULT 'json'"),
+    # Named AI-Powered intensity level ('test', 'low', 'medium', 'high',
+    # 'aggressive' - see engine/runner.py:AI_INTENSITY_LEVELS), replacing a
+    # bare "max attempts per category" number in the Scan Config UI with
+    # something an operator can reason about without reading the engine's
+    # source. The older ai_max_attempts column is kept (and still written)
+    # for backward compatibility - a config saved before this column existed
+    # has no ai_intensity value, so the engine falls back to its numeric
+    # ai_max_attempts in that case only.
+    ("scan_configs", "ai_intensity", "TEXT DEFAULT 'low'"),
 ]
 
 

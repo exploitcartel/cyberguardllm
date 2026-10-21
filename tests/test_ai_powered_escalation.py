@@ -114,7 +114,7 @@ class EscalationContextTests(unittest.TestCase):
 class HardStopTests(unittest.TestCase):
     """Two independent caps so this loop can never run forever."""
 
-    def test_per_category_budget_is_clamped_to_ten_even_if_config_asks_for_more(self):
+    def test_per_category_budget_is_clamped_to_the_aggressive_ceiling_even_if_config_asks_for_more(self):
         conn = _conn()
         calls = []
 
@@ -129,10 +129,13 @@ class HardStopTests(unittest.TestCase):
              mock.patch.object(ai_agent, "generate_adversarial_prompt", side_effect=fake_generate), \
              mock.patch.object(ai_agent, "judge_response", return_value=("PASS", "low", "resisted", 90)):
             # A misconfigured/malicious config value of 9999 must never be
-            # honored literally - the hard clamp in _run_ai_powered caps it.
+            # honored literally - the hard clamp in _run_ai_powered caps it
+            # at the "aggressive" intensity level's own ceiling (legacy path:
+            # no intensity given, so the old numeric max_attempts is used,
+            # clamped against the same ceiling the named levels use).
             runner._run_ai_powered(conn, task_id=1, result_id=1, target={}, categories=["LLM01"], max_attempts=9999)
 
-        self.assertEqual(len(calls), 10, "attempts_budget must be clamped to 10 regardless of configured value")
+        self.assertEqual(len(calls), 30, "attempts_budget must be clamped to the aggressive ceiling (30)")
 
     def test_global_attempt_cap_stops_the_whole_run_cleanly(self):
         conn = _conn()
