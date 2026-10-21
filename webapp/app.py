@@ -13,7 +13,7 @@ from auth.auth import (seed_admin, verify_password, hash_password, make_session_
 from core.discovery import discover_target, get_proxies, test_proxy_connectivity
 from core.crypto import encrypt_token, decrypt_token
 from engine.loader import load_all_rules, count_by_category, count_by_category_all_levels
-from engine.runner import run_scan_async, get_task_progress
+from engine.runner import run_scan_async, get_task_progress, reap_orphaned_tasks, force_stop_task
 from engine.scorer import severity_breakdown_rows, owasp_breakdown_rows
 from report.pdf_report import generate_pdf_report
 from webapp.i18n import translate
@@ -36,6 +36,11 @@ app.config["SESSION_COOKIE_NAME"] = "cgllm_flash_session"
 
 init_db()
 seed_admin()
+# Any task still "running" at process start was orphaned by the previous
+# process exiting (crash, Ctrl+C, a `git pull` + restart) - nothing in this
+# fresh process is driving it, so its own Stop button would never take
+# effect. Clear those now instead of leaving them stuck.
+reap_orphaned_tasks()
 
 
 def _row_get_app(row, key, default=None):
@@ -779,6 +784,26 @@ def tasks_resume(task_id):
 @app.route("/tasks/<int:task_id>/stop", methods=["POST"])
 def tasks_stop(task_id):
     return _set_task_control(task_id, "stop", "Scan Stopped")
+
+
+@app.route("/tasks/<int:task_id>/force-stop", methods=["POST"])
+def tasks_force_stop(task_id):
+    # Manual escape hatch for a task stuck showing "running" with no live
+    # scan actually driving it (see reap_orphaned_tasks(), which clears
+    # this automatically on the next app restart). Available without
+    # restarting the app, for the case where the process is still alive
+    # but a task's own background thread has died without updating its
+    # status. Does not require status=='running' like _set_task_control()
+    # does, since the whole point is to clear a task whose status is
+    # already stuck/wrong.
+    username, err = require_role("operator")
+    if err: return err
+    ok = force_stop_task(task_id)
+    if not ok:
+        return jsonify({"ok": False, "error": "Task not found"}), 404
+    log_activity(username, "Scan Force-Stopped", f"Task #{task_id}")
+    flash("Scan force-stopped.", "success")
+    return redirect("/tasks")
 
 
 @app.route("/results")

@@ -32,6 +32,10 @@
         <td>
           {% if task.status == 'running' %}
           <a href="/scan/{{ task.id }}/live" class="btn" style="padding:5px 10px;">{{ t('btn_watch_live') }}</a>
+          <form method="post" action="/tasks/{{ task.id }}/force-stop" style="display:inline;"
+                onsubmit="return confirm('{{ t('confirm_force_stop') }}');">
+            <button type="submit" class="btn btn-danger" style="padding:5px 10px;">{{ t('btn_force_stop') }}</button>
+          </form>
           {% endif %}
         </td>
       </tr>

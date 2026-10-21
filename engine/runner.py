@@ -784,6 +784,59 @@ def run_scan_async(task_id: int):
     t.start()
 
 
+def reap_orphaned_tasks():
+    """
+    Call once when the app process starts. Any task still marked 'running'
+    in the database at that moment cannot actually be running: the thread
+    driving it lived in a previous process (one that exited - crashed,
+    Ctrl+C'd, or stopped for a `git pull` + restart), and nothing in this
+    fresh process is watching it. Left alone, such a task shows "running"
+    forever and its own Stop button does nothing, because _check_control()
+    is only ever polled by a live scan loop - and there is no longer one
+    running for it. Found live: Edison Ctrl+C'd the app mid AI-Powered
+    scan, ran `git pull` and restarted it, and the old scan kept showing
+    "running" with Stop having no effect, with no way to clear it.
+
+    Marks every such task 'stopped' (same terminal status the operator's
+    own Stop button produces) so it leaves the "running" state and its
+    Watch-live / Stop controls stop appearing for a scan nobody is running.
+    Whatever findings it had already saved before the process died are
+    untouched - only the task's own status/control columns are touched.
+    Returns how many tasks were reaped, for a one-line startup log message.
+    """
+    conn = get_conn()
+    orphaned = conn.execute("SELECT id FROM tasks WHERE status='running'").fetchall()
+    for row in orphaned:
+        conn.execute("UPDATE tasks SET status='stopped', control='stop' WHERE id=?", (row["id"],))
+    if orphaned:
+        conn.commit()
+    conn.close()
+    return len(orphaned)
+
+
+def force_stop_task(task_id: int):
+    """
+    Manual escape hatch for a task stuck showing 'running' with no live
+    scan actually driving it (the same situation reap_orphaned_tasks()
+    clears automatically on startup, but an operator may hit this without
+    restarting the app - e.g. a task whose background thread died from an
+    unexpected exception without reaching its own error handling). Unlike
+    _set_task_control() in webapp/app.py, this does not require the task
+    to currently be 'running' and does not rely on a live loop noticing a
+    control flag - it sets the terminal status directly. Returns True if a
+    task with this id existed (whatever its previous status was).
+    """
+    conn = get_conn()
+    task = conn.execute("SELECT id FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if not task:
+        conn.close()
+        return False
+    conn.execute("UPDATE tasks SET status='stopped', control='stop' WHERE id=?", (task_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+
 def get_task_progress(task_id: int):
     conn = get_conn()
     task = conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
