@@ -32,7 +32,7 @@ def _conn():
     conn.execute(
         "CREATE TABLE findings (id INTEGER PRIMARY KEY, scan_result_id INTEGER, rule_id TEXT, owasp TEXT, "
         "severity TEXT, verdict TEXT, prompt_sent TEXT, raw_response TEXT, description TEXT, module TEXT, "
-        "source TEXT, recommendation TEXT, confidence INTEGER)"
+        "source TEXT, recommendation TEXT, confidence INTEGER, reproducibility_hits INTEGER, reproducibility_total INTEGER)"
     )
     conn.execute(
         "CREATE TABLE tasks (id INTEGER PRIMARY KEY, progress_total INTEGER, progress_done INTEGER, "

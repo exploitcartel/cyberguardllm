@@ -6,9 +6,30 @@ DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
+    # timeout=30: without this, sqlite3's default is 5s, and a connection
+    # that can't get the write lock in that window raises "database is
+    # locked" immediately instead of waiting - seen live: a scan running in
+    # its background thread (engine/runner.py commits progress frequently
+    # while it's active) made ordinary web requests (deleting targets,
+    # starting another scan) fail with exactly that error, because they
+    # happened to land mid-write. 30s gives a request plenty of room to
+    # just wait its turn instead of failing outright.
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL (Write-Ahead Logging) lets readers keep reading while a write is
+    # in progress, instead of SQLite's default journal mode where any write
+    # blocks every other connection (reads included) for its duration - the
+    # single biggest source of "database is locked" under exactly the kind
+    # of mixed read/write concurrency this app has (a long-lived scan
+    # thread writing progress continuously, alongside normal page loads).
+    # A no-op (and harmless) on every connection after the first, since WAL
+    # is a property of the database file itself, not the connection.
+    conn.execute("PRAGMA journal_mode = WAL")
+    # Belt-and-suspenders on top of the connect()-level timeout above: this
+    # is SQLite's own internal retry window for a connection that is
+    # blocked waiting on another writer, applied the same way.
+    conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
 
