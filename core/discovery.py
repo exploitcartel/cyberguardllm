@@ -423,8 +423,21 @@ def discover_target(url: str, token: str, timeout: float = 25.0):
                                 "response_field": HTML_RESPONSE_FIELD,
                                 "sample_response": html_reply,
                             }
-                        results_log.append({"auth": auth_scheme, "format": fmt_name, "encoding": encoding,
-                                             "status": resp.status_code, "note": "200 OK but not JSON"})
+                        # No JSON and no extractable HTML reply - include a
+                        # short, tag-stripped snippet of the page in the log
+                        # so a human (or the next debugging pass) can see
+                        # WHAT came back without needing shell access to the
+                        # target, instead of just "not JSON" with no detail.
+                        entry = {"auth": auth_scheme, "format": fmt_name, "encoding": encoding,
+                                 "status": resp.status_code, "note": "200 OK but not JSON"}
+                        try:
+                            from bs4 import BeautifulSoup
+                            snippet = BeautifulSoup(resp.text, "html.parser").get_text(" ", strip=True)[:300]
+                        except Exception:
+                            snippet = resp.text[:300]
+                        if snippet:
+                            entry["snippet"] = snippet
+                        results_log.append(entry)
                         continue
                     field_path, length = _find_response_field(data)
                     if field_path and length > 2:
