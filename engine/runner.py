@@ -634,12 +634,24 @@ def _execute(task_id: int):
     conn.commit()
     result_id = cur.lastrowid
 
+    try:
+        enable_static = bool(config["enable_static"]) if config["enable_static"] is not None else True
+    except (IndexError, KeyError):
+        enable_static = True
+
     stopped = False
     try:
-        if ai_powered:
-            stopped = _run_ai_powered(conn, task_id, result_id, target, ai_categories, max_attempts=config["ai_max_attempts"])
-        else:
+        # Static payloads and AI-Powered mode are independent toggles in the
+        # UI (a config can turn both on to run a combined test), so both run
+        # here, one after the other, into the SAME scan_result - they used
+        # to be mutually exclusive (ai_powered on meant static never ran at
+        # all, regardless of enable_static), which silently dropped the
+        # entire static half of a "both on" config with no error or
+        # indication anywhere that it had been skipped.
+        if enable_static:
             stopped = _run_static(conn, task_id, result_id, target, categories, config)
+        if not stopped and ai_powered:
+            stopped = _run_ai_powered(conn, task_id, result_id, target, ai_categories, max_attempts=config["ai_max_attempts"])
     except Exception as e:
         conn.execute("UPDATE scan_results SET status='error' WHERE id=?", (result_id,))
         conn.execute("UPDATE tasks SET status='error' WHERE id=?", (task_id,))

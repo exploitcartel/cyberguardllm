@@ -484,9 +484,22 @@ def is_transport_error(response_text) -> bool:
     return isinstance(response_text, str) and response_text.startswith("[ERROR]")
 
 
-def send_prompt(target_row, prompt: str, timeout: float = 20.0, max_retries: int = 2):
+def send_prompt(target_row, prompt: str, timeout: float = 45.0, max_retries: int = 2):
     """
     Sends one prompt to the target and returns its text response.
+
+    timeout default raised from 20s to 45s, for the same reason
+    discover_target()'s own default went from 10s to 25s: a self-hosted
+    target running inference on CPU (Ollama, llama.cpp, etc, like OWASP
+    PromptMe) can easily take 10-20+ seconds for a single reply - and a
+    target that runs a guardrail/safety model check BEFORE the main reply
+    (two sequential model calls per message, as OWASP PromptMe's LLM01
+    challenge does) can need double that. Found live: a real scan logged
+    several "Read timed out (read timeout=20.0)" errors against exactly
+    this kind of target, each one recorded as a scan/infrastructure issue
+    rather than a real pass/fail - not because the target resisted the
+    attack, but because the old timeout gave up before the (correctly
+    slow) answer ever arrived.
 
     Retries up to `max_retries` additional times (exponential backoff: 2s,
     4s, ...) when the attempt looks like a transport/infra failure rather
