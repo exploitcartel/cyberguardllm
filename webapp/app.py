@@ -355,6 +355,7 @@ def target_save():
     token = request.form.get("token")
     auth_scheme = request.form.get("auth_scheme")
     body_format = request.form.get("body_format")
+    body_encoding = request.form.get("body_encoding", "json") or "json"
     response_field = request.form.get("response_field")
     body_template_json = request.form.get("body_template_json", "").strip() or None
     transport = request.form.get("transport", "http")
@@ -363,10 +364,10 @@ def target_save():
     conn = get_conn()
     conn.execute(
         """INSERT INTO targets (name, url, token_encrypted, auth_scheme, body_format, response_field, status,
-           created_at, body_template_json, transport, ws_auth_mode, ws_event_name)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+           created_at, body_template_json, transport, ws_auth_mode, ws_event_name, body_encoding)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (name, url, encrypt_token(token), auth_scheme, body_format, response_field, "active", now(),
-         body_template_json, transport, ws_auth_mode, ws_event_name),
+         body_template_json, transport, ws_auth_mode, ws_event_name, body_encoding),
     )
     conn.commit()
     conn.close()

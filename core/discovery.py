@@ -210,6 +210,26 @@ def _parse_sse_text(raw_text: str) -> str:
     return "".join(pieces)
 
 
+def _post_body(url, body, headers, params, timeout, encoding="json"):
+    """
+    Single place that knows how to put a filled-in body template on the
+    wire, so discover_target()/send_prompt()/send_conversation_turn() never
+    duplicate this branch. 'json' (the historical default, still used for
+    every chat target this tool was originally built against: a REST/XHR
+    JSON API) sends it as a JSON POST body. 'form' sends it as a classic
+    application/x-www-form-urlencoded body instead, the shape a plain
+    server-rendered HTML <form> submits - needed for targets like OWASP
+    PromptMe that are not a JSON API at all, just a Flask app reading
+    request.form[...]. requests' `data=` already form-encodes a flat dict
+    correctly; a body template with nested structure (the 'messages'
+    OpenAI-style format) is never meaningful as form data, so callers never
+    pass encoding='form' for that format - see send_conversation_turn().
+    """
+    if encoding == "form":
+        return requests.post(url, data=body, headers=headers, params=params, timeout=timeout, proxies=get_proxies())
+    return requests.post(url, json=body, headers=headers, params=params, timeout=timeout, proxies=get_proxies())
+
+
 def _find_response_field(data, path=""):
     best = (None, 0)
     if isinstance(data, dict):
@@ -234,6 +254,21 @@ def _find_response_field(data, path=""):
 
 
 def discover_target(url: str, token: str, timeout: float = 10.0):
+    """
+    Brute-forces auth scheme x body format x body ENCODING combinations
+    against the target with a harmless "hello" ping, the same approach
+    README documents, extended with encoding since discover_target() used
+    to assume every target speaks JSON. A target that is actually a plain
+    HTML <form> POST (application/x-www-form-urlencoded, e.g. OWASP
+    PromptMe's /chat) would otherwise fail every single combination with a
+    500/400 (the server trying to read request.form[...] from a JSON body
+    that was never form-decoded) with no way to tell why. Trying 'json'
+    first keeps today's common case (a real JSON chat API) exactly as fast
+    as before for the overwhelming majority of targets, and 'form' is only
+    tried as a fallback per combination, so this is universal - every
+    future target works the same way regardless of which encoding it
+    expects, with nothing to configure by hand.
+    """
     ping_prompt = "hello"
     results_log = []
 
@@ -243,38 +278,45 @@ def discover_target(url: str, token: str, timeout: float = 10.0):
 
         for fmt_name, template in BODY_FORMATS.items():
             body = _fill_body(template, ping_prompt)
-            try:
-                resp = requests.post(url, json=body, headers=headers, params=params, timeout=timeout, proxies=get_proxies())
-            except Exception as e:
-                results_log.append({"auth": auth_scheme, "format": fmt_name, "error": str(e)})
-                continue
+            for encoding in ("json", "form"):
+                try:
+                    resp = _post_body(url, body, headers, params, timeout, encoding=encoding)
+                except Exception as e:
+                    results_log.append({"auth": auth_scheme, "format": fmt_name, "encoding": encoding, "error": str(e)})
+                    continue
 
-            if resp.status_code == 200:
-                if _is_sse_response(resp):
-                    reconstructed = _parse_sse_text(resp.text)
-                    if len(reconstructed) > 2:
+                if resp.status_code == 200:
+                    if _is_sse_response(resp):
+                        reconstructed = _parse_sse_text(resp.text)
+                        if len(reconstructed) > 2:
+                            return {
+                                "status": "success",
+                                "auth_scheme": auth_scheme,
+                                "body_format": fmt_name,
+                                "body_encoding": encoding,
+                                "response_field": SSE_RESPONSE_FIELD,
+                                "sample_response": reconstructed,
+                            }
+                        results_log.append({"auth": auth_scheme, "format": fmt_name, "encoding": encoding,
+                                             "status": resp.status_code, "note": "SSE stream, no usable text"})
+                        continue
+                    try:
+                        data = resp.json()
+                    except Exception:
+                        results_log.append({"auth": auth_scheme, "format": fmt_name, "encoding": encoding,
+                                             "status": resp.status_code, "note": "200 OK but not JSON"})
+                        continue
+                    field_path, length = _find_response_field(data)
+                    if field_path and length > 2:
                         return {
                             "status": "success",
                             "auth_scheme": auth_scheme,
                             "body_format": fmt_name,
-                            "response_field": SSE_RESPONSE_FIELD,
-                            "sample_response": reconstructed,
+                            "body_encoding": encoding,
+                            "response_field": field_path,
+                            "sample_response": data,
                         }
-                    continue
-                try:
-                    data = resp.json()
-                except Exception:
-                    continue
-                field_path, length = _find_response_field(data)
-                if field_path and length > 2:
-                    return {
-                        "status": "success",
-                        "auth_scheme": auth_scheme,
-                        "body_format": fmt_name,
-                        "response_field": field_path,
-                        "sample_response": data,
-                    }
-            results_log.append({"auth": auth_scheme, "format": fmt_name, "status": resp.status_code})
+                results_log.append({"auth": auth_scheme, "format": fmt_name, "encoding": encoding, "status": resp.status_code})
 
     return {"status": "failed", "log": results_log}
 
@@ -352,6 +394,12 @@ def send_prompt(target_row, prompt: str, timeout: float = 20.0, max_retries: int
     auth_scheme = target_row["auth_scheme"]
     body_format = target_row["body_format"]
     response_field = target_row["response_field"]
+    try:
+        body_encoding = target_row["body_encoding"] or "json"
+    except (IndexError, KeyError):
+        # Target row saved before the body_encoding column existed - keep
+        # behaving exactly as before (JSON) rather than erroring out.
+        body_encoding = "json"
 
     headers = _apply_stealth(_build_headers(auth_scheme, token))
     params = {"token": token} if auth_scheme == "query" else {}
@@ -362,7 +410,7 @@ def send_prompt(target_row, prompt: str, timeout: float = 20.0, max_retries: int
     last_error = "[ERROR] unknown failure"
     for attempt in range(max_retries + 1):
         try:
-            resp = requests.post(target_row["url"], json=body, headers=headers, params=params, timeout=timeout, proxies=get_proxies())
+            resp = _post_body(target_row["url"], body, headers, params, timeout, encoding=body_encoding)
         except Exception as e:
             last_error = f"[ERROR] {e}"
             if attempt < max_retries:
@@ -454,6 +502,15 @@ def send_conversation_turn(target_row, prompt: str, history: list, timeout: floa
         response_text = None
         for attempt in range(max_retries + 1):
             try:
+                # Always JSON here, regardless of the target's body_encoding:
+                # the OpenAI-style "messages" array is a nested structure
+                # that has no meaningful application/x-www-form-urlencoded
+                # representation, so form-encoded targets are never
+                # discovered/saved with body_format == "messages" in the
+                # first place (see discover_target()'s per-format encoding
+                # loop above - "form" is tried for every format, but a
+                # nested one simply won't round-trip through a real form
+                # endpoint and so will never be the one that succeeds).
                 resp = requests.post(target_row["url"], json=body, headers=headers, params=params,
                                       timeout=timeout, proxies=get_proxies())
             except Exception as e:

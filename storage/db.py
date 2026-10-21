@@ -241,6 +241,17 @@ _MIGRATIONS = [
     # the cookie's own max_age only limits the BROWSER, not the server).
     # See auth/auth.py make_session_cookie()/validate_session_cookie().
     ("users", "session_version", "INTEGER DEFAULT 0"),
+    # How the request body is encoded on the wire: 'json' (the only option
+    # before this - every BODY_FORMATS shape sent as a JSON POST body) or
+    # 'form' (application/x-www-form-urlencoded, for targets that are a
+    # classic server-rendered HTML form rather than a JSON chat API - e.g.
+    # OWASP PromptMe's /chat route). discover_target() now tries both
+    # encodings automatically for every auth/body-format combination, so
+    # this never needs to be guessed or set by hand; it is simply recorded
+    # on the target row so send_prompt()/send_conversation_turn() replay the
+    # same encoding discovery found. Defaults to 'json' so every target
+    # saved before this column existed keeps behaving exactly as before.
+    ("targets", "body_encoding", "TEXT DEFAULT 'json'"),
 ]
 
 
