@@ -47,6 +47,23 @@ class OrphanedTaskRecoveryTests(CyberGuardTestCase):
         conn.close()
         return task_id
 
+    def _make_task_with_result(self, task_status, result_status):
+        """Same as _make_task, but also creates a linked scan_results row
+        (with its own, possibly different, status) and points task.result_id
+        at it - the normal shape once a scan has actually started writing
+        findings. Returns (task_id, result_id)."""
+        task_id = self._make_task(task_status)
+        conn = self.get_conn()
+        conn.execute(
+            "INSERT INTO scan_results (task_id, target_id, timestamp, status, mode) VALUES (?,?,?,?,?)",
+            (task_id, 1, "2026-01-01", result_status, "ai_powered"),
+        )
+        result_id = conn.execute("SELECT id FROM scan_results WHERE task_id=?", (task_id,)).fetchone()["id"]
+        conn.execute("UPDATE tasks SET result_id=? WHERE id=?", (result_id, task_id))
+        conn.commit()
+        conn.close()
+        return task_id, result_id
+
     def test_reap_orphaned_tasks_stops_a_running_task_left_over_from_a_dead_process(self):
         import engine.runner as runner
 
@@ -59,6 +76,36 @@ class OrphanedTaskRecoveryTests(CyberGuardTestCase):
         conn.close()
         self.assertEqual(row["status"], "stopped")
         self.assertEqual(row["control"], "stop")
+
+    def test_reap_orphaned_tasks_also_stops_the_linked_scan_results_row(self):
+        # Found live: Edison saw Tasks correctly show a reaped task as
+        # "stopped", but the Results page kept showing that same scan as
+        # "running" forever - scan_results has its own status column that
+        # the first version of this fix never touched.
+        import engine.runner as runner
+
+        task_id, result_id = self._make_task_with_result("running", "running")
+        runner.reap_orphaned_tasks()
+
+        conn = self.get_conn()
+        result_row = conn.execute("SELECT status FROM scan_results WHERE id=?", (result_id,)).fetchone()
+        conn.close()
+        self.assertEqual(result_row["status"], "stopped")
+
+    def test_reap_orphaned_tasks_also_sweeps_scan_results_left_stale_by_an_older_build(self):
+        # A task already reaped by an older build (status already
+        # 'stopped') no longer matches the "tasks WHERE status='running'"
+        # query, but its scan_results row from back then was never touched
+        # and is still stuck at 'running' - must be swept independently.
+        import engine.runner as runner
+
+        task_id, result_id = self._make_task_with_result("stopped", "running")
+        runner.reap_orphaned_tasks()
+
+        conn = self.get_conn()
+        result_row = conn.execute("SELECT status FROM scan_results WHERE id=?", (result_id,)).fetchone()
+        conn.close()
+        self.assertEqual(result_row["status"], "stopped")
 
     def test_reap_orphaned_tasks_leaves_finished_tasks_alone(self):
         import engine.runner as runner
@@ -83,6 +130,17 @@ class OrphanedTaskRecoveryTests(CyberGuardTestCase):
         row = conn.execute("SELECT status, control FROM tasks WHERE id=?", (task_id,)).fetchone()
         conn.close()
         self.assertEqual(row["status"], "stopped")
+
+    def test_force_stop_task_also_stops_the_linked_scan_results_row(self):
+        import engine.runner as runner
+
+        task_id, result_id = self._make_task_with_result("running", "running")
+        runner.force_stop_task(task_id)
+
+        conn = self.get_conn()
+        result_row = conn.execute("SELECT status FROM scan_results WHERE id=?", (result_id,)).fetchone()
+        conn.close()
+        self.assertEqual(result_row["status"], "stopped")
 
     def test_force_stop_task_returns_false_for_a_missing_task(self):
         import engine.runner as runner
