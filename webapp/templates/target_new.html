@@ -19,6 +19,7 @@
     {% if discovery.status == 'success' %}
       <p><strong>{{ t('auth_scheme_label') }}</strong> {{ discovery.auth_scheme }}</p>
       <p><strong>{{ t('body_format_label') }}</strong> {{ discovery.body_format }}</p>
+      <p><strong>Body encoding:</strong> {{ discovery.body_encoding }}{% if discovery.body_encoding == 'form' %} (classic HTML form POST, not a JSON API){% endif %}</p>
       <p><strong>{{ t('response_field_label') }}</strong> {{ discovery.response_field }}</p>
       <pre>{{ discovery.sample_response }}</pre>
       <form method="post" action="/targets/save">
@@ -27,6 +28,7 @@
         <input type="hidden" name="token" value="{{ form_token }}">
         <input type="hidden" name="auth_scheme" value="{{ discovery.auth_scheme }}">
         <input type="hidden" name="body_format" value="{{ discovery.body_format }}">
+        <input type="hidden" name="body_encoding" value="{{ discovery.body_encoding }}">
         <input type="hidden" name="response_field" value="{{ discovery.response_field }}">
         <button class="btn btn-primary" type="submit">{{ t('btn_save_target') }}</button>
       </form>
@@ -64,6 +66,10 @@
       <div class="field"><label>{{ t('field_session_token') }}</label><input type="text" name="token" value="{{ browser_discovery.token }}" required></div>
       <input type="hidden" name="auth_scheme" value="{{ browser_discovery.auth_scheme }}">
       <input type="hidden" name="body_format" value="{{ browser_discovery.body_format }}">
+      <!-- Browser-assisted discovery only ever captures a fetch/XHR request
+           carrying JSON (see core/browser_discovery.py's own scope notes),
+           never a classic form POST, so this is always 'json'. -->
+      <input type="hidden" name="body_encoding" value="json">
       <input type="hidden" name="response_field" value="{{ browser_discovery.response_field }}">
       <input type="hidden" name="body_template_json" value='{{ browser_discovery.body_template_json }}'>
       <p style="color:var(--text-muted);font-size:14px;">{{ t('review_token_hint') }}</p>
