@@ -16,7 +16,7 @@ def _memory_findings_conn():
     conn.execute(
         "CREATE TABLE findings (id INTEGER PRIMARY KEY, scan_result_id INTEGER, rule_id TEXT, owasp TEXT, "
         "severity TEXT, verdict TEXT, prompt_sent TEXT, raw_response TEXT, description TEXT, module TEXT, "
-        "source TEXT, recommendation TEXT, confidence INTEGER)"
+        "source TEXT, recommendation TEXT, confidence INTEGER, reproducibility_hits INTEGER, reproducibility_total INTEGER)"
     )
     conn.execute("CREATE TABLE canary_hits (token TEXT, remote_addr TEXT, hit_at TEXT)")
     conn.commit()

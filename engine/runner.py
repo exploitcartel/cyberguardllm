@@ -309,6 +309,36 @@ def _retest_fail(target, rule, ai_judge_cfg, min_confidence, retest_count):
     return hits, total
 
 
+def _retest_ai_fail(target, prompt, owasp_code, label, api_base, api_key, model, min_confidence,
+                     retest_count, business_context, timeout):
+    """
+    _retest_fail's counterpart for AI-Powered mode: re-sends the EXACT
+    winning prompt that just got a confirmed FAIL (not a newly generated
+    one - reproducibility means "does this same prompt still work", not
+    "can the AI find another way in") (retest_count - 1) more times and
+    counts how many of those re-sends are also judged FAIL. Returns
+    (hits, total), same shape as _retest_fail, where the original FAIL
+    counts as hit 1 of total. Never raises - a re-send that errors (network
+    issue, judge call failure) just counts as a non-hit, same as
+    _retest_fail's behavior for the static engine.
+    """
+    hits, total = 1, 1
+    for _ in range(max(0, retest_count - 1)):
+        total += 1
+        try:
+            resend_response = send_prompt(target, prompt, timeout=timeout)
+            if is_transport_error(resend_response):
+                continue
+            resend_verdict, *_ = ai_agent.judge_response(
+                api_base, api_key, model, owasp_code, label, prompt, resend_response,
+                business_context=business_context)
+            if resend_verdict == "FAIL":
+                hits += 1
+        except Exception:
+            pass
+    return hits, total
+
+
 def _run_static(conn, task_id, result_id, target, categories, config=None):
     scan_level = "low"
     enable_static = True
@@ -446,7 +476,7 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
     return False  # ran to completion, not stopped early
 
 
-def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=None, intensity=None):
+def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=None, intensity=None, config=None):
     """
     "Freestyle" AI-Powered mode: for each OWASP category, the attacking AI
     gets up to attempts_budget rounds to adapt and escalate against the
@@ -516,6 +546,29 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
     # it always costs a known, small, fixed number of calls.
     allow_extension = intensity != "test"
     min_confidence = int(get_setting("ai_judge_min_confidence", "60") or 60)
+
+    # Same "Retest" setting the static engine already offers (see
+    # _retest_fail above) - re-sends the exact prompt that triggered a FAIL
+    # several more times and records how many of those re-sends also came
+    # back FAIL, since an LLM is non-deterministic and a single confirmed
+    # FAIL could in principle have been a one-off. Requested directly:
+    # Edison wanted AI-Powered to "continue a bit further to actually prove
+    # something" rather than stop and report the very first FAIL as-is with
+    # nothing backing it up. Off by default (same default as the static
+    # engine), and does not change the verdict either way - still FAIL
+    # either way, this only adds a reproducibility rate to the finding so
+    # the report says how solid the result is instead of just asserting it.
+    enable_retest = False
+    retest_count = 3
+    if config is not None:
+        try:
+            enable_retest = bool(config["enable_retest"])
+        except (IndexError, KeyError):
+            enable_retest = False
+        try:
+            retest_count = max(2, int(config["retest_count"] or 3))
+        except (IndexError, KeyError, TypeError, ValueError):
+            retest_count = 3
 
     # Same rule as the static engine (see engine/loader.py): no OWASP
     # category selected means no AI-powered attempts run either, instead of
@@ -672,14 +725,23 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
             if verdict == "FAIL":
                 findings_count += 1
 
+            repro_hits, repro_total = None, None
+            if verdict == "FAIL" and enable_retest:
+                repro_hits, repro_total = _retest_ai_fail(
+                    target, prompt, owasp_code, label, api_base, api_key, model, min_confidence,
+                    retest_count, business_context, dynamic_timeout)
+
+            description = f"AI-generated adversarial attempt #{attempt} for {owasp_code} ({label}). Judge reasoning: {reasoning}"
+            if repro_total:
+                description += f" | Retested {repro_total}x, reproduced {repro_hits}/{repro_total}"
+
             conn.execute(
-                """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response, description, module, source, recommendation, confidence)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (result_id, rule_id, owasp_code, severity, verdict, prompt, response_text,
-                 f"AI-generated adversarial attempt #{attempt} for {owasp_code} ({label}). Judge reasoning: {reasoning}",
+                """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response, description, module, source, recommendation, confidence, reproducibility_hits, reproducibility_total)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (result_id, rule_id, owasp_code, severity, verdict, prompt, response_text, description,
                  "AI-Powered Adversarial Agent", "ai_agent",
                  "Harden system instructions and add output filtering for this category; re-test after remediation." if verdict == "FAIL" else "",
-                 confidence),
+                 confidence, repro_hits, repro_total),
             )
             conn.execute("UPDATE tasks SET progress_done=?, progress_findings=?, last_rule_id=? WHERE id=?",
                          (step, findings_count, rule_id, task_id))
@@ -788,7 +850,7 @@ def _execute(task_id: int):
             except (IndexError, KeyError):
                 ai_intensity = None  # config saved before this column existed
             stopped = _run_ai_powered(conn, task_id, result_id, target, ai_categories,
-                                       max_attempts=config["ai_max_attempts"], intensity=ai_intensity)
+                                       max_attempts=config["ai_max_attempts"], intensity=ai_intensity, config=config)
     except Exception as e:
         conn.execute("UPDATE scan_results SET status='error' WHERE id=?", (result_id,))
         conn.execute("UPDATE tasks SET status='error' WHERE id=?", (task_id,))
