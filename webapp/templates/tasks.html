@@ -23,11 +23,20 @@
   <div class="card">
     <h3 style="margin-top:0;">{{ t('recent_tasks') }}</h3>
     <table>
-      <tr><th>{{ t('col_target') }}</th><th>{{ t('col_config') }}</th><th>{{ t('col_status') }}</th></tr>
+      <tr><th>{{ t('col_target') }}</th><th>{{ t('col_config') }}</th><th>{{ t('col_status') }}</th><th>{{ t('col_action') }}</th></tr>
       {% for task in tasks %}
-      <tr><td>{{ task.target_name or '-' }}</td><td>{{ task.config_name or '-' }}</td><td><span class="badge badge-{{ task.status }}">{{ task.status }}</span></td></tr>
+      <tr>
+        <td>{{ task.target_name or '-' }}</td>
+        <td>{{ task.config_name or '-' }}</td>
+        <td><span class="badge badge-{{ task.status }}">{{ task.status }}</span></td>
+        <td>
+          {% if task.status == 'running' %}
+          <a href="/scan/{{ task.id }}/live" class="btn" style="padding:5px 10px;">{{ t('btn_watch_live') }}</a>
+          {% endif %}
+        </td>
+      </tr>
       {% else %}
-      <tr><td colspan="3" style="text-align:center;color:var(--text-muted);">{{ t('no_tasks_yet') }}</td></tr>
+      <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">{{ t('no_tasks_yet') }}</td></tr>
       {% endfor %}
     </table>
   </div>

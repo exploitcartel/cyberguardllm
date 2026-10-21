@@ -297,6 +297,8 @@ TRANSLATIONS = {
     "recent_tasks": {"en": "Recent tasks", "al": "Detyrat e fundit"},
     "col_config": {"en": "Config", "al": "Konfigurimi"},
     "no_tasks_yet": {"en": "No tasks yet.", "al": "S'ka detyra ende."},
+    "btn_watch_live": {"en": "Watch live", "al": "Shiko live"},
+    "col_action": {"en": "Action", "al": "Veprim"},
 
     # ---- results.html ----
     "results_title": {"en": "Scan Results", "al": "Rezultatet e Skanimit"},
