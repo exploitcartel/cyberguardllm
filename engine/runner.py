@@ -461,6 +461,22 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
         conn.commit()
         return False
 
+    # Warm up the target once before the scored loop starts. A self-hosted
+    # target running inference on CPU (Ollama, llama.cpp) often unloads its
+    # model between uses, so the very first real request has to pay for a
+    # cold model load on top of actual inference - seen live: attempt #1
+    # timed out at 45s against OWASP PromptMe even right after the per-call
+    # timeout was raised, because that 45s was spent loading the model, not
+    # answering. A throwaway prompt here, with a much longer timeout and no
+    # retries, pays that cold-start cost up front so every attempt that
+    # actually counts toward the budget/score lands on an already-warm
+    # model. Its result is discarded either way - this is not a probe and
+    # is never recorded as a finding or counted against total_ai_calls.
+    try:
+        send_prompt(target, "Hello", timeout=120.0, max_retries=0)
+    except Exception:
+        pass
+
     hit_global_cap = False
     for owasp_code in cats:
         if hit_global_cap:
