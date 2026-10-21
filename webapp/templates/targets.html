@@ -34,6 +34,7 @@
       <td>
         <a href="/targets/{{ t_row.id }}/trend" class="btn" style="padding:5px 10px;">{{ t('btn_trend') }}</a>
         {% if user_role in ('administrator','global_administrator') %}
+        <a href="/targets/{{ t_row.id }}/edit" class="btn" style="padding:5px 10px;">{{ t('btn_edit') }}</a>
         <form method="post" action="/targets/{{ t_row.id }}/delete" style="display:inline;" onsubmit="return confirm('{{ t('confirm_delete_target') }}');">
           <button type="submit" class="btn" style="padding:5px 10px;">{{ t('btn_delete') }}</button>
         </form>

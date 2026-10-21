@@ -392,6 +392,58 @@ def target_update_context(target_id):
     return redirect("/targets")
 
 
+@app.route("/targets/<int:target_id>/edit", methods=["GET"])
+def target_edit(target_id):
+    username, err = require_role("administrator")
+    if err: return err
+    conn = get_conn()
+    target = conn.execute("SELECT * FROM targets WHERE id=?", (target_id,)).fetchone()
+    conn.close()
+    if not target:
+        return forbidden("Target not found.")
+    from core.discovery import AUTH_SCHEMES, BODY_FORMATS
+    return render_template("target_edit.html", **ctx(
+        active="targets", target=target, auth_schemes=AUTH_SCHEMES, body_formats=list(BODY_FORMATS.keys())))
+
+
+@app.route("/targets/<int:target_id>/edit", methods=["POST"])
+def target_edit_save(target_id):
+    username, err = require_role("administrator")
+    if err: return err
+    conn = get_conn()
+    target = conn.execute("SELECT * FROM targets WHERE id=?", (target_id,)).fetchone()
+    if not target:
+        conn.close()
+        return forbidden("Target not found.")
+
+    name = request.form.get("name", "").strip()
+    url = request.form.get("url", "").strip()
+    auth_scheme = request.form.get("auth_scheme", "").strip()
+    body_format = request.form.get("body_format", "").strip()
+    body_encoding = request.form.get("body_encoding", "json") or "json"
+    response_field = request.form.get("response_field", "").strip()
+    new_token = request.form.get("token", "")
+
+    # The token field is deliberately left blank by default (the existing
+    # encrypted token is never decrypted just to redisplay it - it's a
+    # secret). Only overwrite it when the operator actually typed a new
+    # one; an edit that only renames the target or fixes its URL must not
+    # silently wipe out a working session token.
+    if new_token.strip():
+        conn.execute("UPDATE targets SET token_encrypted=? WHERE id=?", (encrypt_token(new_token.strip()), target_id))
+
+    conn.execute(
+        """UPDATE targets SET name=?, url=?, auth_scheme=?, body_format=?, body_encoding=?, response_field=?
+           WHERE id=?""",
+        (name, url, auth_scheme, body_format, body_encoding, response_field, target_id),
+    )
+    conn.commit()
+    conn.close()
+    log_activity(username, "Target Edited", name)
+    flash_t("flash_target_updated")
+    return redirect("/targets")
+
+
 @app.route("/targets/<int:target_id>/trend")
 def target_trend(target_id):
     username, err = require_login()
