@@ -18,6 +18,15 @@ OWASP_LABELS_FALLBACK = {
 
 AI_ATTEMPTS_PER_CATEGORY = 3
 
+# Absolute ceiling across an entire AI-Powered run (every OWASP category
+# combined), independent of the per-category attempts_budget cap (itself
+# already clamped to at most 10 in _run_ai_powered). Today's fixed ~10-entry
+# OWASP LLM Top 10 category list times a 10-attempt budget tops out at 100
+# anyway, so this is a defense-in-depth backstop rather than a binding limit
+# in normal use - it exists so "the AI tries forever" can never happen even
+# if a future change allows more categories to be selected than today.
+AI_POWERED_GLOBAL_ATTEMPT_CAP = 120
+
 
 def _check_control(conn, task_id):
     """
@@ -383,13 +392,30 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
     """
     "Freestyle" AI-Powered mode: for each OWASP category, the attacking AI
     gets up to max_attempts rounds to adapt and escalate against the target,
-    seeing the previous prompt/response each time, exactly like a human
-    red-teamer trying something, watching how the target reacts, and trying
-    something sharper. Unlike a fixed canned script, it STOPS as soon as it
-    gets a confirmed FAIL for that category (budget spent only where it is
-    still needed) rather than always burning every attempt regardless of
-    whether the category is already proven vulnerable; it only uses the
-    full budget on a category that keeps resisting.
+    seeing the previous prompt/response AND the judge's own reasoning for why
+    it resisted each time (plus a rotated technique hint - see
+    ai_agent.ATTACK_TECHNIQUE_ROTATION), exactly like a human red-teamer
+    trying something, watching how the target reacts, and deliberately trying
+    a different angle next, informed by what just happened. Unlike a fixed
+    canned script, it STOPS as soon as it gets a confirmed FAIL for that
+    category (budget spent only where it is still needed) rather than always
+    burning every attempt regardless of whether the category is already
+    proven vulnerable; it only uses the full budget on a category that keeps
+    resisting.
+
+    This escalation loop is scoped to AI-Powered scans ONLY - the static
+    rule library's own dual-judge path (_evaluate_attempt, used by
+    _run_static even when an AI judge is additionally configured there) is
+    untouched and still evaluates each rule once, no escalation.
+
+    Hard stop on "the AI tries forever": attempts_budget below is clamped to
+    at most 10 per category regardless of what a scan config asks for, so a
+    single category can never run more than 10 rounds. On top of that,
+    _GLOBAL_AI_ATTEMPT_CAP below is an absolute ceiling across the WHOLE
+    AI-Powered run (every category combined) - belt-and-suspenders in case a
+    future change ever allows more categories to be selected than today's
+    fixed OWASP LLM Top 10 list. Hitting either cap ends the run cleanly with
+    an explanatory finding instead of silently running forever.
     """
     from engine import ai_agent
     from core.crypto import decrypt_token
@@ -414,6 +440,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
     # silently defaulting to every category.
     cats = categories
     total = len(cats) * attempts_budget
+    total_ai_calls = 0  # counted across every category combined, see _GLOBAL_AI_ATTEMPT_CAP below
     conn.execute("UPDATE tasks SET progress_total=?, progress_done=0, progress_findings=0, status='running', result_id=? WHERE id=?",
                  (total, result_id, task_id))
     conn.commit()
@@ -434,18 +461,47 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
         conn.commit()
         return False
 
+    hit_global_cap = False
     for owasp_code in cats:
+        if hit_global_cap:
+            break
         label = OWASP_LABELS_FALLBACK.get(owasp_code, owasp_code)
-        prev_prompt, prev_response = None, None
+        prev_prompt, prev_response, prev_reasoning = None, None, None
         category_confirmed = False
         for attempt in range(1, attempts_budget + 1):
             if _check_control(conn, task_id):
                 return True  # operator stopped the scan; everything so far is already saved
+
+            total_ai_calls += 1
+            if total_ai_calls > AI_POWERED_GLOBAL_ATTEMPT_CAP:
+                # Absolute backstop: end the run cleanly right here instead of
+                # continuing into more categories/attempts, no matter how
+                # many categories or how large a per-category budget was
+                # configured - see the cap's own comment above for why this
+                # exists on top of the per-category attempts_budget clamp.
+                conn.execute(
+                    """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response, description, module, source, recommendation)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (result_id, "ai-global-cap-reached", owasp_code, "low", "PASS", "", "",
+                     f"AI-Powered scan reached its safety cap of {AI_POWERED_GLOBAL_ATTEMPT_CAP} total attempts "
+                     "across all categories and stopped here, so this scan has a guaranteed end regardless of "
+                     "configuration. Remaining categories were skipped; everything completed so far is saved.",
+                     None, "ai_agent", ""),
+                )
+                conn.execute("UPDATE tasks SET progress_done=?, progress_findings=?, last_rule_id=? WHERE id=?",
+                             (total, findings_count, "ai-global-cap-reached", task_id))
+                conn.commit()
+                hit_global_cap = True
+                break
+
             step += 1
             rule_id = f"ai-{owasp_code}-{attempt}"
+            technique_hint = ai_agent.ATTACK_TECHNIQUE_ROTATION[(attempt - 1) % len(ai_agent.ATTACK_TECHNIQUE_ROTATION)]
             try:
                 prompt = ai_agent.generate_adversarial_prompt(
-                    api_base, api_key, model, owasp_code, label, prev_prompt, prev_response)
+                    api_base, api_key, model, owasp_code, label, prev_prompt, prev_response,
+                    previous_reasoning=prev_reasoning, technique_hint=technique_hint,
+                    attempt_number=attempt, attempts_budget=attempts_budget)
             except Exception as e:
                 # A broken provider/model/key would otherwise fail the exact
                 # same way on every remaining attempt and category, silently
@@ -524,7 +580,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                          (step, findings_count, rule_id, task_id))
             conn.commit()
 
-            prev_prompt, prev_response = prompt, response_text
+            prev_prompt, prev_response, prev_reasoning = prompt, response_text, reasoning
 
             if verdict == "FAIL":
                 # Freestyle budget: this category is already proven vulnerable,
