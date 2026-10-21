@@ -52,6 +52,28 @@ AI_INTENSITY_ORDER = ("test", "low", "medium", "high", "aggressive")
 AI_BREAKTHROUGH_EXTENSION_ATTEMPTS = 3
 AI_BREAKTHROUGH_CONFIDENCE_MARGIN = 15
 
+# Confirmed live against OWASP PromptMe: attempt #1 of a run answers well
+# within send_prompt()'s normal 45s default, then attempt #2 - sent moments
+# later, same target, same cookie - times out at the exact same 45s. This
+# is not the model randomly getting stuck: PromptMe (like a lot of simple
+# demo chat apps) keeps a server-side history per session/user_id and
+# re-processes the WHOLE thing on every turn (see
+# engine/session_isolation_module.py's own module docstring, which exists
+# specifically because this class of target holds state across what the
+# scanner sends as separate, stateless requests). So every AI-Powered
+# attempt against the SAME target/cookie adds to that growing history, and
+# a CPU-only local model takes measurably longer to answer as there is more
+# of it to process each time - the first attempt (short history) can finish
+# comfortably, the second (history now includes the warm-up call and attempt
+# #1's exchange) can already be tight, and it only gets worse from there.
+# Rather than one fixed timeout for every attempt regardless of how far into
+# the run it is, the per-attempt timeout grows with total_ai_calls (global
+# across the whole run, matching how the target's own history grows) and is
+# capped so a single stuck attempt still can't hang indefinitely.
+AI_POWERED_TIMEOUT_BASE = 45.0
+AI_POWERED_TIMEOUT_GROWTH_PER_CALL = 15.0
+AI_POWERED_TIMEOUT_CAP = 180.0
+
 # Absolute ceiling across an entire AI-Powered run (every OWASP category
 # combined), independent of the per-category attempts_budget cap (itself
 # already clamped to at most AI_INTENSITY_LEVELS["aggressive"] in
@@ -611,7 +633,11 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 conn.commit()
                 return False
 
-            response_text = send_prompt(target, prompt)
+            dynamic_timeout = min(
+                AI_POWERED_TIMEOUT_BASE + AI_POWERED_TIMEOUT_GROWTH_PER_CALL * (total_ai_calls - 1),
+                AI_POWERED_TIMEOUT_CAP,
+            )
+            response_text = send_prompt(target, prompt, timeout=dynamic_timeout)
 
             try:
                 business_context = target["business_context"]
