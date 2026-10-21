@@ -253,7 +253,7 @@ def _find_response_field(data, path=""):
     return best
 
 
-def discover_target(url: str, token: str, timeout: float = 10.0):
+def discover_target(url: str, token: str, timeout: float = 25.0):
     """
     Brute-forces auth scheme x body format x body ENCODING combinations
     against the target with a harmless "hello" ping, the same approach
@@ -268,6 +268,16 @@ def discover_target(url: str, token: str, timeout: float = 10.0):
     tried as a fallback per combination, so this is universal - every
     future target works the same way regardless of which encoding it
     expects, with nothing to configure by hand.
+
+    timeout default raised from 10s to 25s (matching send_prompt()'s own
+    20s default closely, with a little headroom): a self-hosted target
+    running its model locally on CPU (Ollama, llama.cpp, etc, like OWASP
+    PromptMe in local testing) can easily take 10-20+ seconds for a single
+    reply, so a too-short discovery timeout misreads "the correct
+    combination, just answering slowly" as "every combination failed" -
+    the request never completed within the old 10s window, so discovery
+    moved on to the next combination without ever getting the 200 that
+    would have identified the right one.
     """
     ping_prompt = "hello"
     results_log = []
