@@ -1,5 +1,6 @@
 import requests
 import random
+import re
 import time
 import json
 
@@ -173,6 +174,85 @@ def _is_sse_response(resp) -> bool:
     return text.startswith("data:") or "\ndata:" in text
 
 
+# Sentinel stored as response_field on a target row when discovery detected
+# a full server-rendered HTML page response instead of a JSON body or an SSE
+# stream - the pattern used by chat UIs like OWASP PromptMe's Flask + Jinja
+# /chat route, which re-renders the whole page (chat.html) on every POST
+# rather than exposing a JSON API. Without this, every such target fails
+# discovery on EVERY auth/format/encoding combination, forever, even the
+# exactly-correct one: discover_target()'s success check used to require
+# resp.json() to work, so a 200 OK that is real HTML (not an error) was
+# always logged as "200 OK but not JSON" and never accepted. send_prompt and
+# send_conversation_turn check for this sentinel the same way they already
+# do for SSE_RESPONSE_FIELD, and scrape the reply out of the page instead of
+# walking a dot-path into a JSON body that was never there.
+HTML_RESPONSE_FIELD = "__html__"
+
+_ASSISTANT_HINTS = ("assistant", "bot", "ai-", "-ai", "model", "reply", "response", "agent")
+_USER_HINTS = ("user", "human", "you-said", "-you")
+
+
+def _extract_html_reply(html_text: str, exclude_text: str = ""):
+    """
+    Heuristic extraction of a chatbot's latest reply out of a full
+    server-rendered HTML page response. There is no universal markup for
+    "the bot's reply" the way there is for JSON (a response_field
+    dot-path), so this is deliberately generic rather than tailored to one
+    app's template, and returns None (never guesses) when neither heuristic
+    finds anything - callers then keep treating the response as "200 OK but
+    not JSON" exactly as before, so an unrelated HTML page (a login page, a
+    404, a static site) is never mistaken for a successful chat reply.
+
+    1. The LAST element on the page whose class/id mentions an
+       assistant-like word (assistant/bot/ai/model/reply/response/agent)
+       and not a user-like word (user/human/you) - the common pattern of
+       chat templates giving each message bubble a role-based CSS class,
+       with the most recent message last in document order.
+    2. A plain "Role: text" line (Bot:, Assistant:, AI:) anywhere in the
+       page's visible text, for chat UIs with no role-based markup at all
+       - again, the LAST match.
+
+    exclude_text (the exact prompt that was sent) filters out a match that
+    is only the user's own input being echoed back, so a page that merely
+    reflects the message is not mistaken for a real reply.
+    """
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        soup = None
+    else:
+        soup = BeautifulSoup(html_text, "html.parser")
+
+    if soup is not None:
+        candidates = []
+        for el in soup.find_all(True):
+            if el.name in ("script", "style", "head", "input", "textarea"):
+                continue
+            classes = " ".join(el.get("class", []) or [])
+            el_id = el.get("id") or ""
+            marker = f"{classes} {el_id}".lower()
+            if any(h in marker for h in _ASSISTANT_HINTS) and not any(h in marker for h in _USER_HINTS):
+                text = el.get_text(strip=True)
+                if text and text != exclude_text:
+                    candidates.append(text)
+        if candidates:
+            return candidates[-1]
+
+    source_text = soup.get_text("\n") if soup is not None else html_text
+    pattern = re.compile(r"(?:bot|assistant|ai)\s*:\s*(.+)", re.IGNORECASE)
+    text_matches = []
+    for line in source_text.splitlines():
+        m = pattern.match(line.strip())
+        if m:
+            candidate = m.group(1).strip()
+            if candidate and candidate != exclude_text:
+                text_matches.append(candidate)
+    if text_matches:
+        return text_matches[-1]
+
+    return None
+
+
 def _parse_sse_text(raw_text: str) -> str:
     """
     Reconstructs a plain-text reply from an SSE stream. Each "data: ..."
@@ -313,6 +393,16 @@ def discover_target(url: str, token: str, timeout: float = 25.0):
                     try:
                         data = resp.json()
                     except Exception:
+                        html_reply = _extract_html_reply(resp.text, exclude_text=ping_prompt)
+                        if html_reply and len(html_reply) > 2:
+                            return {
+                                "status": "success",
+                                "auth_scheme": auth_scheme,
+                                "body_format": fmt_name,
+                                "body_encoding": encoding,
+                                "response_field": HTML_RESPONSE_FIELD,
+                                "sample_response": html_reply,
+                            }
                         results_log.append({"auth": auth_scheme, "format": fmt_name, "encoding": encoding,
                                              "status": resp.status_code, "note": "200 OK but not JSON"})
                         continue
@@ -437,6 +527,16 @@ def send_prompt(target_row, prompt: str, timeout: float = 20.0, max_retries: int
 
         if response_field == SSE_RESPONSE_FIELD or _is_sse_response(resp):
             return _parse_sse_text(resp.text)
+
+        if response_field == HTML_RESPONSE_FIELD:
+            html_reply = _extract_html_reply(resp.text, exclude_text=prompt)
+            if html_reply:
+                return html_reply
+            last_error = "[ERROR] target returned an HTML page with no recognizable reply"
+            if attempt < max_retries:
+                time.sleep(delay); delay *= 2
+                continue
+            return last_error
 
         try:
             data = resp.json()
