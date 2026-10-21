@@ -4,11 +4,12 @@
 
 <div class="grid grid-2">
   <div class="card">
-    <form method="post" action="/targets/discover">
-      <div class="field"><label>{{ t('field_target_name') }}</label><input type="text" name="name" placeholder="ChatGPT Clone" required></div>
-      <div class="field"><label>{{ t('field_target_url') }}</label><input type="text" name="url" placeholder="https://chat.example.com/api/chat" required></div>
-      <div class="field"><label>{{ t('field_session_token') }}</label><input type="password" name="token" placeholder="eyJhbGc..." required></div>
+    <form method="post" action="/targets/discover" id="detect-form">
+      <div class="field"><label>{{ t('field_target_name') }}</label><input type="text" name="name" id="detect-name" placeholder="ChatGPT Clone" value="{{ form_name or '' }}" required></div>
+      <div class="field"><label>{{ t('field_target_url') }}</label><input type="text" name="url" id="detect-url" placeholder="https://chat.example.com/api/chat" value="{{ form_url or '' }}" required></div>
+      <div class="field"><label>{{ t('field_session_token') }}</label><input type="password" name="token" id="detect-token" placeholder="eyJhbGc..." value="{{ form_token or '' }}" required></div>
       <button class="btn btn-primary" type="submit">{{ t('btn_detect') }}</button>
+      <button class="btn" type="button" onclick="document.getElementById('detect-name').value='';document.getElementById('detect-url').value='';document.getElementById('detect-token').value='';document.getElementById('detect-name').focus();">Clear</button>
       <a href="/targets" class="btn">{{ t('btn_cancel') }}</a>
     </form>
   </div>

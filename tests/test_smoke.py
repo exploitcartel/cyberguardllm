@@ -6,6 +6,8 @@ most of the bugs found and fixed this session (the script-ordering bug
 that silently broke bulk-select on every page, the rename-input CSS
 collapse) would have been caught immediately by a test this simple.
 """
+from unittest import mock
+
 from tests.base import CyberGuardTestCase
 
 
@@ -14,6 +16,26 @@ class SmokeTest(CyberGuardTestCase):
         for page in ("/dashboard", "/scan-configs", "/rules", "/results", "/targets"):
             resp = self.client.get(page)
             self.assertEqual(resp.status_code, 200, f"{page} did not return 200")
+
+    def test_add_target_form_keeps_typed_values_after_a_failed_detect(self):
+        """
+        Regression test: /targets/new's "Detect" form used to re-render with
+        every field blanked out after a failed discovery attempt, forcing
+        the operator to retype the name/URL/token to try again. The inputs
+        now echo back what was submitted, and a Clear button exists to
+        blank them deliberately instead.
+        """
+        import webapp.app as app_mod
+        with mock.patch.object(app_mod, "discover_target", return_value={"status": "failed", "log": []}):
+            resp = self.client.post("/targets/discover", data={
+                "name": "MyTarget", "url": "http://x.example/chat", "token": "sek ret",
+            })
+        html = resp.data.decode("utf-8", errors="replace")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('value="MyTarget"', html)
+        self.assertIn('value="http://x.example/chat"', html)
+        self.assertIn('value="sek ret"', html)
+        self.assertIn(">Clear<", html)
 
     def test_rules_page_has_no_server_error_markers(self):
         resp = self.client.get("/rules")
