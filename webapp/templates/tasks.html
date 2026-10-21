@@ -43,6 +43,15 @@
       <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">{{ t('no_tasks_yet') }}</td></tr>
       {% endfor %}
     </table>
+    {% if tasks_total_pages and tasks_total_pages > 1 %}
+    <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-top:14px;flex-wrap:wrap;">
+      <a href="/tasks?page={{ tasks_page - 1 }}" class="btn" style="padding:5px 10px;{% if tasks_page <= 1 %}pointer-events:none;opacity:0.4;{% endif %}">&laquo; {{ t('btn_prev_page') }}</a>
+      {% for p in range(1, tasks_total_pages + 1) %}
+      <a href="/tasks?page={{ p }}" class="btn {% if p == tasks_page %}btn-primary{% endif %}" style="padding:5px 11px;">{{ p }}</a>
+      {% endfor %}
+      <a href="/tasks?page={{ tasks_page + 1 }}" class="btn" style="padding:5px 10px;{% if tasks_page >= tasks_total_pages %}pointer-events:none;opacity:0.4;{% endif %}">{{ t('btn_next_page') }} &raquo;</a>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
