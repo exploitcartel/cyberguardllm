@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>{{ t('edit_target_title') }}</h1><p>{{ t('edit_target_sub') }}</p></div></div>
+
+<div class="card" style="max-width:560px;">
+  <form method="post" action="/targets/{{ target.id }}/edit">
+    <div class="field"><label>{{ t('field_target_name') }}</label>
+      <input type="text" name="name" value="{{ target.name }}" required>
+    </div>
+    <div class="field"><label>{{ t('field_target_url') }}</label>
+      <input type="text" name="url" value="{{ target.url }}" required>
+    </div>
+    <div class="field"><label>{{ t('field_auth_scheme') }}</label>
+      <select name="auth_scheme">
+        {% for scheme in auth_schemes %}
+        <option value="{{ scheme }}" {% if target.auth_scheme == scheme %}selected{% endif %}>{{ scheme }}</option>
+        {% endfor %}
+        {% if target.auth_scheme not in auth_schemes %}
+        <option value="{{ target.auth_scheme }}" selected>{{ target.auth_scheme }}</option>
+        {% endif %}
+      </select>
+    </div>
+    <div class="field"><label>{{ t('field_body_format') }}</label>
+      <select name="body_format">
+        {% for fmt in body_formats %}
+        <option value="{{ fmt }}" {% if target.body_format == fmt %}selected{% endif %}>{{ fmt }}</option>
+        {% endfor %}
+        {% if target.body_format not in body_formats %}
+        <option value="{{ target.body_format }}" selected>{{ target.body_format }} ({{ t('view_only') }})</option>
+        {% endif %}
+      </select>
+    </div>
+    <div class="field"><label>{{ t('field_body_encoding') }}</label>
+      <select name="body_encoding">
+        <option value="json" {% if (target.body_encoding or 'json') == 'json' %}selected{% endif %}>json</option>
+        <option value="form" {% if target.body_encoding == 'form' %}selected{% endif %}>form</option>
+      </select>
+    </div>
+    <div class="field"><label>{{ t('field_response_field') }}</label>
+      <input type="text" name="response_field" value="{{ target.response_field }}">
+    </div>
+    <div class="field"><label>{{ t('field_new_token_optional') }}</label>
+      <input type="password" name="token" placeholder="eyJhbGc...">
+      <p style="color:var(--text-muted);font-size:13px;margin-top:4px;">{{ t('token_blank_hint') }}</p>
+    </div>
+    <button class="btn btn-primary" type="submit">{{ t('btn_save_changes') }}</button>
+    <a href="/targets" class="btn">{{ t('btn_cancel') }}</a>
+  </form>
+</div>
+{% endblock %}
