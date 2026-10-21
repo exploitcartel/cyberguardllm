@@ -480,14 +480,46 @@ def target_trend(target_id):
                                                         comparison=comparison))
 
 
+def _cascade_delete_targets(conn, target_ids):
+    """Explicitly remove everything a target's scan history points at
+    before deleting the target row itself.
+
+    targets has no DB-level ON DELETE CASCADE for the rows that point at
+    it (tasks.target_id, scan_results.target_id), and those rows in turn
+    are pointed at by findings/attack_chains (via scan_result_id). With
+    PRAGMA foreign_keys = ON, a bare "DELETE FROM targets" against a
+    target that still has scan history either fails outright or - under
+    concurrent access, while a scan thread is actively writing to
+    tasks/scan_results for an unrelated run - can surface as a confusing
+    "database is locked" error instead of a clean constraint error,
+    because the FK check itself has to read those same busy tables.
+    Mirrors the already-correct cascading pattern in results_delete().
+    """
+    if not target_ids:
+        return
+    tplaceholders = ",".join("?" * len(target_ids))
+    result_rows = conn.execute(
+        f"SELECT id FROM scan_results WHERE target_id IN ({tplaceholders})", target_ids).fetchall()
+    result_ids = [r["id"] for r in result_rows]
+    if result_ids:
+        rplaceholders = ",".join("?" * len(result_ids))
+        conn.execute(f"DELETE FROM findings WHERE scan_result_id IN ({rplaceholders})", result_ids)
+        conn.execute(f"DELETE FROM attack_chains WHERE scan_result_id IN ({rplaceholders})", result_ids)
+        conn.execute(f"UPDATE tasks SET result_id=NULL WHERE result_id IN ({rplaceholders})", result_ids)
+        conn.execute(f"DELETE FROM scan_results WHERE id IN ({rplaceholders})", result_ids)
+    conn.execute(f"DELETE FROM tasks WHERE target_id IN ({tplaceholders})", target_ids)
+    conn.execute(f"DELETE FROM targets WHERE id IN ({tplaceholders})", target_ids)
+
+
 @app.route("/targets/<int:target_id>/delete", methods=["POST"])
 def target_delete(target_id):
     username, err = require_role("administrator")
     if err: return err
     conn = get_conn()
     row = conn.execute("SELECT * FROM targets WHERE id=?", (target_id,)).fetchone()
-    conn.execute("DELETE FROM targets WHERE id=?", (target_id,))
-    conn.commit()
+    if row:
+        _cascade_delete_targets(conn, [target_id])
+        conn.commit()
     conn.close()
     if row:
         log_activity(username, "Target Deleted", row["name"])
@@ -508,8 +540,7 @@ def targets_bulk_delete():
     rows = conn.execute(f"SELECT id, name FROM targets WHERE id IN ({placeholders})", ids).fetchall()
     if rows:
         found_ids = [r["id"] for r in rows]
-        fplaceholders = ",".join("?" * len(found_ids))
-        conn.execute(f"DELETE FROM targets WHERE id IN ({fplaceholders})", found_ids)
+        _cascade_delete_targets(conn, found_ids)
         conn.commit()
         log_activity(username, "Target(s) Deleted", f"{len(rows)} target(s): {', '.join(r['name'] for r in rows)}")
         flash(f"Deleted {len(rows)} target(s).", "success")
@@ -701,6 +732,9 @@ def scan_configs_bulk_delete():
     return redirect("/scan-configs")
 
 
+TASKS_PAGE_SIZE = 5
+
+
 @app.route("/tasks", methods=["GET"])
 def tasks_page():
     username, err = require_login()
@@ -708,12 +742,26 @@ def tasks_page():
     conn = get_conn()
     targets = conn.execute("SELECT * FROM targets").fetchall()
     configs = conn.execute("SELECT * FROM scan_configs").fetchall()
+
+    total_tasks = conn.execute("SELECT COUNT(*) AS n FROM tasks").fetchone()["n"]
+    total_pages = max(1, (total_tasks + TASKS_PAGE_SIZE - 1) // TASKS_PAGE_SIZE)
+    try:
+        page = int(request.args.get("page", "1"))
+    except (TypeError, ValueError):
+        page = 1
+    page = max(1, min(page, total_pages))
+    offset = (page - 1) * TASKS_PAGE_SIZE
+
     tasks = conn.execute("""SELECT tk.*, t.name as target_name, c.name as config_name FROM tasks tk
                              LEFT JOIN targets t ON tk.target_id=t.id
                              LEFT JOIN scan_configs c ON tk.scan_config_id=c.id
-                             ORDER BY tk.created_at DESC""").fetchall()
+                             ORDER BY tk.created_at DESC LIMIT ? OFFSET ?""",
+                          (TASKS_PAGE_SIZE, offset)).fetchall()
     conn.close()
-    return render_template("tasks.html", **ctx(active="tasks", targets=targets, configs=configs, tasks=tasks))
+    return render_template("tasks.html", **ctx(
+        active="tasks", targets=targets, configs=configs, tasks=tasks,
+        tasks_page=page, tasks_total_pages=total_pages,
+    ))
 
 
 @app.route("/tasks/run", methods=["POST"])

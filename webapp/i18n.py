@@ -313,6 +313,8 @@ TRANSLATIONS = {
     "field_scan_config": {"en": "Scan Configuration", "al": "Konfigurimi i Skanimit"},
     "btn_start_scan": {"en": "Start Scan", "al": "Nis Skanimin"},
     "recent_tasks": {"en": "Recent tasks", "al": "Detyrat e fundit"},
+    "btn_prev_page": {"en": "Prev", "al": "Mbrapa"},
+    "btn_next_page": {"en": "Next", "al": "Para"},
     "col_config": {"en": "Config", "al": "Konfigurimi"},
     "no_tasks_yet": {"en": "No tasks yet.", "al": "S'ka detyra ende."},
     "btn_watch_live": {"en": "Watch live", "al": "Shiko live"},
