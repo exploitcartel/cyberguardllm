@@ -96,6 +96,48 @@ class DiscoverTargetHtmlPageTests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
 
 
+class CookieAuthTriesFormBeforeJsonTests(unittest.TestCase):
+    def test_cookie_scheme_tries_form_before_json_to_avoid_poisoning_server_state(self):
+        """
+        Regression test for a bug found live against OWASP PromptMe:
+        discover_target() used to always try 'json' first for every
+        combination, including cookie-authenticated ones. Against an app
+        that reads request.form and naively stores the (then-missing)
+        message into server-side session history before validating it,
+        that first json attempt poisons the session - so by the time the
+        very next attempt (the correct form-encoded one, same session) ran,
+        the app was already broken and crashed rendering the poisoned
+        history, even though ITS OWN request was perfectly correct.
+
+        This simulates exactly that: a fake target that 500s on every
+        request forever once it has ever received a json-encoded request
+        (standing in for "the session is now poisoned"), but otherwise
+        answers correctly to the right form-encoded combination. For
+        cookie auth, discovery must never send a json request before
+        trying the correct form one, so it must succeed cleanly.
+        """
+        poisoned = {"value": False}
+
+        def fake_post(url, json=None, data=None, headers=None, params=None, timeout=None, proxies=None):
+            if json is not None:
+                poisoned["value"] = True
+                return _FakeResponse(status_code=500)
+            if poisoned["value"]:
+                return _FakeResponse(status_code=500)
+            if data and data.get("message") == "hello":
+                return _FakeResponse(status_code=200, text=CHAT_PAGE_WITH_REPLY)
+            return _FakeResponse(status_code=200, text=PLAIN_LOGIN_PAGE)
+
+        with mock.patch.object(discovery.requests, "post", side_effect=fake_post), \
+             mock.patch.object(discovery, "get_proxies", return_value=None), \
+             mock.patch.object(discovery, "AUTH_SCHEMES", ["cookie"]):
+            result = discovery.discover_target("http://promptme.example/chat", "faketoken")
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["body_encoding"], "form")
+        self.assertFalse(poisoned["value"], "a json request must never be sent before the correct form one for cookie auth")
+
+
 class SendPromptHtmlPageTests(unittest.TestCase):
     def test_send_prompt_scrapes_the_reply_via_the_saved_html_sentinel(self):
         target_row = {

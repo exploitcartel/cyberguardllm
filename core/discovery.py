@@ -349,6 +349,25 @@ def discover_target(url: str, token: str, timeout: float = 25.0):
     future target works the same way regardless of which encoding it
     expects, with nothing to configure by hand.
 
+    The one exception is auth_scheme == 'cookie', where 'form' is tried
+    FIRST instead. Found live against OWASP PromptMe: a target that
+    authenticates via a session cookie is, in practice, always a
+    server-rendered HTML app (a real JSON chat API almost never uses a
+    browser session cookie as its machine-auth - it uses a bearer token or
+    API key), and such apps commonly keep conversation history in
+    server-side state shared across requests for that session. Sending the
+    'message' format as JSON first against an app that only reads
+    request.form means the field is never populated, so the app sees a
+    missing/None message - and if it naively stores that into history
+    before validating it (as OWASP PromptMe's challenge does), it corrupts
+    that session's history before the very next attempt (the actually
+    correct 'form' encoding, same combination) ever runs, so EVERY later
+    request against that same session fails too (the app crashes trying to
+    render the poisoned history entry), even the exactly-right one - the
+    correct combination can never win a race it never gets to run cleanly.
+    Trying 'form' first for cookie-authenticated targets means the
+    almost-always-correct guess is tried before any damage can be done.
+
     timeout default raised from 10s to 25s (matching send_prompt()'s own
     20s default closely, with a little headroom): a self-hosted target
     running its model locally on CPU (Ollama, llama.cpp, etc, like OWASP
@@ -368,7 +387,8 @@ def discover_target(url: str, token: str, timeout: float = 25.0):
 
         for fmt_name, template in BODY_FORMATS.items():
             body = _fill_body(template, ping_prompt)
-            for encoding in ("json", "form"):
+            encodings = ("form", "json") if auth_scheme == "cookie" else ("json", "form")
+            for encoding in encodings:
                 try:
                     resp = _post_body(url, body, headers, params, timeout, encoding=encoding)
                 except Exception as e:
