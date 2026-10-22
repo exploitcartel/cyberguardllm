@@ -6,3 +6,4 @@ secret.key
 auth_secret.key
 flask_secret.key
 *.pdf
+venv-garak/
