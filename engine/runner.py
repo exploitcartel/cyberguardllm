@@ -1,5 +1,7 @@
+import socket
 import threading
 import time
+from urllib.parse import urlparse
 from storage.db import get_conn, now, get_setting
 from engine.loader import load_rules_by_categories
 from engine.evaluator import evaluate, evaluate_explained, evaluate_multiturn, evaluate_persistence
@@ -91,6 +93,40 @@ AI_POWERED_GLOBAL_ATTEMPT_CAP = 400
 # payloads (down, rate-limiting, or far too slow) will not answer the other ~1700 either, and with a 45 s timeout
 # per request plus retries that would otherwise run for many hours producing nothing but ERROR rows.
 MAX_CONSECUTIVE_TRANSPORT_ERRORS = 5
+# AI-Powered attempts can each wait up to 180 s, so it gives up sooner.
+AI_MAX_CONSECUTIVE_TRANSPORT_ERRORS = 3
+
+# Before any payload is sent, check that the target's host:port accepts a TCP connection (no data is sent). A scan
+# against a host that cannot be reached - the machine moved to another network, the VM is off, a typo in the IP -
+# used to spend minutes timing out payload after payload (45 s, then 60 s, 75 s...) before reporting anything.
+# Tests switch this off because their targets are fake hostnames.
+PREFLIGHT_ENABLED = True
+PREFLIGHT_TIMEOUT_S = 6.0
+
+
+def _preflight_target(target, proxy_used=None):
+    """
+    Returns None when the target looks reachable (or the check does not apply), else a short human explanation.
+    Skipped when a proxy is configured (the proxy, not this machine, makes the connection) and for targets whose
+    URL cannot be parsed into a host (the normal error handling deals with those).
+    """
+    if not PREFLIGHT_ENABLED or proxy_used:
+        return None
+    try:
+        parsed = urlparse((target["url"] or "").strip())
+        host = parsed.hostname
+        port = parsed.port or {"https": 443, "wss": 443, "http": 80, "ws": 80}.get(parsed.scheme or "http", 80)
+    except Exception:
+        return None
+    if not host:
+        return None
+    try:
+        socket.create_connection((host, port), timeout=PREFLIGHT_TIMEOUT_S).close()
+        return None
+    except Exception as e:
+        return (f"{host}:{port} did not accept a connection within {PREFLIGHT_TIMEOUT_S:.0f} s ({e}). Check that the "
+                "target is running, that this machine is on the same network as it (a changed Wi-Fi/hotspot or VPN, "
+                "or a VM that is off, are common causes), and that the IP and port in the target's URL are right.")
 
 
 def _warm_up_target(target):
@@ -697,6 +733,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
         pass
 
     hit_global_cap = False
+    consecutive_transport_errors = 0
     for owasp_code in cats:
         if hit_global_cap:
             break
@@ -838,6 +875,24 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
 
             prev_prompt, prev_response, prev_reasoning = prompt, response_text, reasoning
 
+            consecutive_transport_errors = consecutive_transport_errors + 1 if is_transport_error(response_text) else 0
+            if consecutive_transport_errors >= AI_MAX_CONSECUTIVE_TRANSPORT_ERRORS:
+                conn.execute(
+                    """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent,
+                       raw_response, description, module, source, recommendation)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (result_id, "scan-aborted-target-unresponsive", owasp_code, "low", "ERROR", "", "",
+                     f"The AI-Powered scan stopped after {consecutive_transport_errors} consecutive requests got no "
+                     "response (timeouts or connection errors), so the remaining attempts were not made. This is a "
+                     "scan/target issue, not a security result: the target is down, unreachable from this machine, "
+                     "rate-limiting the scanner, or too slow.",
+                     None, "scanner",
+                     "Check that the target answers in a browser from this machine, then re-run."))
+                conn.execute("UPDATE tasks SET progress_done=?, last_rule_id=? WHERE id=?",
+                             (total, "scan-aborted-target-unresponsive", task_id))
+                conn.commit()
+                return False
+
             if verdict == "FAIL":
                 # Freestyle budget: this category is already proven vulnerable,
                 # stop spending further attempts on it and let the remaining
@@ -916,6 +971,23 @@ def _execute(task_id: int):
     )
     conn.commit()
     result_id = cur.lastrowid
+
+    unreachable = _preflight_target(target, proxy_used)
+    if unreachable:
+        conn.execute(
+            """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
+               description, module, source, recommendation)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (result_id, "target-unreachable", "LLM01", "low", "ERROR", "", "",
+             f"The scan did not start: the target could not be reached. {unreachable} This is a network/setup "
+             "issue, not a security result; no payload was sent.",
+             None, "scanner", "Make the target reachable from the machine running CYBERGUARD LLM, then re-run."))
+        conn.execute("UPDATE scan_results SET status='error', finished_at=? WHERE id=?", (now(), result_id))
+        conn.execute("UPDATE tasks SET status='error', last_rule_id='Target unreachable', result_id=? WHERE id=?",
+                     (result_id, task_id))
+        conn.commit()
+        conn.close()
+        return
 
     try:
         enable_static = bool(config["enable_static"]) if config["enable_static"] is not None else True

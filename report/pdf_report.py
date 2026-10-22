@@ -284,7 +284,10 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
     make_brain_graphic(brain_section_path, seed=(scan_result["id"] or 1) + 1000,
                         accent="#378ADD", accent2="#E24B4A", glow="#EF9F27")
 
-    doc = SimpleDocTemplate(output_path, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm)
+    # The PDF's own title is what a browser shows in the tab (it was "(anonymous)" when left empty).
+    doc = SimpleDocTemplate(output_path, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm,
+                            title=f"{target['name']} - report", author="CYBERGUARD LLM",
+                            subject="AI / LLM security assessment report")
     styles = getSampleStyleSheet()
 
     cover_title = ParagraphStyle("CoverTitle", parent=styles["Title"], fontSize=28, alignment=TA_CENTER,
