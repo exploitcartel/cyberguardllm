@@ -87,6 +87,26 @@ AI_POWERED_TIMEOUT_CAP = 180.0
 AI_POWERED_GLOBAL_ATTEMPT_CAP = 400
 
 
+# Static scans stop after this many transport failures IN A ROW. A target that cannot answer five consecutive
+# payloads (down, rate-limiting, or far too slow) will not answer the other ~1700 either, and with a 45 s timeout
+# per request plus retries that would otherwise run for many hours producing nothing but ERROR rows.
+MAX_CONSECUTIVE_TRANSPORT_ERRORS = 5
+
+
+def _warm_up_target(target):
+    """
+    One throwaway request with a long timeout and no retries, sent before the scored payloads. A self-hosted target
+    running its model on CPU (Ollama, llama.cpp) usually has to load the model on the first request, which can take
+    longer than the normal per-request timeout; seen live: first request 47.6 s, the next one 1.1 s. Paying that
+    cost here means the scored payloads hit a warm model instead of timing out one after another. The result is
+    discarded, never recorded as a finding. AI-Powered mode already does the same (see _run_ai_powered).
+    """
+    try:
+        send_prompt(target, "Hello", timeout=120.0, max_retries=0)
+    except Exception:
+        pass
+
+
 def _check_control(conn, task_id):
     """
     Reads the operator control signal for this task (tasks.control: 'run',
@@ -410,6 +430,9 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
     ai_judge_cfg = _get_ai_judge_config()
     min_confidence = int(get_setting("ai_judge_min_confidence", "60") or 60)
 
+    if rules:
+        _warm_up_target(target)
+
     # Offline (no-AI) baseline/control-prompt check: one extra benign request
     # whose response and response time anchor two purely mechanical signals
     # below, see engine/baseline_module.py. Never blocks the scan if it fails.
@@ -420,7 +443,11 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
 
     findings_count = 0
     step = 0
+    consecutive_errors = 0
+    aborted = False
     for rule in rules:
+        if aborted:
+            break
         turns = rule.get("turns")
         variants = [(None, rule)]
         if not turns and not rule.get("poison_prompt"):
@@ -499,7 +526,28 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
                          (step, findings_count, rule_id, task_id))
             conn.commit()
 
-    return False  # ran to completion, not stopped early
+            consecutive_errors = consecutive_errors + 1 if verdict == "ERROR" else 0
+            if consecutive_errors >= MAX_CONSECUTIVE_TRANSPORT_ERRORS:
+                conn.execute(
+                    """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent,
+                       raw_response, description, module, source, recommendation)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (result_id, "scan-aborted-target-unresponsive", "LLM10", "low", "ERROR", "", "",
+                     f"The static scan stopped after {consecutive_errors} consecutive requests got no response "
+                     f"(timeouts, connection errors or rate limiting), so the remaining payloads were not sent. "
+                     "This is a scan/target issue, not a security result. Common causes: the target is down or "
+                     "rate-limiting the scanner, or it is a self-hosted model that is too slow or still loading.",
+                     None, "scanner",
+                     "Check that the target answers a normal message in a browser, wait for a local model to finish "
+                     "loading, or enable Stealth mode (Settings) to slow the request rate, then re-run."),
+                )
+                conn.execute("UPDATE tasks SET progress_done=?, last_rule_id=? WHERE id=?",
+                             (total, "scan-aborted-target-unresponsive", task_id))
+                conn.commit()
+                aborted = True
+                break
+
+    return False  # ran to completion (or aborted on an unresponsive target), not stopped by the operator
 
 
 def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=None, intensity=None, config=None):
