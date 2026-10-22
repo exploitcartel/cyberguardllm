@@ -383,6 +383,13 @@ def discover_target(url: str, token: str, timeout: float = 25.0):
     ping_prompt = "hello"
     results_log = []
     token = (token or "").strip()
+    # Fail fast: with ~70 combinations to try, a wrong/unreachable URL used to
+    # burn through every one of them (each up to `timeout` seconds). Two kinds
+    # of response mean NO combination can work, so stop at once and say why:
+    #  - the host refuses/can't be reached (connection error, not a slow reply)
+    #  - the path does not exist or does not accept POST (404/405/410)
+    connection_failures = 0
+    missing_path_streak = 0
 
     for auth_scheme in (AUTH_SCHEMES if token else ["none"]):
         headers = _build_headers(auth_scheme, token)
@@ -396,7 +403,28 @@ def discover_target(url: str, token: str, timeout: float = 25.0):
                     resp = _post_body(url, body, headers, params, timeout, encoding=encoding)
                 except Exception as e:
                     results_log.append({"auth": auth_scheme, "format": fmt_name, "encoding": encoding, "error": str(e)})
+                    is_timeout = isinstance(e, requests.exceptions.Timeout)
+                    if isinstance(e, requests.exceptions.ConnectionError) and not is_timeout:
+                        connection_failures += 1
+                        if connection_failures >= 3:
+                            return {"status": "failed", "log": results_log,
+                                    "reason": "The target could not be reached (connection refused or DNS/TLS "
+                                              "failure). Check the URL, that the target is running, and the proxy "
+                                              "settings; the remaining combinations were not tried."}
                     continue
+
+                if resp.status_code in (404, 405, 410):
+                    missing_path_streak += 1
+                    if missing_path_streak >= 3:
+                        return {"status": "failed", "log": results_log + [
+                                    {"auth": auth_scheme, "format": fmt_name, "encoding": encoding,
+                                     "status": resp.status_code}],
+                                "reason": f"The URL answered HTTP {resp.status_code} three times in a row: that "
+                                          "path does not exist or does not accept POST, so no body/auth "
+                                          "combination can work. Check the exact chat API endpoint URL; the "
+                                          "remaining combinations were not tried."}
+                else:
+                    missing_path_streak = 0
 
                 if resp.status_code == 200:
                     if _is_sse_response(resp):
