@@ -147,3 +147,40 @@ class CombinedProgressTests(CyberGuardTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TokenOptionalTests(CyberGuardTestCase):
+    def test_discovery_without_token_only_tries_no_auth(self):
+        import core.discovery as disc
+        seen = []
+
+        class Resp:
+            status_code = 200
+            headers = {}
+            text = '{"reply": "hello there, how can I help?"}'
+
+            def json(self):
+                return {"reply": "hello there, how can I help?"}
+
+        def fake_post(url, body, headers, params, timeout, encoding="json"):
+            seen.append((headers, params))
+            return Resp()
+
+        with mock.patch.object(disc, "_post_body", fake_post):
+            result = disc.discover_target("http://t.example/chat", None)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["auth_scheme"], "none")
+        self.assertTrue(all(h == {} and p == {} for h, p in seen))
+
+    def test_detect_and_save_target_without_token(self):
+        form = {"name": "open-bot", "url": "http://t.example/chat", "token": "",
+                "auth_scheme": "none", "body_format": "message", "response_field": "reply"}
+        resp = self.client.post("/targets/save", data=form)
+        self.assertIn(resp.status_code, (200, 302))
+        from core.crypto import decrypt_token
+        row = self.get_conn().execute("SELECT * FROM targets WHERE name='open-bot'").fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(decrypt_token(row["token_encrypted"]), "")
+        page = self.client.get("/targets/new").get_data(as_text=True)
+        self.assertNotIn('id="detect-token"' + ' placeholder="eyJhbGc... (optional)" value="" required', page)
+        self.assertNotRegex(page, r'name="token" id="detect-token"[^>]*required')
