@@ -939,6 +939,29 @@ def _execute(task_id: int):
             run_pyrit_scan(conn, result_id, target, objectives)
         _run_optional_module(conn, result_id, "pyrit-module-crash", "The PyRIT module", "PyRIT", "pyrit", _do_pyrit)
 
+    try:
+        use_crescendo = bool(config["use_crescendo"])
+    except (IndexError, KeyError):
+        use_crescendo = False
+    if use_crescendo:
+        conn.execute("UPDATE tasks SET last_rule_id='Running Crescendo multi-turn attack...' WHERE id=?", (task_id,))
+        conn.commit()
+
+        def _do_crescendo():
+            from engine.crescendo_module import run_crescendo_scan
+            objectives = [o.strip() for o in (config["crescendo_objectives"] or "").split(",") if o.strip()]
+
+            def _progress(label):
+                conn.execute("UPDATE tasks SET last_rule_id=? WHERE id=?", (label, task_id))
+                conn.commit()
+            run_crescendo_scan(
+                conn, result_id, target, objectives, _get_ai_judge_config(),
+                max_turns=config["crescendo_max_turns"] or 8,
+                min_confidence=int(get_setting("ai_judge_min_confidence", "60") or 60),
+                should_stop=lambda: _check_control(conn, task_id), on_progress=_progress)
+        _run_optional_module(conn, result_id, "crescendo-module-crash", "The Crescendo module", "Crescendo",
+                              "crescendo", _do_crescendo)
+
     if config["enable_canary"]:
         conn.execute("UPDATE tasks SET last_rule_id='Running out-of-band canary checks...' WHERE id=?", (task_id,))
         conn.commit()

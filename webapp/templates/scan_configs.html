@@ -96,6 +96,25 @@
       </details>
 
       <details class="config-section">
+        <summary>{{ t('section_crescendo') }}</summary>
+        <div style="margin-top:10px;">
+          <div class="checkbox-row">
+            <input type="checkbox" name="use_crescendo">
+            {{ t('use_crescendo_label') }}
+            {% if not ai_configured %}<span class="badge badge-triage-false_positive">{{ t('needs_ai_api') }}</span>{% endif %}
+          </div>
+          <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('crescendo_explanation') }}</p>
+          {% for key, obj in crescendo_objectives.items() %}
+          <div class="checkbox-row"><input type="checkbox" name="crescendo_objectives" value="{{ key }}"> {{ obj.owasp }}: {{ obj.text }}</div>
+          {% endfor %}
+          <div class="field" style="margin-top:6px;max-width:220px;">
+            <label>{{ t('crescendo_turns_label') }}</label>
+            <input type="number" name="crescendo_max_turns" value="8" min="2" max="15">
+          </div>
+        </div>
+      </details>
+
+      <details class="config-section">
         <summary>{{ t('section_reliability') }}</summary>
         <div style="margin-top:10px;">
           <div class="checkbox-row"><input type="checkbox" name="enable_retest"> {{ t('enable_retest_checkbox') }}</div>
@@ -162,6 +181,7 @@
         {% endif %}
         {% if c.use_garak %}<span class="badge badge-triage-accepted_risk">Garak</span>{% endif %}
         {% if c.use_pyrit %}<span class="badge badge-triage-accepted_risk">PyRIT</span>{% endif %}
+        {% if c.use_crescendo %}<span class="badge badge-triage-accepted_risk">Crescendo</span>{% endif %}
         {% if c.mutation_techniques %}<span class="badge badge-triage-accepted_risk">Mutations</span>{% endif %}
         {% if c.enable_retest %}<span class="badge badge-triage-accepted_risk">Retest</span>{% endif %}
         {% if c.enable_canary %}<span class="badge badge-triage-accepted_risk">Canary</span>{% endif %}

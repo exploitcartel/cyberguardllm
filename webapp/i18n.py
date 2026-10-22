@@ -222,6 +222,22 @@ TRANSLATIONS = {
               "pa të. Kërkon garak të instaluar (pip install -r requirements.txt)."},
     "garak_extra_probes_label": {"en": "Advanced: extra garak probe names (comma-separated, any installed probe)",
                                   "al": "Të përparuara: emra shtesë probe-sh garak (ndarë me presje, çdo probe i instaluar)"},
+    "section_crescendo": {"en": "Multi-turn Attack (Crescendo)", "al": "Sulm Multi-turn (Crescendo)"},
+    "use_crescendo_label": {"en": "Run built-in Crescendo multi-turn attack - requires AI API",
+                             "al": "Ekzekuto sulmin multi-turn Crescendo (i brendshëm) - kërkon AI API"},
+    "needs_ai_api": {"en": "needs AI API", "al": "kërkon AI API"},
+    "crescendo_explanation": {
+        "en": "An attacking model holds a real conversation with the target: it starts innocuous and on-topic, then "
+              "escalates in small steps that build on the target's own replies, and backs off and changes angle when "
+              "the target refuses. A judge reads every reply. This finds guardrails that hold against a single "
+              "request but give way gradually, which a fixed prompt list cannot. Objectives test policy and "
+              "business-logic boundaries only. Needs the AI API under Settings.",
+        "al": "Një model sulmues bën një bisedë të vërtetë me objektivin: nis i pafajshëm dhe në temë, pastaj "
+              "përshkallëzon me hapa të vegjël mbi përgjigjet e vetë objektivit, dhe tërhiqet e ndryshon kënd kur "
+              "ai refuzon. Një gjyqtar lexon çdo përgjigje. Gjen mbrojtje që qëndrojnë ndaj një kërkese të vetme "
+              "por lëshojnë gradualisht. Objektivat testojnë vetëm kufijtë e politikave dhe të logjikës së biznesit. "
+              "Kërkon AI API te Settings."},
+    "crescendo_turns_label": {"en": "Max turns per objective", "al": "Maks. kthesa për objektiv"},
     "use_pyrit_checkbox_label": {"en": "Run PyRIT module (external, Microsoft PyRIT) - requires AI API",
                                   "al": "Ekzekuto modulin PyRIT (i jashtëm, Microsoft PyRIT) - kërkon AI API"},
     "pyrit_module_explanation": {

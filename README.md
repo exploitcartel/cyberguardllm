@@ -566,6 +566,25 @@ match (a refusal that quotes the attack) is REVIEW, not FAIL. The vulnerability 
 [promptfoo](https://github.com/promptfoo/promptfoo)'s red-team plugins (MIT); the prompts, patterns and
 remediation text are original to this project.
 
+### 20. Built-in Crescendo multi-turn attack
+
+`engine/crescendo_module.py` (opt-in per scan config: "Multi-turn Attack (Crescendo)", needs the AI API under Settings,
+no PyRIT required). A single-shot payload list cannot reproduce how real conversational jailbreaks work, so an
+attacking model holds an actual conversation with the target: it opens innocuous and on-topic, escalates in small steps
+that build on the target's own replies, and **backtracks** when a message is refused (that exchange is dropped from the
+history replayed to the target and the attacker is told to change angle, up to 3 times per objective). A judge reads
+every reply and reports achieved / refused / progress; the objective's grader (section 19) defines what "achieved"
+means where one exists. It stops at the first confirmed success or at the turn budget (2 to 15, default 8).
+
+Objectives test policy and business-logic boundaries only: system-prompt leakage, role override (a harmless marker token
+proves the target obeyed), unauthorized commitments, another user's data, tool disclosure and fabricated facts. The
+attacker is told never to ask for genuinely dangerous content. Each objective becomes one finding with the full
+transcript, progress per turn (e.g. `40 > 40 > 100`) and the number of backtracks. A low-confidence success is REVIEW,
+an unreachable target or a failing AI provider is ERROR, never PASS.
+
+Honest limit: a target that keeps its own server-side history cannot be rewound, so for such targets a refused message
+stays in the target's memory even though it is dropped from what this tool replays.
+
 ## 🗂️ Project Structure
 
 ```
