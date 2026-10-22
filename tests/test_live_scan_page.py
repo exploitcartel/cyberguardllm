@@ -86,3 +86,24 @@ class LoginPageHeadTests(CyberGuardTestCase):
         page = self.client.get("/login").get_data(as_text=True)
         for needle in ('name="username"', 'name="password"', 'data-lang="al"', 'action="/login"'):
             self.assertIn(needle, page)
+
+
+class ThemeAndGlobeTests(CyberGuardTestCase):
+    def test_stage_has_a_light_variant_and_the_scene_gets_the_theme(self):
+        conn = self.get_conn()
+        conn.execute("INSERT INTO targets (name,url,token_encrypted,created_at) VALUES ('Bot','http://t','e','2026')")
+        conn.execute("INSERT INTO scan_configs (name,categories,created_at) VALUES ('c','LLM01','2026')")
+        conn.execute("INSERT INTO tasks (target_id,scan_config_id,status,created_at) VALUES (1,1,'running','2026')")
+        conn.commit()
+        page = self.client.get("/scan/1/live").get_data(as_text=True)
+        self.assertIn("body.light .stage", page)
+        self.assertIn("classList.contains('light')", page)
+        self.assertIn("var(--s-grad)", page)
+        self.assertNotIn("#0f1d3a 0%, var(--s-bg)", page)  # the dark gradient is no longer hard-coded
+
+    def test_scene_has_the_network_globe_and_no_platform(self):
+        js = self.client.get("/static/js/head-scene.js").get_data(as_text=True)
+        for present in ("IcosahedronGeometry", "EdgesGeometry", "QuadraticBezierCurve3", "uLight", "theme ="):
+            self.assertIn(present, js)
+        for gone in ("RingGeometry", "CylinderGeometry", "PLATFORM_Y", "LineDashedMaterial"):
+            self.assertNotIn(gone, js)

@@ -1,6 +1,7 @@
-// 3D head used by the live scan page: a scanned human head rendered as fingerprint-style ridges with a neural
-// node mesh on a light platform, driven by what the scan is actually doing (activity pulses, red alerts on a
-// finding, slow-down while paused).
+// 3D head used by the live scan page and the login page: a scanned human head rendered as fingerprint-style ridges
+// with a neural node mesh, enclosed in a rotating geodesic network globe whose nodes are linked by data arcs with
+// packets travelling along them. It is driven by what the scan is actually doing (activity pulses, a red flash on a
+// finding, slow-down while paused) and it follows the page theme: additive glow on dark, solid deep blues on light.
 //
 // Ported to plain JavaScript from the CyberGuard AI site's HeadScene component. The head geometry is
 // "Infinite" by Lee Perry-Smith (Infinite Realities / triplegangers.com), licensed CC BY 3.0 - see
@@ -10,6 +11,10 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const MODEL_URL = "/static/models/head.glb";
+
+// Radius of the network globe around the head, and the vertical centre of both.
+const CAGE_RADIUS = 1.72;
+const CENTER_Y = 0.05;
 
 const RIDGE_VERT = /* glsl */ `
   varying vec3 vPos;
@@ -33,6 +38,7 @@ const RIDGE_FRAG = /* glsl */ `
   uniform float uFreq;
   uniform float uAlert;
   uniform float uActivity;
+  uniform float uLight;
   varying vec3 vPos;
   varying vec3 vNormal;
   varying vec3 vView;
@@ -75,14 +81,16 @@ const RIDGE_FRAG = /* glsl */ `
     intensity *= 1.0 + uActivity * 0.45 + uAlert * 0.7;
     float fill = rim * 0.09 + band * 0.05 + uAlert * rim * 0.12;
 
-    vec3 cold = vec3(0.12, 0.5, 1.0);
-    vec3 hot = vec3(0.55, 0.96, 1.0);
+    // dark theme: bright cyan glow (additive); light theme: deep blues (normal blending)
+    vec3 cold = mix(vec3(0.12, 0.5, 1.0), vec3(0.07, 0.22, 0.70), uLight);
+    vec3 hot = mix(vec3(0.55, 0.96, 1.0), vec3(0.15, 0.42, 0.92), uLight);
     vec3 col = mix(cold, hot, clamp(rim * 1.2 + band * 0.9 + diffuse * 0.25, 0.0, 1.0));
-    col = mix(col, vec3(1.0, 0.3, 0.33), clamp(uAlert, 0.0, 1.0) * 0.7);
+    vec3 red = mix(vec3(1.0, 0.3, 0.33), vec3(0.85, 0.10, 0.16), uLight);
+    col = mix(col, red, clamp(uAlert, 0.0, 1.0) * 0.7);
 
     float fadeBottom = smoothstep(-1.0, -0.4, p.y);
-    float a = (intensity + fill) * fadeBottom;
-    gl_FragColor = vec4(col, clamp(a, 0.0, 1.0));
+    float a = (intensity + fill * (1.0 - uLight * 0.6)) * fadeBottom;
+    gl_FragColor = vec4(col, clamp(a, 0.0, 1.0) * mix(1.0, 0.92, uLight));
   }
 `;
 
@@ -104,52 +112,32 @@ const POINT_VERT = /* glsl */ `
 const POINT_FRAG = /* glsl */ `
   precision highp float;
   uniform float uAlert;
+  uniform float uLight;
   varying float vPulse;
   void main() {
     float d = length(gl_PointCoord - 0.5);
     float glow = smoothstep(0.5, 0.0, d);
     float core = smoothstep(0.14, 0.0, d);
-    vec3 col = mix(vec3(0.35, 0.8, 1.0), vec3(1.0), core);
-    col = mix(col, vec3(1.0, 0.35, 0.38), clamp(uAlert, 0.0, 1.0) * 0.8);
+    vec3 halo = mix(vec3(0.35, 0.8, 1.0), vec3(0.15, 0.40, 0.95), uLight);
+    vec3 center = mix(vec3(1.0), vec3(0.04, 0.16, 0.55), uLight);
+    vec3 col = mix(halo, center, core);
+    vec3 red = mix(vec3(1.0, 0.35, 0.38), vec3(0.86, 0.12, 0.18), uLight);
+    col = mix(col, red, clamp(uAlert, 0.0, 1.0) * 0.8);
     gl_FragColor = vec4(col, glow * glow * vPulse + core);
-  }
-`;
-
-const COLUMN_VERT = /* glsl */ `
-  varying vec2 vUv;
-  varying vec3 vPos;
-  void main() {
-    vUv = uv;
-    vPos = position;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-const COLUMN_FRAG = /* glsl */ `
-  precision highp float;
-  uniform float uTime;
-  uniform float uAlert;
-  varying vec2 vUv;
-  varying vec3 vPos;
-  void main() {
-    float ang = atan(vPos.z, vPos.x);
-    float stripe = smoothstep(0.55, 0.95, sin(ang * 64.0 + uTime * 0.35) * 0.5 + 0.5);
-    float flicker = 0.75 + 0.25 * sin(uTime * 3.0 + ang * 9.0);
-    float a = (1.0 - vUv.y) * 0.55 * stripe * flicker;
-    vec3 col = mix(vec3(0.45, 0.85, 1.0), vec3(1.0, 0.4, 0.4), clamp(uAlert, 0.0, 1.0) * 0.8);
-    gl_FragColor = vec4(col, a);
   }
 `;
 
 /**
  * Mounts the head into `canvas` (which `wrap` sizes) and returns a controller:
- *   pulse(amount)  - scan activity (a payload was sent): brightens the mesh briefly
- *   alert()        - a finding was confirmed: the whole head flashes red
+ *   pulse(amount)  - scan activity (a payload was sent): brightens the mesh and speeds up the data packets
+ *   alert()        - a finding was confirmed: the head and the globe flash red
  *   setPaused(b)   - slows everything down while the scan is paused
  *   dispose()
- * `onFail` is called once if WebGL or the model is unavailable, so the page can show its fallback.
+ * `theme` is "dark" (default) or "light". `onFail` is called once if WebGL or the model is unavailable.
  */
-export function createHeadScene(wrap, canvas, { onFail = () => {} } = {}) {
+export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark" } = {}) {
+  const light = theme === "light";
+  const BLEND = light ? THREE.NormalBlending : THREE.AdditiveBlending;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const lowPower = window.matchMedia("(max-width: 768px)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;
 
@@ -166,72 +154,101 @@ export function createHeadScene(wrap, canvas, { onFail = () => {} } = {}) {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
-  camera.position.set(0, 0.12, 6.4);
-  camera.lookAt(0, -0.08, 0);
 
   const headGroup = new THREE.Group();
-  const platformGroup = new THREE.Group();
-  scene.add(headGroup, platformGroup);
+  const cageGroup = new THREE.Group();
+  cageGroup.position.y = CENTER_Y;
+  scene.add(cageGroup, headGroup);
 
   const disposables = [];
   const track = (o) => { disposables.push(o); return o; };
 
   const state = { activity: 0, alert: 0, speed: 1, paused: false };
   const ridgeUniforms = { uScan: { value: -2 }, uFreq: { value: lowPower ? 12 : 18 },
-                          uAlert: { value: 0 }, uActivity: { value: 0 } };
-  const pointUniforms = { uTime: { value: 0 }, uScale: { value: 1 }, uAlert: { value: 0 }, uActivity: { value: 0 } };
-  const columnUniforms = { uTime: { value: 0 }, uAlert: { value: 0 } };
-  const dashedRings = [];
+                          uAlert: { value: 0 }, uActivity: { value: 0 }, uLight: { value: light ? 1 : 0 } };
+  const pointUniforms = { uTime: { value: 0 }, uScale: { value: 1 }, uAlert: { value: 0 }, uActivity: { value: 0 },
+                          uLight: { value: light ? 1 : 0 } };
+  const cageUniforms = { uTime: { value: 0 }, uScale: { value: 1 }, uAlert: { value: 0 }, uActivity: { value: 0 },
+                         uLight: { value: light ? 1 : 0 } };
 
-  // Platform: concentric rings, a rotating dashed ring, soft ground glow and a striped light column.
-  const PLATFORM_Y = -1.32;
-  [
-    { r: 1.3, op: 0.85, w: 0.022 },
-    { r: 1.08, op: 0.5, w: 0.012 },
-    { r: 0.84, op: 0.4, w: 0.01 },
-    { r: 0.6, op: 0.3, w: 0.01 },
-  ].forEach(({ r, op, w }) => {
-    const geo = track(new THREE.RingGeometry(r - w, r, 160));
-    const mat = track(new THREE.MeshBasicMaterial({ color: 0x8fd0ff, transparent: true, opacity: op,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-    const ring = new THREE.Mesh(geo, mat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = PLATFORM_Y;
-    platformGroup.add(ring);
-  });
-  const dashPts = [];
-  for (let i = 0; i <= 160; i++) {
-    const a = (i / 160) * Math.PI * 2;
-    dashPts.push(new THREE.Vector3(Math.cos(a) * 1.18, 0, Math.sin(a) * 1.18));
+  // ---- Network globe ("cage"): geodesic wireframe, glowing nodes at its vertices, and data arcs between distant
+  // nodes with a packet travelling along each one.
+  const ico = track(new THREE.IcosahedronGeometry(CAGE_RADIUS, 2));
+  const cageLineMat = track(new THREE.LineBasicMaterial({
+    color: light ? 0x2f5fd0 : 0x6fb6ff, transparent: true, opacity: light ? 0.3 : 0.2,
+    blending: BLEND, depthWrite: false }));
+  const cageEdges = new THREE.LineSegments(track(new THREE.EdgesGeometry(ico)), cageLineMat);
+  cageEdges.renderOrder = -3;
+  cageGroup.add(cageEdges);
+
+  // unique vertices -> nodes
+  const verts = [];
+  {
+    const pos = ico.getAttribute("position");
+    const seen = new Set();
+    for (let i = 0; i < pos.count; i++) {
+      const key = `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      verts.push(new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)));
+    }
   }
-  const dashGeo = track(new THREE.BufferGeometry().setFromPoints(dashPts));
-  const dashMat = track(new THREE.LineDashedMaterial({ color: 0xbfe6ff, dashSize: 0.07, gapSize: 0.09,
-    transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending }));
-  const dashed = new THREE.Line(dashGeo, dashMat);
-  dashed.computeLineDistances();
-  dashed.position.y = PLATFORM_Y + 0.004;
-  dashedRings.push(dashed);
-  platformGroup.add(dashed);
+  let seed = 9001;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  {
+    const nPos = new Float32Array(verts.length * 3);
+    const nPhase = new Float32Array(verts.length);
+    const nSize = new Float32Array(verts.length);
+    verts.forEach((v, i) => {
+      nPos.set([v.x, v.y, v.z], i * 3);
+      nPhase[i] = rnd() * Math.PI * 2;
+      nSize[i] = 1.6 + rnd() * 2.4;
+    });
+    const g = track(new THREE.BufferGeometry());
+    g.setAttribute("position", new THREE.BufferAttribute(nPos, 3));
+    g.setAttribute("aPhase", new THREE.BufferAttribute(nPhase, 1));
+    g.setAttribute("aSize", new THREE.BufferAttribute(nSize, 1));
+    const m = track(new THREE.ShaderMaterial({ uniforms: cageUniforms, vertexShader: POINT_VERT,
+      fragmentShader: POINT_FRAG, transparent: true, depthWrite: false, blending: BLEND }));
+    const pts = new THREE.Points(g, m);
+    pts.renderOrder = -2;
+    cageGroup.add(pts);
+  }
 
-  const glowGeo = track(new THREE.CircleGeometry(1.6, 64));
-  const glowMat = track(new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
-    fragmentShader: "varying vec2 vUv; void main(){ float d = length(vUv - 0.5) * 2.0; float a = pow(1.0 - clamp(d,0.0,1.0), 2.4) * 0.5; gl_FragColor = vec4(0.25,0.6,1.0,a); }",
-  }));
-  const glow = new THREE.Mesh(glowGeo, glowMat);
-  glow.rotation.x = -Math.PI / 2;
-  glow.position.y = PLATFORM_Y - 0.01;
-  platformGroup.add(glow);
+  // data arcs: great-circle arcs lifted slightly off the globe, between nodes far apart
+  const arcs = [];
+  {
+    const ARC_COUNT = lowPower ? 8 : 14;
+    const arcMat = track(new THREE.LineBasicMaterial({
+      color: light ? 0x1d4ed8 : 0x9fdcff, transparent: true, opacity: light ? 0.38 : 0.3,
+      blending: BLEND, depthWrite: false }));
+    let guard = 0;
+    while (arcs.length < ARC_COUNT && guard++ < 400) {
+      const a = verts[Math.floor(rnd() * verts.length)];
+      const b = verts[Math.floor(rnd() * verts.length)];
+      if (a.angleTo(b) < 1.2) continue;
+      const mid = a.clone().add(b).normalize().multiplyScalar(CAGE_RADIUS * 1.16);
+      const curve = new THREE.QuadraticBezierCurve3(a.clone().multiplyScalar(1.01), mid, b.clone().multiplyScalar(1.01));
+      const points = curve.getPoints(28);
+      const line = new THREE.Line(track(new THREE.BufferGeometry().setFromPoints(points)), arcMat);
+      line.renderOrder = -3;
+      cageGroup.add(line);
+      arcs.push({ curve, t: rnd(), speed: 0.12 + rnd() * 0.18 });
+    }
+  }
+  const packetPos = new Float32Array(arcs.length * 3);
+  const packetGeo = track(new THREE.BufferGeometry());
+  packetGeo.setAttribute("position", new THREE.BufferAttribute(packetPos, 3));
+  packetGeo.setAttribute("aPhase", new THREE.BufferAttribute(new Float32Array(arcs.length).map(() => rnd() * 6.28), 1));
+  packetGeo.setAttribute("aSize", new THREE.BufferAttribute(new Float32Array(arcs.length).fill(3.6), 1));
+  const packetMat = track(new THREE.ShaderMaterial({ uniforms: cageUniforms, vertexShader: POINT_VERT,
+    fragmentShader: POINT_FRAG, transparent: true, depthWrite: false, blending: BLEND }));
+  const packets = new THREE.Points(packetGeo, packetMat);
+  packets.renderOrder = -2;
+  packets.frustumCulled = false;
+  cageGroup.add(packets);
 
-  const colGeo = track(new THREE.CylinderGeometry(0.74, 1.0, 0.95, 96, 1, true));
-  const colMat = track(new THREE.ShaderMaterial({ uniforms: columnUniforms, vertexShader: COLUMN_VERT,
-    fragmentShader: COLUMN_FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending }));
-  const column = new THREE.Mesh(colGeo, colMat);
-  column.position.y = PLATFORM_Y + 0.475;
-  platformGroup.add(column);
-
+  // ---- Head
   let disposed = false;
   new GLTFLoader().load(
     MODEL_URL,
@@ -260,18 +277,16 @@ export function createHeadScene(wrap, canvas, { onFail = () => {} } = {}) {
       headGroup.add(occluder);
 
       const ridgeMat = track(new THREE.ShaderMaterial({ uniforms: ridgeUniforms, vertexShader: RIDGE_VERT,
-        fragmentShader: RIDGE_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+        fragmentShader: RIDGE_FRAG, transparent: true, depthWrite: false, blending: BLEND }));
       headGroup.add(new THREE.Mesh(geometry, ridgeMat));
 
       // Neural nodes sampled from the surface, plus links between near ones.
       const posAttr = geometry.getAttribute("position");
       const nrmAttr = geometry.getAttribute("normal");
-      let seed = 4242;
-      const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
       const count = lowPower ? 70 : 130;
       const nodePos = [];
-      let guard = 0;
-      while (nodePos.length < count && guard++ < 6000) {
+      let g2 = 0;
+      while (nodePos.length < count && g2++ < 6000) {
         const i = Math.floor(rnd() * posAttr.count);
         const p = new THREE.Vector3(posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i));
         if (p.y < -0.55) continue;
@@ -293,7 +308,7 @@ export function createHeadScene(wrap, canvas, { onFail = () => {} } = {}) {
       pGeo.setAttribute("aPhase", new THREE.BufferAttribute(pPhase, 1));
       pGeo.setAttribute("aSize", new THREE.BufferAttribute(pSize, 1));
       const pMat = track(new THREE.ShaderMaterial({ uniforms: pointUniforms, vertexShader: POINT_VERT,
-        fragmentShader: POINT_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+        fragmentShader: POINT_FRAG, transparent: true, depthWrite: false, blending: BLEND }));
       headGroup.add(new THREE.Points(pGeo, pMat));
 
       const linePts = [];
@@ -309,8 +324,8 @@ export function createHeadScene(wrap, canvas, { onFail = () => {} } = {}) {
       }
       const lGeo = track(new THREE.BufferGeometry());
       lGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(linePts), 3));
-      const lMat = track(new THREE.LineBasicMaterial({ color: 0x9fdcff, transparent: true, opacity: 0.28,
-        blending: THREE.AdditiveBlending, depthWrite: false }));
+      const lMat = track(new THREE.LineBasicMaterial({ color: light ? 0x2f5fd0 : 0x9fdcff, transparent: true,
+        opacity: light ? 0.4 : 0.28, blending: BLEND, depthWrite: false }));
       headGroup.add(new THREE.LineSegments(lGeo, lMat));
     },
     undefined,
@@ -324,8 +339,14 @@ export function createHeadScene(wrap, canvas, { onFail = () => {} } = {}) {
     if (w === 0 || h === 0) return;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
+    // Back the camera off until the whole globe fits in both directions (tall narrow areas are width-limited).
+    const halfFov = (camera.fov * Math.PI) / 360;
+    camera.position.set(0, CENTER_Y + 0.07, ((CAGE_RADIUS + 0.2) / Math.tan(halfFov)) / Math.min(1, camera.aspect));
+    camera.lookAt(0, CENTER_Y, 0);
     camera.updateProjectionMatrix();
-    pointUniforms.uScale.value = (h * pixelRatio * 0.5) / Math.tan((camera.fov * Math.PI) / 360) * 0.0105;
+    const dist = camera.position.z;
+    pointUniforms.uScale.value = cageUniforms.uScale.value =
+      (h * pixelRatio * 0.5) / Math.tan(halfFov) * 0.0105 * (dist / 6.4);
   };
   resize();
   const ro = new ResizeObserver(resize);
@@ -344,6 +365,7 @@ export function createHeadScene(wrap, canvas, { onFail = () => {} } = {}) {
   const onVis = () => { tabHidden = document.hidden; };
   document.addEventListener("visibilitychange", onVis);
 
+  const tmp = new THREE.Vector3();
   let raf = 0;
   let lastTime = 0;
   let clock = 0;
@@ -359,8 +381,9 @@ export function createHeadScene(wrap, canvas, { onFail = () => {} } = {}) {
     state.speed += ((state.paused ? 0.12 : 1) - state.speed) * 0.08;
     state.activity *= 0.94;
     state.alert *= 0.94;
-    clock += dt * (reduceMotion ? 0 : state.speed);
-    scanPhase += dt * (reduceMotion ? 0 : state.speed) * 0.55 * (1 + state.activity * 1.6);
+    const step = dt * (reduceMotion ? 0 : state.speed);
+    clock += step;
+    scanPhase += step * 0.55 * (1 + state.activity * 1.6);
 
     pointer.x += (pointer.tx - pointer.x) * 0.06;
     pointer.y += (pointer.ty - pointer.y) * 0.06;
@@ -368,15 +391,29 @@ export function createHeadScene(wrap, canvas, { onFail = () => {} } = {}) {
     headGroup.rotation.x = -0.04 + pointer.y * 0.12;
     headGroup.position.y = reduceMotion ? 0 : Math.sin(clock * 0.8) * 0.015;
 
+    // the globe turns slowly against the head, tilted, and nudges with the pointer too
+    cageGroup.rotation.y = clock * 0.16 - pointer.x * 0.15;
+    cageGroup.rotation.x = 0.32 + pointer.y * 0.06;
+
+    // packets run along the arcs, faster while the scan is busy
+    for (let i = 0; i < arcs.length; i++) {
+      const arc = arcs[i];
+      arc.t = (arc.t + step * arc.speed * (1 + state.activity * 2.5)) % 1;
+      arc.curve.getPoint(arc.t, tmp);
+      packetPos[i * 3] = tmp.x; packetPos[i * 3 + 1] = tmp.y; packetPos[i * 3 + 2] = tmp.z;
+    }
+    packetGeo.attributes.position.needsUpdate = true;
+
+    const flash = state.alert;
+    cageLineMat.opacity = (light ? 0.3 : 0.2) + flash * 0.3 + state.activity * 0.08;
+    cageLineMat.color.setHex(flash > 0.15 ? (light ? 0xc81e2d : 0xff6b6b) : (light ? 0x2f5fd0 : 0x6fb6ff));
+
     ridgeUniforms.uScan.value = reduceMotion ? -2 : (scanPhase % 3.2) - 1.3;
     ridgeUniforms.uAlert.value = state.alert;
     ridgeUniforms.uActivity.value = state.activity;
-    pointUniforms.uTime.value = clock;
-    pointUniforms.uAlert.value = state.alert;
-    pointUniforms.uActivity.value = state.activity;
-    columnUniforms.uTime.value = clock;
-    columnUniforms.uAlert.value = state.alert;
-    dashedRings.forEach((r) => (r.rotation.y = -clock * 0.25));
+    pointUniforms.uTime.value = cageUniforms.uTime.value = clock;
+    pointUniforms.uAlert.value = cageUniforms.uAlert.value = state.alert;
+    pointUniforms.uActivity.value = cageUniforms.uActivity.value = state.activity;
 
     renderer.render(scene, camera);
   };
