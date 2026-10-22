@@ -145,6 +145,94 @@ class CombinedProgressTests(CyberGuardTestCase):
         self.assertEqual(row["progress_findings"], 2)
 
 
+class CsrfTokenTests(CyberGuardTestCase):
+    def setUp(self):
+        super().setUp()
+        self.app_mod.app.config["CSRF_ENFORCE_IN_TESTS"] = True
+
+    def _token(self):
+        self.client.get("/dashboard")
+        cookie = self.client.get_cookie("csrf_token")
+        return cookie.value if cookie else ""
+
+    def test_post_without_token_is_rejected_and_with_token_is_accepted(self):
+        token = self._token()
+        self.assertTrue(token)
+        self.assertEqual(self.client.post("/settings/proxy", data={}).status_code, 403)
+        self.assertEqual(self.client.post("/settings/proxy", data={"csrf_token": "wrong"}).status_code, 403)
+        self.assertNotEqual(self.client.post("/settings/proxy", data={"csrf_token": token}).status_code, 403)
+        self.assertNotEqual(
+            self.client.post("/settings/proxy", data={}, headers={"X-CSRF-Token": token}).status_code, 403)
+
+    def test_forms_carry_the_token_script_and_logout_is_protected(self):
+        page = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("cgllmCsrfFill", page)
+        self.assertEqual(self.client.post("/logout").status_code, 403)
+        self.assertEqual(self.client.post("/logout", data={"csrf_token": self._token()}).status_code, 302)
+
+    def test_login_and_canary_do_not_need_a_token(self):
+        self.assertNotEqual(self.client.post("/login", data={"username": "x", "password": "y"}).status_code, 403)
+        self.assertEqual(self.client.get("/canary/" + "b" * 32).status_code, 200)
+
+
+class DetailPageBackTests(CyberGuardTestCase):
+    def test_finding_detail_has_back_to_its_scan_and_result_detail_has_back(self):
+        conn = self.get_conn()
+        conn.execute("INSERT INTO targets (name,url,token_encrypted,created_at) VALUES ('t','http://t','e','2026')")
+        tid = conn.execute("SELECT id FROM targets").fetchone()["id"]
+        conn.execute("INSERT INTO scan_results (target_id,timestamp,status) VALUES (?,?,?)", (tid, "2026", "completed"))
+        rid = conn.execute("SELECT id FROM scan_results").fetchone()["id"]
+        conn.execute("""INSERT INTO findings (scan_result_id,rule_id,owasp,severity,verdict,prompt_sent,raw_response,description)
+                        VALUES (?,?,?,?,?,?,?,?)""", (rid, "R1", "LLM01", "low", "PASS", "p", "r", "d"))
+        fid = conn.execute("SELECT id FROM findings").fetchone()["id"]
+        conn.commit()
+        finding_page = self.client.get(f"/findings/{fid}").get_data(as_text=True)
+        self.assertIn(f'href="/results/{rid}"', finding_page)
+        self.assertIn('id="btn-back"', finding_page)
+        self.assertIn('id="btn-back"', self.client.get(f"/results/{rid}").get_data(as_text=True))
+
+    def test_extension_rows_do_not_count_as_tested(self):
+        from engine.scorer import owasp_breakdown_rows
+        rows = [{"rule_id": "ai-LLM01-1", "verdict": "PASS", "owasp": "LLM01"},
+                {"rule_id": "ai-LLM01-extension", "verdict": "PASS", "owasp": "LLM01"}]
+        self.assertEqual(owasp_breakdown_rows(rows), {"LLM01": {"total": 1, "failed": 0}})
+
+
+class DiscoveryFailFastTests(unittest.TestCase):
+    def test_gives_up_after_three_404s_with_reason(self):
+        import core.discovery as disc
+
+        class Resp:
+            status_code = 404
+            headers = {}
+            text = "nope"
+
+            def json(self):
+                raise ValueError
+
+        calls = []
+        with mock.patch.object(disc, "_post_body", lambda *a, **k: calls.append(1) or Resp()):
+            result = disc.discover_target("http://t/x", "tok")
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("404", result["reason"])
+        self.assertEqual(len(calls), 3)
+
+    def test_gives_up_after_three_connection_failures(self):
+        import core.discovery as disc
+        import requests
+        calls = []
+
+        def boom(*a, **k):
+            calls.append(1)
+            raise requests.exceptions.ConnectionError("refused")
+
+        with mock.patch.object(disc, "_post_body", boom):
+            result = disc.discover_target("http://t/x", "tok")
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("could not be reached", result["reason"])
+        self.assertEqual(len(calls), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
 

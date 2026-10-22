@@ -3,6 +3,7 @@
 <div class="page-header">
   <div><h1>{{ t('scan_hash') }} #{{ result.id }}</h1><p>{{ t('target_label') }} {{ result.target_name or '-' }} | {{ t('risk_score_label') }} {{ result.risk_score }}/100</p></div>
   <div style="display:flex;gap:8px;">
+    <a href="/results" class="btn" id="btn-back" data-fallback="/results">&larr; {{ t('btn_back') }}</a>
     <a href="/results/{{ result.id }}/json" class="btn">{{ t('btn_export_json') }}</a>
     <a href="/results/{{ result.id }}/csv" class="btn">{{ t('btn_export_csv') }}</a>
     <a href="/results/{{ result.id }}/pdf" class="btn btn-primary">{{ t('btn_export_pdf') }}</a>
@@ -54,4 +55,22 @@
     {% endfor %}
   </table>
 </div>
+<script>
+// Back returns to the exact page the operator came from (the Results list with
+// its search/scroll, a comparison, a task...) when that was inside this app,
+// and falls back to the Results list when the page was opened directly.
+(function(){
+  var btn = document.getElementById('btn-back');
+  if(!btn) return;
+  btn.addEventListener('click', function(e){
+    try {
+      var ref = document.referrer ? new URL(document.referrer) : null;
+      if(ref && ref.origin === location.origin && history.length > 1 && ref.pathname !== location.pathname){
+        e.preventDefault();
+        history.back();
+      }
+    } catch(err) {}
+  });
+})();
+</script>
 {% endblock %}

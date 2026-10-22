@@ -35,6 +35,7 @@
       </form>
     {% else %}
       <p style="color:var(--danger);">{{ t('discovery_failed') }}</p>
+      {% if discovery.reason %}<p><strong>{{ discovery.reason }}</strong></p>{% endif %}
       <pre>{{ discovery.log }}</pre>
     {% endif %}
   </div>

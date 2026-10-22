@@ -47,7 +47,11 @@ reap_orphaned_tasks()
 
 # Routes that are meant to be called by something other than a logged-in
 # browser page, so the same-origin check below must not apply to them.
+# /login is exempt from the token (there is no session to ride yet and the
+# page that posts to it may be the very first request, before a token exists);
+# the Origin check below still applies to it.
 _CSRF_EXEMPT_PREFIXES = ("/canary/",)
+_CSRF_TOKEN_EXEMPT_PATHS = ("/login",)
 
 
 @app.before_request
@@ -66,12 +70,36 @@ def _reject_cross_site_posts():
     if request.path.startswith(_CSRF_EXEMPT_PREFIXES):
         return None
     source = request.headers.get("Origin") or request.headers.get("Referer")
-    if not source:
+    if source:
+        from urllib.parse import urlparse
+        if urlparse(source).netloc != request.host:
+            return Response("Cross-site request blocked.", status=403)
+    return _check_csrf_token()
+
+
+def _check_csrf_token():
+    """
+    Double-submit-cookie check: the csrf_token cookie must be echoed back in a
+    form field or X-CSRF-Token header. Skipped for the test client (unless a
+    test opts in with CSRF_ENFORCE_IN_TESTS) and for token-exempt paths.
+    """
+    if app.config.get("TESTING") and not app.config.get("CSRF_ENFORCE_IN_TESTS"):
         return None
-    from urllib.parse import urlparse
-    if urlparse(source).netloc != request.host:
-        return Response("Cross-site request blocked.", status=403)
+    if request.path in _CSRF_TOKEN_EXEMPT_PATHS:
+        return None
+    import hmac
+    cookie = request.cookies.get("csrf_token", "")
+    sent = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token") or ""
+    if not cookie or not hmac.compare_digest(cookie, sent):
+        return Response("Missing or invalid CSRF token. Reload the page and try again.", status=403)
     return None
+
+
+@app.after_request
+def _issue_csrf_cookie(resp):
+    if not request.cookies.get("csrf_token"):
+        resp.set_cookie("csrf_token", secrets.token_urlsafe(32), samesite="Lax", secure=request.is_secure)
+    return resp
 
 
 # Failed-login throttle (in memory, per username+IP): after _LOGIN_MAX_FAILURES

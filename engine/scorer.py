@@ -41,11 +41,19 @@ def owasp_breakdown_rows(rows):
     """
     Per-category coverage. ERROR rows (target unreachable, AI judge down,
     config problems) are not counted as tested: a category whose every
-    attempt errored out must not show up as "tested, 0 failed".
+    attempt errored out must not show up as "tested, 0 failed". The
+    informational "budget extended" rows (ai-<cat>-extension) record a
+    decision, not an attempt, so they are skipped too.
     """
     breakdown = {}
     for r in rows:
         if r["verdict"] in NON_RESULT_VERDICTS:
+            continue
+        try:
+            rule_id = r["rule_id"] or ""
+        except (IndexError, KeyError):
+            rule_id = ""  # caller passed only severity/verdict/owasp
+        if rule_id.endswith("-extension"):
             continue
         owasp = r["owasp"]
         breakdown.setdefault(owasp, {"total": 0, "failed": 0})
