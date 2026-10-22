@@ -31,6 +31,10 @@ class CyberGuardTestCase(unittest.TestCase):
         self._tmp_db = tempfile.mktemp(suffix=".db")
         db.DB_PATH = self._tmp_db
 
+        # Test targets use fake hostnames; the real pre-flight TCP check is covered by its own tests.
+        import engine.runner as _runner
+        _runner.PREFLIGHT_ENABLED = False
+
         # webapp.app is imported lazily (not at module load time) so that
         # db.DB_PATH above is already patched before app.py's own module-
         # level code (if any) touches the database.

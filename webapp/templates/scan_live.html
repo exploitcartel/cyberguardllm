@@ -308,9 +308,10 @@ function poll(){
 
     applyControlUI(data.control || 'run');
 
-    if(data.status === 'completed' || data.status === 'stopped'){
+    if(data.status === 'completed' || data.status === 'stopped' || data.status === 'error'){
       finished = true;
-      setStatus(data.status === 'stopped' ? 'STOPPED' : 'DONE', data.status === 'stopped' ? 'stopped' : 'done');
+      setStatus(data.status === 'completed' ? 'DONE' : (data.status === 'error' ? 'ERROR' : 'STOPPED'),
+                data.status === 'completed' ? 'done' : 'stopped');
       btnPauseResume.disabled = true;
       btnStop.disabled = true;
       setTimeout(() => { window.location.href = '/results/' + data.result_id; }, 1400);

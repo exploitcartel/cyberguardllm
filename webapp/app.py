@@ -1084,6 +1084,17 @@ def _build_exec_summary(result, target, findings):
         return None
 
 
+def report_download_name(target_name):
+    """
+    "<target name> - report.pdf", e.g. "cyberguard.al - report.pdf". Characters that are not allowed in file names
+    (and control characters) are replaced so the name works on every OS; an empty name falls back to "report.pdf".
+    """
+    import re
+    clean = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", str(target_name or "")).strip(" .")
+    clean = re.sub(r"\s+", " ", clean)
+    return f"{clean} - report.pdf" if clean else "report.pdf"
+
+
 @app.route("/results/<int:result_id>/pdf")
 def result_pdf(result_id):
     username, err = require_login()
@@ -1097,8 +1108,10 @@ def result_pdf(result_id):
     conn.close()
     exec_summary_text = _build_exec_summary(result, target, findings)
     project_root = os.path.dirname(BASE_DIR)
-    filename = f"report_scan_{result_id}.pdf"
-    out_path = os.path.join(project_root, filename)
+    # On disk the file keeps a unique per-scan name (two scans of one target must not overwrite each other);
+    # the name the operator downloads is "<target name> - report.pdf".
+    out_path = os.path.join(project_root, f"report_scan_{result_id}.pdf")
+    filename = report_download_name(target["name"])
     generate_pdf_report(result, findings, target, out_path, severity_breakdown_rows(findings),
                          owasp_breakdown_rows(findings), attack_chains=attack_chains,
                          exec_summary_text=exec_summary_text, benchmark=benchmark)
