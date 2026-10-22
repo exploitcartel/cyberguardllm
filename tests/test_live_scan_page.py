@@ -70,3 +70,19 @@ class LiveScanPageTests(CyberGuardTestCase):
         glb = self.client.get("/static/models/head.glb")
         self.assertEqual(glb.status_code, 200)
         self.assertEqual(glb.data[:4], b"glTF")
+
+
+class LoginPageHeadTests(CyberGuardTestCase):
+    def test_login_shows_the_3d_head_instead_of_the_generated_brain(self):
+        self.client.post("/logout")
+        page = self.client.get("/login").get_data(as_text=True)
+        for needle in ('id="headStage"', 'id="headCanvas"', "createHeadScene", "CC BY 3.0", "Lee Perry-Smith"):
+            self.assertIn(needle, page)
+        for gone in ("brainCanvas", "canvasWrap", "three.min.js", "brainShape"):
+            self.assertNotIn(gone, page)
+
+    def test_login_still_has_the_form_and_language_toggle(self):
+        self.client.post("/logout")
+        page = self.client.get("/login").get_data(as_text=True)
+        for needle in ('name="username"', 'name="password"', 'data-lang="al"', 'action="/login"'):
+            self.assertIn(needle, page)
