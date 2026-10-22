@@ -11,7 +11,7 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;font-family:var(--font);}
 body{display:grid;grid-template-columns:1.15fr 1fr;min-height:100vh;background:#fff;overflow:hidden;}
-.left{position:relative;background:radial-gradient(ellipse at 30% 20%, #10193a 0%, var(--bg) 60%);display:flex;flex-direction:column;justify-content:space-between;padding:48px 56px;color:var(--text);overflow:hidden;}
+.left{position:relative;background:radial-gradient(ellipse at 30% 20%, #10193a 0%, var(--bg) 60%);display:flex;flex-direction:column;gap:18px;padding:48px 56px;color:var(--text);overflow:hidden;}
 .brand{display:flex;align-items:center;gap:10px;position:relative;z-index:5;}
 .brand-mark{width:38px;height:38px;border-radius:50%;box-shadow:0 0 22px rgba(37,99,235,0.55);}
 .brand-mark img{width:100%;height:100%;display:block;}
@@ -20,9 +20,19 @@ body{display:grid;grid-template-columns:1.15fr 1fr;min-height:100vh;background:#
 .lang-toggle button{background:transparent;border:none;color:var(--muted);font-size:14px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;font-family:var(--font);}
 .lang-toggle button.active{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;}
 .top-row{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:5;}
-.canvas-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;cursor:grab;}
-.canvas-wrap:active{cursor:grabbing;}
-#brainCanvas{display:block;width:100%;height:100%;}
+.head-stage{position:relative;flex:1;min-height:0;margin:8px 0;}
+.head-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+.head-stage .no-webgl-note{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted);font-size:14px;text-align:center;}
+.head-stage.no-webgl .no-webgl-note{display:flex;}
+.threat{position:absolute;width:clamp(150px,34%,220px);padding:9px 12px;border-radius:11px;z-index:2;
+  background:rgba(16,30,62,.82);border:1px solid rgba(130,170,255,.26);backdrop-filter:blur(6px);
+  animation:threat-in .55s cubic-bezier(.22,1,.36,1) both;pointer-events:none;}
+@keyframes threat-in{from{opacity:0;transform:translateY(8px) scale(.97);}to{opacity:1;transform:none;}}
+.threat-label{font-size:13px;font-weight:600;line-height:1.25;color:var(--text);}
+.threat-row{margin-top:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;font:12px ui-monospace,Consolas,monospace;color:#a9b6d3;}
+.threat-chip{font:700 10.5px ui-monospace,Consolas,monospace;letter-spacing:.06em;padding:3px 7px;border-radius:6px;color:#bfdbfe;background:rgba(96,165,250,.2);}
+.threat-1{left:0;top:6%;} .threat-2{right:0;top:2%;} .threat-3{left:2%;top:62%;} .threat-4{right:2%;top:58%;}
+@media (prefers-reduced-motion:reduce){.threat{animation:none;}}
 .left-text{position:relative;z-index:5;max-width:420px;}
 .left-text h1{font-size:32px;font-weight:700;line-height:1.25;margin-bottom:12px;letter-spacing:-0.01em;}
 .left-text p{font-size:15px;color:var(--muted);line-height:1.6;}
@@ -58,7 +68,11 @@ input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,0.12)
       <button type="button" data-lang="al" onclick="setLang('al')">AL</button>
     </div>
   </div>
-  <div class="canvas-wrap" id="canvasWrap"><canvas id="brainCanvas"></canvas></div>
+  <div class="head-stage" id="headStage">
+    <canvas id="headCanvas" aria-hidden="true"></canvas>
+    <div class="no-webgl-note">3D view unavailable in this browser.</div>
+    <div id="threats"></div>
+  </div>
   <div class="left-text">
     <h1 data-i18n="headline">AI security assessment platform</h1>
     <p data-i18n="subtext">Black-box vulnerability scanning for LLM agents and chatbots, against the OWASP LLM Top 10.</p>
@@ -67,6 +81,7 @@ input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,0.12)
   <div class="gh-credit">
     <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
     <span data-i18n="credit">Built by</span>&nbsp;<a href="https://github.com/exploitcartel" target="_blank">exploitcartel</a>
+    <span style="margin-left:auto;font-size:12px;color:#5e6b86;">Head model &ldquo;Infinite&rdquo; by Lee Perry-Smith, <a href="/static/models/head-license.txt" target="_blank" rel="noopener" style="color:#7f8db0;font-weight:400;display:inline;">CC BY 3.0</a></span>
   </div>
 </div>
 <div class="right">
@@ -91,7 +106,6 @@ input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,99,235,0.12)
     CYBERGUARD LLM v1.0
   </div>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const I18N = {
   en: {
@@ -134,50 +148,43 @@ function setLang(lang){
   try{ saved = localStorage.getItem('cgllm_lang') || saved; }catch(e){}
   setLang(saved);
 })();
+</script>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+import { createHeadScene } from '/static/js/head-scene.js';
 
-const wrap = document.getElementById('canvasWrap');
-const canvas = document.getElementById('brainCanvas');
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, wrap.clientWidth/wrap.clientHeight, 0.1, 100);
-camera.position.z = 7;
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
-function resize(){renderer.setSize(wrap.clientWidth, wrap.clientHeight);camera.aspect=wrap.clientWidth/wrap.clientHeight;camera.updateProjectionMatrix();}
-resize();
-window.addEventListener('resize', resize);
-const brainGroup = new THREE.Group();
-scene.add(brainGroup);
-function brainShape(u,v){
-  const theta=u*Math.PI*2, phi=v*Math.PI;
-  const base=Math.sin(phi);
-  const rx=1.95, ry=1.55, rz=1.65;
-  let bump=1;
-  bump+=Math.sin(theta*9+phi*7)*0.05;
-  bump+=Math.sin(theta*15-phi*5)*0.03;
-  bump+=Math.sin(phi*20)*0.035;
-  bump+=Math.cos(theta*4)*Math.sin(phi*11)*0.04;
-  let x=rx*base*Math.cos(theta)*bump;
-  let y=ry*Math.cos(phi);
-  let z=rz*base*Math.sin(theta)*bump;
-  if(y<-1.0){ y=-1.0-(Math.abs(y)-1.0)*0.4; }
-  const nearMidline=Math.exp(-Math.pow(x*3.2,2));
-  if(y>0){ x+=(x>=0?1:-1)*nearMidline*0.22; z*=(1-nearMidline*0.12); y-=nearMidline*0.28; }
-  return new THREE.Vector3(x,y,z);
+const stage = document.getElementById('headStage');
+// The left panel is hidden on narrow screens; do not load three.js and the model for a view nobody can see.
+if (stage && stage.offsetParent !== null) {
+  createHeadScene(stage, document.getElementById('headCanvas'), { onFail: () => stage.classList.add('no-webgl') });
+
+  // Illustrative callouts: well-known LLM attack classes this tool probes (OWASP LLM Top 10). Not live data.
+  const THREATS = [
+    ['Prompt Injection', 'LLM01'], ['System Prompt Leakage', 'LLM07'], ['Excessive Agency', 'LLM06'],
+    ['Sensitive Information Disclosure', 'LLM02'], ['Improper Output Handling', 'LLM05'],
+    ['Vector & Embedding Weaknesses', 'LLM08'], ['Misinformation', 'LLM09'], ['Unbounded Consumption', 'LLM10'],
+  ];
+  const box = document.getElementById('threats');
+  let next = 0, slot = 0;
+  const show = () => {
+    const [label, code] = THREATS[next++ % THREATS.length];
+    const n = (slot++ % 4) + 1;
+    const old = box.querySelector('.threat-' + n);
+    if (old) old.remove();
+    const card = document.createElement('div');
+    card.className = 'threat threat-' + n;
+    card.innerHTML = '<div class="threat-label"></div><div class="threat-row"><span></span><span class="threat-chip">TESTED</span></div>';
+    card.querySelector('.threat-label').textContent = label;
+    card.querySelector('.threat-row span').textContent = code;
+    box.appendChild(card);
+  };
+  for (let i = 0; i < 4; i++) show();
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) setInterval(() => { if (!document.hidden) show(); }, 2200);
 }
-const nodeCount=900;const positions=new Float32Array(nodeCount*3);const nodeVecs=[];
-for(let i=0;i<nodeCount;i++){const p=brainShape(Math.random(),Math.random());positions[i*3]=p.x;positions[i*3+1]=p.y;positions[i*3+2]=p.z;nodeVecs.push(p);}
-const pGeo=new THREE.BufferGeometry();pGeo.setAttribute('position',new THREE.BufferAttribute(positions,3));
-const pMat=new THREE.PointsMaterial({color:0x3b82f6,size:0.045,transparent:true,opacity:0.9});
-brainGroup.add(new THREE.Points(pGeo,pMat));
-const linePositions=[];const maxDist=0.5;const maxLinksPerNode=4;
-for(let i=0;i<nodeCount;i++){let links=0;for(let j=i+1;j<nodeCount&&links<maxLinksPerNode;j++){if(nodeVecs[i].distanceTo(nodeVecs[j])<maxDist){linePositions.push(nodeVecs[i].x,nodeVecs[i].y,nodeVecs[i].z,nodeVecs[j].x,nodeVecs[j].y,nodeVecs[j].z);links++;}}}
-const lGeo=new THREE.BufferGeometry();lGeo.setAttribute('position',new THREE.Float32BufferAttribute(linePositions,3));
-brainGroup.add(new THREE.LineSegments(lGeo,new THREE.LineBasicMaterial({color:0x2563eb,transparent:true,opacity:0.22})));
-let dragging=false,lastX=0,lastY=0,rotVelY=0.0035,targetVelY=0.0035;
-wrap.addEventListener('mousedown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;targetVelY=0;});
-window.addEventListener('mouseup',()=>{dragging=false;targetVelY=0.0035;});
-window.addEventListener('mousemove',e=>{if(!dragging)return;brainGroup.rotation.y+=(e.clientX-lastX)*0.006;brainGroup.rotation.x+=(e.clientY-lastY)*0.006;lastX=e.clientX;lastY=e.clientY;});
-function animate(){requestAnimationFrame(animate);rotVelY+=(targetVelY-rotVelY)*0.05;if(!dragging){brainGroup.rotation.y+=rotVelY;}renderer.render(scene,camera);}
-animate();
 </script>
 </body>
 </html>

@@ -130,7 +130,8 @@ ones), not a canned animation. Pause and Stop are in the console header.
 The head geometry is "Infinite" by Lee Perry-Smith (Infinite Realities / triplegangers.com), licensed
 [CC BY 3.0](webapp/static/models/head-license.txt), and is credited on the page. Three.js is loaded from a pinned
 jsDelivr URL, so the live page needs internet access for the 3D view; the scan itself does not, and the page shows a
-notice instead of the head if WebGL or the CDN is unavailable. The login page still uses the earlier brain animation.
+notice instead of the head if WebGL or the CDN is unavailable. The login page uses the same head, with illustrative
+callouts for the OWASP LLM Top 10 classes the tool probes (these are decorative, not live data).
 
 ### 5. Role-based access control
 
