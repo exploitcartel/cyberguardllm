@@ -1,0 +1,72 @@
+"""
+Live scan page: the redesigned single-surface console with the 3D head, the callouts fed by real findings, and
+the assets it needs (head model, its CC BY license, the scene module).
+"""
+from tests.base import CyberGuardTestCase
+
+
+class LiveScanPageTests(CyberGuardTestCase):
+    def _seed(self, with_findings=True):
+        conn = self.get_conn()
+        conn.execute("INSERT INTO targets (name,url,token_encrypted,created_at) VALUES ('Bot','http://t','e','2026')")
+        conn.execute("INSERT INTO scan_configs (name,categories,created_at) VALUES ('Full Audit','LLM01','2026')")
+        conn.execute("""INSERT INTO tasks (target_id,scan_config_id,status,progress_total,progress_done,
+                        progress_findings,last_rule_id,created_at) VALUES (1,1,'running',100,12,1,'SSRF-002','2026')""")
+        conn.execute("INSERT INTO scan_results (task_id,target_id,timestamp,status) VALUES (1,1,'2026','running')")
+        conn.execute("UPDATE tasks SET result_id=1 WHERE id=1")
+        if with_findings:
+            for i, verdict in enumerate(["PASS", "FAIL", "REVIEW"], start=1):
+                conn.execute("""INSERT INTO findings (scan_result_id,rule_id,owasp,severity,verdict,prompt_sent,
+                                raw_response,description,module) VALUES (1,?,?,?,?,?,?,?,?)""",
+                             (f"R-{i}", "LLM06", "high", verdict, "p", "r", "d", "Tool & Function Discovery"))
+        conn.commit()
+        conn.close()
+
+    def test_page_renders_the_single_surface_console_with_target_and_config(self):
+        self._seed()
+        page = self.client.get("/scan/1/live").get_data(as_text=True)
+        for needle in ('id="stage"', 'id="headCanvas"', 'id="callouts"', 'id="liveLog"', 'id="progressBar"',
+                       'id="btnPauseResume"', 'id="btnStop"', "Target: Bot", "Config: Full Audit",
+                       "createHeadScene", "CC BY 3.0", "Lee Perry-Smith"):
+            self.assertIn(needle, page)
+        self.assertNotIn("brainWrap", page)
+        self.assertNotIn("liveBrainCanvas", page)
+
+    def test_owasp_labels_are_embedded_for_the_callouts(self):
+        self._seed()
+        page = self.client.get("/scan/1/live").get_data(as_text=True)
+        self.assertIn("Excessive Agency", page)
+
+    def test_status_api_returns_recent_findings_newest_first_with_ids(self):
+        self._seed()
+        data = self.client.get("/api/scan-status/1").get_json()
+        self.assertEqual(data["done"], 12)
+        recent = data["recent"]
+        self.assertEqual([r["rule_id"] for r in recent], ["R-3", "R-2", "R-1"])
+        self.assertEqual({"id", "rule_id", "owasp", "verdict", "module"}, set(recent[0]))
+        self.assertGreater(recent[0]["id"], recent[-1]["id"])
+
+    def test_status_api_recent_is_capped_and_empty_without_a_result(self):
+        self._seed(with_findings=False)
+        self.assertEqual(self.client.get("/api/scan-status/1").get_json()["recent"], [])
+        conn = self.get_conn()
+        for i in range(20):
+            conn.execute("""INSERT INTO findings (scan_result_id,rule_id,owasp,severity,verdict,prompt_sent,
+                            raw_response,description) VALUES (1,?,?,?,?,?,?,?)""",
+                         (f"X-{i}", "LLM01", "low", "PASS", "p", "r", "d"))
+        conn.commit()
+        self.assertEqual(len(self.client.get("/api/scan-status/1").get_json()["recent"]), 8)
+
+    def test_unknown_task_still_returns_the_unknown_payload(self):
+        data = self.client.get("/api/scan-status/999").get_json()
+        self.assertEqual(data["status"], "unknown")
+
+    def test_head_assets_are_served(self):
+        for path, needle in (("/static/js/head-scene.js", b"createHeadScene"),
+                             ("/static/models/head-license.txt", b"Lee Perry-Smith")):
+            resp = self.client.get(path)
+            self.assertEqual(resp.status_code, 200, path)
+            self.assertIn(needle, resp.data)
+        glb = self.client.get("/static/models/head.glb")
+        self.assertEqual(glb.status_code, 200)
+        self.assertEqual(glb.data[:4], b"glTF")

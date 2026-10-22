@@ -916,6 +916,7 @@ def scan_live(task_id):
         return redirect("/tasks")
     return render_template("scan_live.html", **ctx(
         active="tasks", task_id=task_id, target_name=task["target_name"], config_name=task["config_name"],
+        owasp_labels=OWASP_LABELS,
     ))
 
 

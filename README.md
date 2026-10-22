@@ -120,11 +120,17 @@ inflates or deflates the score), and get their own "Needs Manual Review" section
 
 ### 4. Live scan visualization
 
-While a scan runs, you do not just see a progress bar. The scan page renders a 3D neural network shaped like a
-brain, built with Three.js, with roughly 900 connected nodes forming two hemispheres with a central fissure. As each
-payload is sent, random nodes pulse cyan. When a finding is confirmed, a burst of nodes flashes red and the whole
-structure briefly grows and glows red, so you can watch the assessment happen rather than just wait for it. The same
-brain visualization (in idle, slowly rotating form, draggable with the mouse) also appears on the login page.
+While a scan runs, you do not just see a progress bar. The live page is one console: a 3D head drawn as
+fingerprint-style ridges with a neural node mesh (Three.js), a progress bar, counters and a live log on a single
+surface. It reacts to the scan itself: each result brightens the mesh and appears as a callout card around the head
+with its module, rule id and verdict (VULNERABLE / RESISTED / REVIEW / ERROR), a confirmed finding flashes the head red,
+and pausing slows it down. The callouts are fed by the scan's real findings (`/api/scan-status` returns the most recent
+ones), not a canned animation. Pause and Stop are in the console header.
+
+The head geometry is "Infinite" by Lee Perry-Smith (Infinite Realities / triplegangers.com), licensed
+[CC BY 3.0](webapp/static/models/head-license.txt), and is credited on the page. Three.js is loaded from a pinned
+jsDelivr URL, so the live page needs internet access for the 3D view; the scan itself does not, and the page shows a
+notice instead of the head if WebGL or the CDN is unavailable. The login page still uses the earlier brain animation.
 
 ### 5. Role-based access control
 

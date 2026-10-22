@@ -1118,6 +1118,13 @@ def force_stop_task(task_id: int):
 def get_task_progress(task_id: int):
     conn = get_conn()
     task = conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+    recent = []
+    if task and task["result_id"] is not None:
+        # The most recent findings (any verdict) for the live page's callouts and log: what was just tested and
+        # how it came out. id lets the page tell which ones it has already shown.
+        recent = [dict(r) for r in conn.execute(
+            "SELECT id, rule_id, owasp, verdict, module FROM findings WHERE scan_result_id=? "
+            "ORDER BY id DESC LIMIT 8", (task["result_id"],)).fetchall()]
     conn.close()
     if not task:
         return None
@@ -1128,5 +1135,6 @@ def get_task_progress(task_id: int):
         "findings": task["progress_findings"] or 0,
         "last_rule_id": task["last_rule_id"],
         "result_id": task["result_id"],
+        "recent": recent,
         "control": task["control"] if "control" in task.keys() and task["control"] else "run",
     }
