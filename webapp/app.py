@@ -1268,6 +1268,19 @@ def activity_page():
     return render_template("activity.html", **ctx(active="activity", logs=logs))
 
 
+def _mask_api_key(api_key_encrypted):
+    """Display-only mask of the stored AI API key (dots plus last 4 chars); never returns the plaintext."""
+    if not api_key_encrypted:
+        return ""
+    try:
+        key = decrypt_token(api_key_encrypted)
+    except Exception:
+        return "•" * 12
+    if len(key) <= 8:
+        return "•" * 12
+    return "•" * 12 + key[-4:]
+
+
 @app.route("/settings", methods=["GET"])
 def settings_page():
     username, err = require_login()
@@ -1284,6 +1297,7 @@ def settings_page():
         active="settings", active_tab=active_tab, must_change=bool(user["must_change_password"]) if user else False,
         users=users, roles=ROLES, role_labels=ROLE_LABELS, settings=settings,
         proxy_test_result=None, proxy_url_masked=_mask_proxy_url(settings.get("proxy_url", "")),
+        ai_key_masked=_mask_api_key(settings.get("ai_api_key_encrypted", "")),
     ))
 
 
@@ -1386,10 +1400,20 @@ def settings_scan_mode():
     set_setting("ai_provider", ai_provider)
     set_setting("ai_api_base", ai_api_base)
     set_setting("ai_model", ai_model)
-    if ai_api_key:
+    if ai_api_key and "•" not in ai_api_key:
         set_setting("ai_api_key_encrypted", encrypt_token(ai_api_key))
     log_activity(username, "Scan Mode Updated", scan_mode)
     flash_t("flash_scan_mode_updated")
+    return redirect("/settings?tab=scan")
+
+
+@app.route("/settings/ai-key/remove", methods=["POST"])
+def settings_ai_key_remove():
+    username, err = require_role("global_administrator")
+    if err: return err
+    set_setting("ai_api_key_encrypted", "")
+    log_activity(username, "AI API Key Removed", "")
+    flash_t("flash_ai_key_removed")
     return redirect("/settings?tab=scan")
 
 

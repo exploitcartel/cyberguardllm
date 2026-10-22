@@ -99,6 +99,7 @@
         {{ t('field_ai_provider') }}: <strong>{{ settings.ai_provider or 'openai_compatible' }}</strong>
         &nbsp;&middot;&nbsp; {{ t('field_model') }}: <strong>{{ settings.ai_model }}</strong>
         &nbsp;&middot;&nbsp; {{ t('field_ai_api_base') }}: <strong>{{ settings.ai_api_base }}</strong>
+        &nbsp;&middot;&nbsp; {{ t('field_ai_api_key') }}: <strong>{{ ai_key_masked }}</strong>
       </div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
@@ -146,7 +147,20 @@
         </div>
       </div>
     </div>
-    <div class="field"><label>{{ t('field_ai_api_key') }}</label><input type="password" name="ai_api_key" placeholder="{{ t('ai_api_key_placeholder_stored') if settings.ai_api_key_encrypted else 'sk-...' }}"></div>
+    <div class="field">
+      <label>{{ t('field_ai_api_key') }}{% if settings.ai_api_key_encrypted %} <span class="status-dot-ok" style="font-size:13px;">&#10003; {{ t('ai_key_saved_label') }}</span>{% endif %}</label>
+      {% if settings.ai_api_key_encrypted %}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input type="text" id="aiApiKeyInput" value="{{ ai_key_masked }}" data-masked="{{ ai_key_masked }}" readonly autocomplete="off" style="flex:1;min-width:220px;">
+        <button type="button" class="btn btn-sm" id="btnChangeKey" onclick="toggleKeyEdit(true)">&#9998; {{ t('btn_change_key') }}</button>
+        <button type="button" class="btn btn-sm" id="btnCancelKey" style="display:none;" onclick="toggleKeyEdit(false)">{{ t('btn_cancel_change') }}</button>
+        <button type="submit" class="btn btn-sm" formaction="/settings/ai-key/remove" formnovalidate
+          onclick="return confirm('{{ t('confirm_remove_key') }}')">{{ t('btn_remove_key') }}</button>
+      </div>
+      {% else %}
+      <input type="password" name="ai_api_key" placeholder="sk-..." autocomplete="off">
+      {% endif %}
+    </div>
     <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('ai_api_key_hint') }}</p>
     <button class="btn btn-primary" type="submit">{{ t('btn_save_scan_mode') }}</button>
   </form>
@@ -169,6 +183,17 @@ function toggleAnthropicPicks(provider){
 }
 function setModel(name){
   if(modelInput) modelInput.value = name;
+}
+function toggleKeyEdit(editing){
+  const input = document.getElementById('aiApiKeyInput');
+  if(!input) return;
+  input.readOnly = !editing;
+  input.type = editing ? 'password' : 'text';
+  input.value = editing ? '' : input.dataset.masked;
+  if(editing){ input.name = 'ai_api_key'; } else { input.removeAttribute('name'); }
+  document.getElementById('btnChangeKey').style.display = editing ? 'none' : '';
+  document.getElementById('btnCancelKey').style.display = editing ? '' : 'none';
+  if(editing) input.focus();
 }
 function focusSection(formId, evt){
   if(evt) evt.stopPropagation();
