@@ -43,6 +43,77 @@ seed_admin()
 reap_orphaned_tasks()
 
 
+# --- Request hardening -------------------------------------------------------
+
+# Routes that are meant to be called by something other than a logged-in
+# browser page, so the same-origin check below must not apply to them.
+_CSRF_EXEMPT_PREFIXES = ("/canary/",)
+
+
+@app.before_request
+def _reject_cross_site_posts():
+    """
+    CSRF guard without per-form tokens: every state-changing request is a
+    POST, and a browser always attaches an Origin (or at least a Referer)
+    header to a cross-site POST. If that header names a different host than
+    the one being served, the request did not come from this app's own pages
+    and is rejected. Requests with neither header (curl, scripts, the test
+    client) are not browser form submissions and are allowed - they cannot
+    ride a victim's browser cookies.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    if request.path.startswith(_CSRF_EXEMPT_PREFIXES):
+        return None
+    source = request.headers.get("Origin") or request.headers.get("Referer")
+    if not source:
+        return None
+    from urllib.parse import urlparse
+    if urlparse(source).netloc != request.host:
+        return Response("Cross-site request blocked.", status=403)
+    return None
+
+
+# Failed-login throttle (in memory, per username+IP): after _LOGIN_MAX_FAILURES
+# wrong passwords the pair is locked out for _LOGIN_LOCKOUT_S seconds, which
+# makes guessing the default admin/admin-style passwords impractical. A restart
+# clears it, which is acceptable for a self-hosted tool.
+_LOGIN_MAX_FAILURES = 5
+_LOGIN_LOCKOUT_S = 300
+_login_failures = {}
+
+
+def _login_key(username):
+    return ((username or "").lower(), request.remote_addr)
+
+
+def _login_locked(username):
+    import time as _time
+    entry = _login_failures.get(_login_key(username))
+    if not entry:
+        return 0
+    count, locked_until = entry
+    remaining = locked_until - _time.time()
+    if count >= _LOGIN_MAX_FAILURES and remaining > 0:
+        return int(remaining) + 1
+    if count >= _LOGIN_MAX_FAILURES:
+        _login_failures.pop(_login_key(username), None)
+    return 0
+
+
+def _login_record_failure(username):
+    import time as _time
+    key = _login_key(username)
+    count, _ = _login_failures.get(key, (0, 0))
+    count += 1
+    _login_failures[key] = (count, _time.time() + _LOGIN_LOCKOUT_S if count >= _LOGIN_MAX_FAILURES else 0)
+
+
+def _set_session_cookie(resp, username):
+    resp.set_cookie("session", make_session_cookie(username), httponly=True, max_age=86400,
+                    samesite="Lax", secure=request.is_secure)
+
+
 def _row_get_app(row, key, default=None):
     """sqlite3.Row supports index/key access but not .get(); this shims it."""
     try:
@@ -156,6 +227,11 @@ def login():
         return render_template("login.html", error=None, lang=current_lang())
     username = request.form.get("username")
     password = request.form.get("password")
+    locked_for = _login_locked(username)
+    if locked_for:
+        return render_template(
+            "login.html", lang=current_lang(),
+            error=f"Too many failed attempts. Try again in {max(1, locked_for // 60 + (1 if locked_for % 60 else 0))} minute(s)."), 429
     conn = get_conn()
     user = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
     conn.close()
@@ -167,15 +243,21 @@ def login():
     password_hash = user["password_hash"] if user else DUMMY_PASSWORD_HASH
     password_ok = verify_password(password or "", password_hash)
     if not user or not password_ok:
+        _login_record_failure(username)
         return render_template("login.html", error="Invalid username or password.", lang=current_lang())
+    _login_failures.pop(_login_key(username), None)
     resp = make_response(redirect("/dashboard"))
-    resp.set_cookie("session", make_session_cookie(username), httponly=True, max_age=86400)
+    _set_session_cookie(resp, username)
     log_activity(username, "Login", "")
     return resp
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["GET", "POST"])
 def logout():
+    if request.method == "GET":
+        # Logging out changes state, so it is POST-only: a GET (a link, an
+        # <img src> on another site) must not be able to sign anyone out.
+        return redirect("/dashboard" if current_user() else "/login")
     username = current_user()
     if username:
         # Revokes this (and every other) session cookie issued for this
@@ -1319,7 +1401,7 @@ def change_password():
     # it isn't logged out by their own action.
     invalidate_sessions(username)
     resp = make_response(redirect("/settings?tab=account"))
-    resp.set_cookie("session", make_session_cookie(username), httponly=True, max_age=86400)
+    _set_session_cookie(resp, username)
     flash_t("flash_password_changed")
     return resp
 
@@ -1471,6 +1553,12 @@ def canary_hit(token):
     records that a specific, single-use token was requested; it does not
     read or affect anything else in the app.
     """
+    import re as _re
+    if not _re.fullmatch(r"[0-9a-f]{32}", token):
+        # Real canary tokens are uuid4().hex; anything else is noise, and
+        # this route is unauthenticated, so do not let arbitrary strings
+        # be written into the database.
+        return "ok", 200
     conn = get_conn()
     conn.execute(
         "INSERT INTO canary_hits (token, hit_at, remote_addr, raw_request, created_at) VALUES (?,?,?,?,?)"

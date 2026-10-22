@@ -2,7 +2,7 @@ import threading
 import time
 from storage.db import get_conn, now, get_setting
 from engine.loader import load_rules_by_categories
-from engine.evaluator import evaluate, evaluate_multiturn, evaluate_persistence
+from engine.evaluator import evaluate, evaluate_explained, evaluate_multiturn, evaluate_persistence
 from engine.scorer import compute_risk_score_rows
 from core.discovery import send_prompt, send_conversation_turn, is_transport_error
 from core.mutation import apply_mutations, MUTATION_LABELS
@@ -225,7 +225,7 @@ def _evaluate_attempt(target, rule, ai_judge_cfg, min_confidence):
         verdict = evaluate_multiturn(rule, responses)
     else:
         response_text = send_prompt(target, rule["prompt"])
-        verdict = evaluate(rule, response_text)
+        verdict, match_kind = evaluate_explained(rule, response_text)
         prompt_sent = rule["prompt"]
         raw_response = response_text
 
@@ -233,6 +233,13 @@ def _evaluate_attempt(target, rule, ai_judge_cfg, min_confidence):
     severity = rule["severity"]
     confidence = None
     judge_note = ""
+    if not turns and not poison_prompt:
+        if match_kind == "both":
+            judge_note = (" Both a fail pattern and a pass pattern matched this response (e.g. a refusal that "
+                          "quotes the attack text), so it cannot be called either way automatically.")
+        elif match_kind == "none":
+            judge_note = (" No fail or pass pattern matched this response: PASS here means 'no indicator found', "
+                          "not a confirmed defense.")
 
     if is_transport_error(raw_response):
         # The target never actually answered this prompt (timeout,
@@ -272,6 +279,12 @@ def _evaluate_attempt(target, rule, ai_judge_cfg, min_confidence):
                 verdict = "REVIEW"
                 if reasoning:
                     judge_note = f" AI judge ({judged_confidence}% confidence, below threshold): {reasoning}"
+            elif offline_verdict == "REVIEW":
+                # The regex check was inconclusive (both patterns matched), so
+                # a confident AI reading of the response decides it.
+                verdict = judged_verdict
+                judge_note = (f" Offline heuristic was inconclusive; AI judge decided {judged_verdict} "
+                               f"({judged_confidence}% confidence)." + (f" {reasoning}" if reasoning else ""))
             elif judged_verdict == offline_verdict:
                 verdict = judged_verdict
                 judge_note = (f" Offline heuristic and AI judge agree ({judged_verdict}, "
@@ -281,8 +294,17 @@ def _evaluate_attempt(target, rule, ai_judge_cfg, min_confidence):
                 judge_note = (f" Dual-judge disagreement: offline heuristic said {offline_verdict}, AI judge said "
                                f"{judged_verdict} ({judged_confidence}% confidence): {reasoning} Flagged for "
                                f"manual review rather than resolved automatically.")
-        except Exception:
-            pass
+        except Exception as e:
+            # An AI judge is configured but could not be reached/parsed, so
+            # this verdict is NOT the dual-judge result the operator asked
+            # for. A regex FAIL that could not be cross-checked is not
+            # trustworthy enough to report as confirmed: send it to REVIEW.
+            # A regex PASS stays PASS but is annotated, so it is clear it is
+            # an unchecked, offline-only verdict.
+            if verdict == "FAIL":
+                verdict = "REVIEW"
+            judge_note += (f" AI judge call failed ({e}); this is an offline-heuristic-only verdict that was "
+                           "not cross-checked.")
 
     return verdict, severity, confidence, prompt_sent, raw_response, judge_note
 
@@ -329,10 +351,12 @@ def _retest_ai_fail(target, prompt, owasp_code, label, api_base, api_key, model,
             resend_response = send_prompt(target, prompt, timeout=timeout)
             if is_transport_error(resend_response):
                 continue
-            resend_verdict, *_ = ai_agent.judge_response(
+            resend_verdict, _sev, _reason, resend_confidence = ai_agent.judge_response(
                 api_base, api_key, model, owasp_code, label, prompt, resend_response,
                 business_context=business_context)
-            if resend_verdict == "FAIL":
+            # Same bar the original FAIL had to clear: a low-confidence FAIL
+            # is a REVIEW, not a reproduction.
+            if resend_verdict == "FAIL" and resend_confidence >= min_confidence:
                 hits += 1
         except Exception:
             pass
@@ -574,20 +598,30 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
     # category selected means no AI-powered attempts run either, instead of
     # silently defaulting to every category.
     cats = categories
-    total = len(cats) * attempts_budget
+    # When a config runs the static engine first and this AI phase second, the
+    # task row already carries the static phase's progress. Continue from it
+    # instead of resetting to zero, so the live bar and findings counter keep
+    # everything found so far.
+    prior = conn.execute("SELECT progress_total, progress_done, progress_findings FROM tasks WHERE id=?",
+                         (task_id,)).fetchone()
+    base_total = (prior["progress_total"] or 0) if prior else 0
+    base_done = (prior["progress_done"] or 0) if prior else 0
+    base_findings = (prior["progress_findings"] or 0) if prior else 0
+
+    total = base_total + len(cats) * attempts_budget
     total_ai_calls = 0  # counted across every category combined, see _GLOBAL_AI_ATTEMPT_CAP below
-    conn.execute("UPDATE tasks SET progress_total=?, progress_done=0, progress_findings=0, status='running', result_id=? WHERE id=?",
+    conn.execute("UPDATE tasks SET progress_total=?, status='running', result_id=? WHERE id=?",
                  (total, result_id, task_id))
     conn.commit()
 
-    findings_count = 0
-    step = 0
+    findings_count = base_findings
+    step = base_done
 
     if not api_base or not api_key:
         conn.execute(
             """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response, description, module, source, recommendation)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (result_id, "ai-config-error", "LLM01", "low", "PASS", "", "",
+            (result_id, "ai-config-error", "LLM01", "low", "ERROR", "", "",
              "AI-Powered scan mode is enabled but no AI API base/key is configured in Settings. No AI attack attempts were run.",
              None, "ai_agent", "Configure an AI API base URL and key under Settings to use AI-Powered scanning."),
         )
@@ -637,7 +671,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 conn.execute(
                     """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response, description, module, source, recommendation)
                        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                    (result_id, "ai-global-cap-reached", owasp_code, "low", "PASS", "", "",
+                    (result_id, "ai-global-cap-reached", owasp_code, "low", "ERROR", "", "",
                      f"AI-Powered scan reached its safety cap of {AI_POWERED_GLOBAL_ATTEMPT_CAP} total attempts "
                      "across all categories and stopped here, so this scan has a guaranteed end regardless of "
                      "configuration. Remaining categories were skipped; everything completed so far is saved.",
@@ -675,7 +709,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 conn.execute(
                     """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response, description, module, source, recommendation)
                        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                    (result_id, "ai-call-error", owasp_code, "low", "PASS", "", "",
+                    (result_id, "ai-call-error", owasp_code, "low", "ERROR", "", "",
                      f"AI-Powered scan stopped: the attacking AI agent call failed ({err_detail}). "
                      "Check the AI provider, model name and API key under Settings, then re-run this scan.",
                      "ai_agent", "ai_agent",
@@ -720,7 +754,12 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                     if confidence < min_confidence:
                         verdict = "REVIEW"
                 except Exception as e:
-                    verdict, severity, reasoning = "PASS", "low", f"AI judge call failed: {e}"
+                    # A judge outage says nothing about the target, so it must
+                    # never be recorded as "the target resisted".
+                    verdict, severity, reasoning = "ERROR", "low", (
+                        f"AI judge call failed ({e}); this attempt could not be evaluated. This is a "
+                        "scan/configuration issue, not a security result - check the AI provider under "
+                        "Settings and re-run.")
 
             if verdict == "FAIL":
                 findings_count += 1
