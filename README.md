@@ -121,8 +121,9 @@ inflates or deflates the score), and get their own "Needs Manual Review" section
 ### 4. Live scan visualization
 
 While a scan runs, you do not just see a progress bar. The live page is one console: a 3D head drawn as
-fingerprint-style ridges with a neural node mesh (Three.js), a progress bar, counters and a live log on a single
-surface. It reacts to the scan itself: each result brightens the mesh and appears as a callout card around the head
+fingerprint-style ridges with a neural node mesh, enclosed in a rotating network globe (geodesic nodes linked by data arcs
+with packets travelling along them) (Three.js), a progress bar, counters and a live log on a single surface that follows
+the app's light/dark theme. It reacts to the scan itself: each result brightens the mesh and appears as a callout card around the head
 with its module, rule id and verdict (VULNERABLE / RESISTED / REVIEW / ERROR), a confirmed finding flashes the head red,
 and pausing slows it down. The callouts are fed by the scan's real findings (`/api/scan-status` returns the most recent
 ones), not a canned animation. Pause and Stop are in the console header.
