@@ -488,6 +488,18 @@ def discover_target(url: str, token: str, timeout: float = 25.0):
 _RETRYABLE_STATUS = (408, 425, 429, 500, 502, 503, 504)
 
 
+def _worth_retrying(exc) -> bool:
+    """
+    False for a read timeout. By then the request has reached the target and it is still working on it (a slow
+    self-hosted model, say), so sending the same prompt again does not help: it queues a duplicate behind the
+    first one, doubles the load on an already slow target, and - for a target that keeps chat history per session,
+    like OWASP PromptMe - writes the same message into that history again. Seen live: one payload showed up three
+    times in the target's chat and its answers arrived long after the scanner had given up. Connection resets,
+    refused connections and 429/5xx are still retried.
+    """
+    return not isinstance(exc, requests.exceptions.ReadTimeout)
+
+
 def _is_error_shaped_body(data):
     """
     True when a 200-OK JSON body looks like a transport/provider error
@@ -590,7 +602,7 @@ def send_prompt(target_row, prompt: str, timeout: float = 45.0, max_retries: int
             resp = _post_body(target_row["url"], body, headers, params, timeout, encoding=body_encoding)
         except Exception as e:
             last_error = f"[ERROR] {e}"
-            if attempt < max_retries:
+            if attempt < max_retries and _worth_retrying(e):
                 time.sleep(delay); delay *= 2
                 continue
             return last_error
@@ -702,7 +714,7 @@ def send_conversation_turn(target_row, prompt: str, history: list, timeout: floa
                                       timeout=timeout, proxies=get_proxies())
             except Exception as e:
                 response_text = f"[ERROR] {e}"
-                if attempt < max_retries:
+                if attempt < max_retries and _worth_retrying(e):
                     time.sleep(delay); delay *= 2
                     continue
                 break

@@ -70,3 +70,35 @@ class StaticResilienceTests(CyberGuardTestCase):
         self.assertEqual(len([p for p, *_ in sent if p != "Hello"]), 12)
         ids = [r["rule_id"] for r in conn.execute("SELECT rule_id FROM findings")]
         self.assertNotIn("scan-aborted-target-unresponsive", ids)
+
+
+class RetryPolicyTests(CyberGuardTestCase):
+    """A read timeout means the target is already working on the prompt: do not send a duplicate."""
+
+    def _target(self):
+        return {"transport": "http", "token_encrypted": "", "auth_scheme": "none", "body_format": "message",
+                "response_field": "reply", "url": "http://t/chat", "body_encoding": "json"}
+
+    def _send(self, exc):
+        import core.discovery as disc
+        calls = []
+
+        def boom(*a, **k):
+            calls.append(1)
+            raise exc
+
+        with mock.patch.object(disc, "_post_body", boom), mock.patch.object(disc.time, "sleep", lambda s: None), \
+                mock.patch("core.crypto.decrypt_token", lambda x: ""):
+            return disc.send_prompt(self._target(), "hi", timeout=1), len(calls)
+
+    def test_read_timeout_is_not_retried(self):
+        import requests
+        result, calls = self._send(requests.exceptions.ReadTimeout("Read timed out"))
+        self.assertEqual(calls, 1)
+        self.assertTrue(result.startswith("[ERROR]"))
+
+    def test_connection_errors_are_still_retried(self):
+        import requests
+        result, calls = self._send(requests.exceptions.ConnectionError("reset"))
+        self.assertEqual(calls, 3)
+        self.assertTrue(result.startswith("[ERROR]"))
