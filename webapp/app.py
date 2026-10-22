@@ -682,11 +682,14 @@ def scan_configs_page():
     conn.close()
     from engine.garak_module import AVAILABLE_PROBES as garak_probes
     from engine.pyrit_module import OBJECTIVES as pyrit_objectives
+    from engine.crescendo_module import OBJECTIVES as crescendo_objectives
+    ai_configured = bool(get_setting("ai_api_base", "") and get_setting("ai_api_key_encrypted", ""))
     from core.mutation import MUTATION_LABELS
     garak_ok, pyrit_ok = _external_tool_status()
     return render_template("scan_configs.html", **ctx(
         active="scan_configs", categories=categories, configs=configs,
         garak_probes=garak_probes, pyrit_objectives=pyrit_objectives,
+        crescendo_objectives=crescendo_objectives, ai_configured=ai_configured,
         garak_ok=garak_ok, pyrit_ok=pyrit_ok, mutation_labels=MUTATION_LABELS,
         counts_by_level=counts_by_level, ai_intensity_levels=AI_INTENSITY_LEVELS,
         ai_intensity_order=AI_INTENSITY_ORDER,
@@ -715,6 +718,14 @@ def scan_config_create():
     use_pyrit = 1 if request.form.get("use_pyrit") == "on" else 0
     pyrit_objectives = request.form.getlist("pyrit_objectives")
 
+    from engine.crescendo_module import OBJECTIVES as _CRESCENDO_OBJECTIVES, DEFAULT_MAX_TURNS, MAX_TURNS_CEILING
+    use_crescendo = 1 if request.form.get("use_crescendo") == "on" else 0
+    crescendo_objectives = [k for k in request.form.getlist("crescendo_objectives") if k in _CRESCENDO_OBJECTIVES]
+    try:
+        crescendo_max_turns = max(2, min(MAX_TURNS_CEILING, int(request.form.get("crescendo_max_turns", DEFAULT_MAX_TURNS))))
+    except (TypeError, ValueError):
+        crescendo_max_turns = DEFAULT_MAX_TURNS
+
     mutation_techniques = request.form.getlist("mutation_techniques")
     enable_retest = 1 if request.form.get("enable_retest") == "on" else 0
     try:
@@ -740,12 +751,13 @@ def scan_config_create():
         """INSERT INTO scan_configs (name, categories, ai_powered, use_garak, garak_probes, use_pyrit,
            pyrit_objectives, mutation_techniques, enable_retest, retest_count, enable_canary, enable_recon,
            ai_max_attempts, ai_intensity, enable_fingerprint, enable_session_isolation, scan_level, enable_static,
-           ai_categories, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           ai_categories, use_crescendo, crescendo_objectives, crescendo_max_turns, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (name, ",".join(categories), ai_powered, use_garak, ",".join(garak_probes), use_pyrit,
          ",".join(pyrit_objectives), ",".join(mutation_techniques), enable_retest, retest_count, enable_canary,
          enable_recon, ai_max_attempts, ai_intensity, enable_fingerprint, enable_session_isolation, scan_level,
-         enable_static, ",".join(ai_categories), now()),
+         enable_static, ",".join(ai_categories), use_crescendo, ",".join(crescendo_objectives),
+         crescendo_max_turns, now()),
     )
     conn.commit()
     conn.close()
