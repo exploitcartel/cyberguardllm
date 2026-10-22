@@ -58,14 +58,40 @@ def _load_custom_rules():
     return rules
 
 
+# Parsing ~1700 rules from YAML takes close to a second (yaml.safe_load is pure Python), and the Scan Configs page
+# used to do it three times per view, plus once more after every save (the save redirects back to that page).
+# The parsed file rules are therefore cached and re-parsed only when a rule file is added, removed or changed
+# (checked by path + mtime + size, which is a handful of stat calls). Rules added through the UI live in the
+# database and are read fresh every time, so adding or deleting one still shows up immediately.
+_yaml_cache = {"signature": None, "rules": []}
+
+
+def _yaml_signature():
+    files = sorted(glob.glob(os.path.join(RULES_DIR, "**", "*.yaml"), recursive=True))
+    sig = []
+    for path in files:
+        st = os.stat(path)
+        sig.append((path, st.st_mtime_ns, st.st_size))
+    return tuple(sig)
+
+
+def _load_yaml_rules():
+    signature = _yaml_signature()
+    if signature != _yaml_cache["signature"]:
+        rules = []
+        for filepath, _mtime, _size in signature:
+            with open(filepath, "r", encoding="utf-8") as f:
+                for rule in (yaml.safe_load(f) or []):
+                    rule["_file"] = filepath
+                    rules.append(rule)
+        _yaml_cache["rules"] = rules
+        _yaml_cache["signature"] = signature
+    return _yaml_cache["rules"]
+
+
 def load_all_rules():
-    rules = []
-    for filepath in glob.glob(os.path.join(RULES_DIR, "**", "*.yaml"), recursive=True):
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or []
-            for rule in data:
-                rule["_file"] = filepath
-                rules.append(rule)
+    # Each rule dict is copied (cheap) so a caller that edits a rule cannot corrupt the cached originals.
+    rules = [dict(r) for r in _load_yaml_rules()]
     rules.extend(_load_custom_rules())
     return rules
 
@@ -100,8 +126,8 @@ def load_rules_by_categories(categories, level="low"):
     ]
 
 
-def count_by_category(level="aggressive"):
-    all_rules = load_all_rules()
+def count_by_category(level="aggressive", all_rules=None):
+    all_rules = load_all_rules() if all_rules is None else all_rules
     max_rank = LEVEL_RANK.get(level, 2)
     counts = {}
     for r in all_rules:
@@ -116,4 +142,5 @@ def count_by_category_all_levels():
     """Returns {'low': {owasp: count}, 'medium': {...}, 'aggressive': {...}}, for a UI that
     shows payload counts per category and updates them live as the operator switches
     scan level."""
-    return {lvl: count_by_category(lvl) for lvl in ("low", "medium", "aggressive")}
+    all_rules = load_all_rules()
+    return {lvl: count_by_category(lvl, all_rules) for lvl in ("low", "medium", "aggressive")}

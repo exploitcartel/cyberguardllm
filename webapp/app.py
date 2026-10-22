@@ -41,6 +41,8 @@ seed_admin()
 # fresh process is driving it, so its own Stop button would never take
 # effect. Clear those now instead of leaving them stuck.
 reap_orphaned_tasks()
+# Parse the rule library once at startup so the first visit to Scan Configs / Rules is as fast as the rest.
+load_all_rules()
 
 
 # --- Request hardening -------------------------------------------------------

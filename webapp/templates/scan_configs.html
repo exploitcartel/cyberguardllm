@@ -164,6 +164,7 @@
       <button type="button" id="btnDeleteConfigs" class="btn btn-danger" style="padding:7px 12px;">{{ t('btn_delete') }}</button>
     </div>
     {% endif %}
+    <div style="overflow-x:auto;">
     <table>
       <tr>
         {% if user_role in ('administrator','global_administrator') %}<th style="width:34px;"><input type="checkbox" id="configsSelectAll"></th>{% endif %}
@@ -211,6 +212,7 @@
       <tr><td colspan="5" style="text-align:center;color:var(--text-muted);">{{ t('no_configs_yet') }}</td></tr>
       {% endfor %}
     </table>
+    </div>
   </div>
 </div>
 
