@@ -1,265 +1,307 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="page-header">
-  <div><h1>Scan in Progress</h1><p>Target: {{ target_name }} | Config: {{ config_name }}</p></div>
-  <div style="display:flex;gap:10px;">
-    <button id="btnPauseResume" class="btn btn-warning" onclick="togglePause()">⏸ Pause</button>
-    <button id="btnStop" class="btn btn-danger" onclick="stopScan()">⏹ Stop</button>
-  </div>
-</div>
+<style>
+  /* One self-contained console: header, 3D view, progress and side panel share a single surface, so the page
+     reads as one instrument instead of separate boxes with empty space around them. */
+  .stage{
+    --s-bg:#070d1a; --s-bg2:#0b1428; --s-line:rgba(130,170,255,.14); --s-text:#e8edf8; --s-muted:#8d9ab4;
+    --s-accent:#60a5fa; --s-red:#f87171; --s-green:#34d399; --s-amber:#fbbf24;
+    display:flex;flex-direction:column;height:calc(100vh - 64px);min-height:600px;
+    background:radial-gradient(120% 90% at 50% 0%, #0f1d3a 0%, var(--s-bg) 58%);
+    color:var(--s-text);border:1px solid var(--s-line);border-radius:18px;overflow:hidden;
+    box-shadow:0 18px 50px rgba(8,16,40,.22);
+  }
+  .stage-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 26px;
+    border-bottom:1px solid var(--s-line);}
+  .stage-title{display:flex;align-items:center;gap:14px;min-width:0;}
+  .stage-title h1{font-size:19px;font-weight:650;margin:0;color:var(--s-text);letter-spacing:.01em;}
+  .stage-title p{margin:2px 0 0;font-size:13.5px;color:var(--s-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .status-pill{display:inline-flex;align-items:center;gap:8px;font:600 12px var(--mono);letter-spacing:.08em;
+    padding:6px 11px;border-radius:999px;border:1px solid var(--s-line);color:var(--s-green);background:rgba(52,211,153,.08);}
+  .status-pill i{width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor;}
+  .status-pill.paused{color:var(--s-amber);background:rgba(251,191,36,.08);}
+  .status-pill.stopped{color:var(--s-red);background:rgba(248,113,113,.08);}
+  .status-pill.done{color:var(--s-accent);background:rgba(96,165,250,.08);}
+  .stage-actions{display:flex;gap:10px;flex-shrink:0;}
+  .s-btn{font:600 14px var(--font);padding:9px 16px;border-radius:10px;border:1px solid var(--s-line);color:var(--s-text);
+    background:rgba(255,255,255,.04);cursor:pointer;transition:background .15s,border-color .15s;}
+  .s-btn:hover:not(:disabled){background:rgba(255,255,255,.09);}
+  .s-btn:disabled{opacity:.4;cursor:default;}
+  .s-btn.danger{border-color:rgba(248,113,113,.45);color:#fecaca;background:rgba(248,113,113,.1);}
+  .s-btn.danger:hover:not(:disabled){background:rgba(248,113,113,.2);}
 
-<div class="grid" style="grid-template-columns: 1.3fr 1fr; gap:20px;">
-  <div class="card" style="min-height:460px;display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden;">
-    <div id="brainWrap" style="width:100%;height:460px;position:relative;">
-      <canvas id="liveBrainCanvas" style="width:100%;height:100%;display:block;"></canvas>
-      <div style="position:absolute;top:16px;left:20px;font-family:var(--mono);font-size:14px;color:var(--text-muted);">
-        NEURAL SCAN ENGINE <span id="engineStatus" style="color:#22c55e;">● ACTIVE</span>
+  .stage-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;}
+  .stage-view{display:flex;flex-direction:column;min-width:0;min-height:0;}
+  .head-wrap{position:relative;flex:1;min-height:0;}
+  .head-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+  .no-webgl-note{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--s-muted);
+    font-size:14px;text-align:center;padding:24px;}
+  .head-wrap.no-webgl .no-webgl-note{display:flex;}
+
+  .callout{position:absolute;width:clamp(170px,19%,230px);padding:10px 13px;border-radius:11px;
+    background:rgba(16,30,62,.9);border:1px solid rgba(130,170,255,.26);backdrop-filter:blur(6px);
+    animation:callout-in .5s cubic-bezier(.22,1,.36,1) both;pointer-events:none;}
+  @keyframes callout-in{from{opacity:0;transform:translateY(8px) scale(.97);}to{opacity:1;transform:none;}}
+  .callout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .callout-label{font:600 13px/1.25 var(--font);color:var(--s-text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .callout-sub{margin-top:7px;display:flex;align-items:center;justify-content:space-between;gap:8px;font:12px var(--mono);color:#a9b6d3;}
+  .callout-sub span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .chip{font:700 10.5px var(--mono);letter-spacing:.06em;padding:3px 7px;border-radius:6px;flex-shrink:0;}
+  .chip.fail{color:#fecaca;background:rgba(248,113,113,.2);}
+  .chip.pass{color:#a7f3d0;background:rgba(52,211,153,.16);}
+  .chip.review{color:#fde68a;background:rgba(251,191,36,.18);}
+  .chip.error{color:#cbd5e1;background:rgba(148,163,184,.2);}
+  .callout.fail{border-color:rgba(248,113,113,.5);}
+  .slot-1{left:3%;top:9%;} .slot-2{right:3%;top:6%;} .slot-3{left:1%;top:40%;}
+  .slot-4{right:1%;top:38%;} .slot-5{left:5%;top:70%;} .slot-6{right:5%;top:68%;}
+
+  .stage-foot{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px 18px;
+    padding:14px 26px 18px;border-top:1px solid var(--s-line);}
+  .pct{font:650 30px var(--mono);line-height:1;min-width:92px;}
+  .bar{height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;}
+  .bar > span{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#2563eb,#60a5fa);
+    transition:width .5s ease;}
+  .count{font:13px var(--mono);color:var(--s-muted);white-space:nowrap;}
+  .phase{grid-column:1 / -1;font:13px var(--mono);color:var(--s-accent);min-height:18px;}
+
+  .stage-side{display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--s-line);
+    background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,0));}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--s-line);}
+  .stat{padding:18px 20px;}
+  .stat + .stat{border-left:1px solid var(--s-line);}
+  .stat-label{font:600 11px var(--font);letter-spacing:.08em;text-transform:uppercase;color:var(--s-muted);}
+  .stat-value{margin-top:6px;font:650 26px var(--mono);}
+  .stat-value.red{color:var(--s-red);}
+  .log-head{padding:16px 20px 8px;font:600 11px var(--font);letter-spacing:.08em;text-transform:uppercase;color:var(--s-muted);}
+  .log{flex:1;min-height:0;overflow-y:auto;padding:0 20px 16px;font:12.5px/1.55 var(--mono);color:var(--s-muted);
+    scrollbar-width:thin;scrollbar-color:rgba(130,170,255,.28) transparent;}
+  .log::-webkit-scrollbar{width:8px;} .log::-webkit-scrollbar-thumb{background:rgba(130,170,255,.25);border-radius:8px;}
+  .log::-webkit-scrollbar-track{background:transparent;}
+  .log-line{display:flex;gap:8px;align-items:baseline;padding:3px 0;border-bottom:1px solid rgba(130,170,255,.06);}
+  .log-line time{color:#5e6b86;flex-shrink:0;}
+  .log-line .rid{color:var(--s-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .log-line .v{margin-left:auto;font-weight:700;flex-shrink:0;}
+  .log-line .v.fail{color:var(--s-red);} .log-line .v.pass{color:var(--s-green);}
+  .log-line .v.review{color:var(--s-amber);} .log-line .v.error{color:#94a3b8;}
+  .log-note{color:var(--s-accent);padding:4px 0;}
+  .credit{padding:8px 26px;border-top:1px solid var(--s-line);font:11.5px var(--font);color:#5e6b86;}
+  .credit a{color:#7f8db0;}
+
+  @media (max-width:1000px){
+    .stage{height:auto;}
+    .stage-body{grid-template-columns:1fr;}
+    .head-wrap{height:62vh;flex:none;}
+    .stage-side{border-left:0;border-top:1px solid var(--s-line);}
+    .log{max-height:260px;}
+    .slot-3,.slot-4,.slot-5,.slot-6{display:none;}
+  }
+  @media (prefers-reduced-motion:reduce){.callout{animation:none;}.bar > span{transition:none;}}
+</style>
+
+<section class="stage" id="stage">
+  <header class="stage-bar">
+    <div class="stage-title">
+      <span class="status-pill" id="statusPill"><i></i><span id="statusText">ACTIVE</span></span>
+      <div>
+        <h1>Scan in progress</h1>
+        <p>Target: {{ target_name }} &nbsp;|&nbsp; Config: {{ config_name }}</p>
       </div>
-      <div style="position:absolute;bottom:16px;left:20px;right:20px;text-align:center;">
-        <div id="progressPct" style="font-family:var(--mono);font-size:32px;font-weight:600;">0%</div>
-        <div style="font-family:var(--mono);font-size:14px;color:var(--text-muted);" id="progressCount">0 / 0 payloads</div>
-        <div style="font-family:var(--mono);font-size:14px;color:var(--accent);margin-top:4px;" id="phaseLabel"></div>
+    </div>
+    <div class="stage-actions">
+      <button id="btnPauseResume" class="s-btn" type="button">&#9208; Pause</button>
+      <button id="btnStop" class="s-btn danger" type="button">&#9209; Stop</button>
+    </div>
+  </header>
+
+  <div class="stage-body">
+    <div class="stage-view">
+      <div class="head-wrap" id="headWrap">
+        <canvas id="headCanvas" aria-hidden="true"></canvas>
+        <div class="no-webgl-note">3D view is unavailable in this browser. The scan itself is running normally.</div>
+        <div id="callouts"></div>
+      </div>
+      <div class="stage-foot">
+        <div class="pct" id="progressPct">0%</div>
+        <div class="bar"><span id="progressBar"></span></div>
+        <div class="count" id="progressCount">0 / 0 payloads</div>
+        <div class="phase" id="phaseLabel"></div>
       </div>
     </div>
+
+    <aside class="stage-side">
+      <div class="stats">
+        <div class="stat"><div class="stat-label">Findings</div><div class="stat-value red" id="findingsCount">0</div></div>
+        <div class="stat"><div class="stat-label">Tested</div><div class="stat-value" id="testedCount">0</div></div>
+        <div class="stat"><div class="stat-label">Total</div><div class="stat-value" id="totalCount">0</div></div>
+      </div>
+      <div class="log-head">Live log</div>
+      <div class="log" id="liveLog"></div>
+    </aside>
   </div>
 
-  <div style="display:flex;flex-direction:column;gap:16px;">
-    <div class="card">
-      <div class="metric-label">Findings detected</div>
-      <div class="metric-value" id="findingsCount" style="color:var(--danger);">0</div>
-    </div>
-    <div class="card" style="flex:1;">
-      <div class="metric-label" style="margin-bottom:10px;">Live payload log</div>
-      <div id="liveLog" style="font-family:var(--mono);font-size:13.5px;color:var(--text-muted);height:280px;overflow-y:auto;display:flex;flex-direction:column-reverse;gap:4px;"></div>
-    </div>
+  <div class="credit">
+    Head model &ldquo;Infinite&rdquo; by Lee Perry-Smith (Infinite Realities), licensed
+    <a href="/static/models/head-license.txt" target="_blank" rel="noopener">CC BY 3.0</a>.
   </div>
-</div>
+</section>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
+</script>
+<script type="module">
+import { createHeadScene } from '/static/js/head-scene.js';
+
 const taskId = {{ task_id }};
-const wrap = document.getElementById('brainWrap');
-const canvas = document.getElementById('liveBrainCanvas');
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, wrap.clientWidth/wrap.clientHeight, 0.1, 100);
-camera.position.z = 7;
-const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
-function resize(){renderer.setSize(wrap.clientWidth, wrap.clientHeight);camera.aspect=wrap.clientWidth/wrap.clientHeight;camera.updateProjectionMatrix();}
-resize();
-window.addEventListener('resize', resize);
+const OWASP_LABELS = {{ owasp_labels | tojson }};
+const $ = (id) => document.getElementById(id);
 
-const brainGroup = new THREE.Group();
-scene.add(brainGroup);
+const head = createHeadScene($('headWrap'), $('headCanvas'), {
+  onFail: () => $('headWrap').classList.add('no-webgl'),
+});
 
-function brainShape(u,v){
-  const theta=u*Math.PI*2, phi=v*Math.PI;
-  const base=Math.sin(phi);
-  const rx=1.95, ry=1.55, rz=1.65;
-  let bump=1;
-  bump+=Math.sin(theta*9+phi*7)*0.05;
-  bump+=Math.sin(theta*15-phi*5)*0.03;
-  bump+=Math.sin(phi*20)*0.035;
-  bump+=Math.cos(theta*4)*Math.sin(phi*11)*0.04;
-  let x=rx*base*Math.cos(theta)*bump;
-  let y=ry*Math.cos(phi);
-  let z=rz*base*Math.sin(theta)*bump;
-  if(y<-1.0){ y=-1.0-(Math.abs(y)-1.0)*0.4; }
-  const nearMidline=Math.exp(-Math.pow(x*3.2,2));
-  if(y>0){ x+=(x>=0?1:-1)*nearMidline*0.22; z*=(1-nearMidline*0.12); y-=nearMidline*0.28; }
-  return new THREE.Vector3(x,y,z);
-}
-
-const nodeCount = 900;
-const positions = new Float32Array(nodeCount*3);
-const nodeColors = new Float32Array(nodeCount*3);
-const nodeVecs = [];
-const baseColor = new THREE.Color(0x3b82f6);
-for(let i=0;i<nodeCount;i++){
-  const p = brainShape(Math.random(), Math.random());
-  positions[i*3]=p.x; positions[i*3+1]=p.y; positions[i*3+2]=p.z;
-  nodeColors[i*3]=baseColor.r; nodeColors[i*3+1]=baseColor.g; nodeColors[i*3+2]=baseColor.b;
-  nodeVecs.push(p);
-}
-const pGeo = new THREE.BufferGeometry();
-pGeo.setAttribute('position', new THREE.BufferAttribute(positions,3));
-pGeo.setAttribute('color', new THREE.BufferAttribute(nodeColors,3));
-const pMat = new THREE.PointsMaterial({size:0.05, transparent:true, opacity:0.9, vertexColors:true});
-const points = new THREE.Points(pGeo, pMat);
-brainGroup.add(points);
-
-const linePositions = [];
-const maxDist=0.55, maxLinksPerNode=4;
-for(let i=0;i<nodeCount;i++){
-  let links=0;
-  for(let j=i+1;j<nodeCount && links<maxLinksPerNode;j++){
-    if(nodeVecs[i].distanceTo(nodeVecs[j])<maxDist){
-      linePositions.push(nodeVecs[i].x,nodeVecs[i].y,nodeVecs[i].z, nodeVecs[j].x,nodeVecs[j].y,nodeVecs[j].z);
-      links++;
-    }
-  }
-}
-const lGeo = new THREE.BufferGeometry();
-lGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions,3));
-const lMat = new THREE.LineBasicMaterial({color:0x2563eb, transparent:true, opacity:0.18});
-brainGroup.add(new THREE.LineSegments(lGeo, lMat));
-
-// outer glow shell that expands with progress
-const glowGeo = new THREE.SphereGeometry(2.4, 32, 32);
-const glowMat = new THREE.MeshBasicMaterial({color:0x2563eb, transparent:true, opacity:0.04, wireframe:true});
-const glowShell = new THREE.Mesh(glowGeo, glowMat);
-brainGroup.add(glowShell);
-
-let rotVelY = 0.004;
-let alertFlash = 0;
-let targetScale = 1.0;
-
-function pulseRandomNodes(count, color){
-  const colorAttr = pGeo.attributes.color;
-  for(let k=0;k<count;k++){
-    const idx = Math.floor(Math.random()*nodeCount);
-    colorAttr.array[idx*3] = color.r;
-    colorAttr.array[idx*3+1] = color.g;
-    colorAttr.array[idx*3+2] = color.b;
-  }
-  colorAttr.needsUpdate = true;
-}
-
-function decayColors(){
-  const colorAttr = pGeo.attributes.color;
-  for(let i=0;i<nodeCount;i++){
-    colorAttr.array[i*3]   += (baseColor.r - colorAttr.array[i*3]) * 0.04;
-    colorAttr.array[i*3+1] += (baseColor.g - colorAttr.array[i*3+1]) * 0.04;
-    colorAttr.array[i*3+2] += (baseColor.b - colorAttr.array[i*3+2]) * 0.04;
-  }
-  colorAttr.needsUpdate = true;
-}
-
-function animate(){
-  requestAnimationFrame(animate);
-  brainGroup.rotation.y += rotVelY;
-  decayColors();
-
-  if(alertFlash > 0){
-    alertFlash -= 0.02;
-    glowMat.color.setRGB(0.93, 0.15, 0.15);
-    glowMat.opacity = 0.06 + alertFlash*0.25;
-  } else {
-    glowMat.color.setHex(0x2563eb);
-    glowMat.opacity = 0.04;
-  }
-
-  const s = brainGroup.scale.x + (targetScale - brainGroup.scale.x) * 0.05;
-  brainGroup.scale.set(s,s,s);
-
-  renderer.render(scene, camera);
-}
-animate();
-
-const cyanColor = new THREE.Color(0x60a5fa);
-const redColor = new THREE.Color(0xef4444);
-
-let lastDone = 0;
-let lastPhaseText = '';
+// ---- controls -------------------------------------------------------------------------------------------
 let currentControl = 'run';
 let actionInFlight = false;
-const log = document.getElementById('liveLog');
-const btnPauseResume = document.getElementById('btnPauseResume');
-const btnStop = document.getElementById('btnStop');
+const btnPauseResume = $('btnPauseResume');
+const btnStop = $('btnStop');
 
 function postControl(action){
-  return fetch('/tasks/' + taskId + '/' + action, {method:'POST'}).then(r=>r.json());
+  return fetch('/tasks/' + taskId + '/' + action, {method:'POST'}).then(r => r.json());
 }
-
-function togglePause(){
+btnPauseResume.addEventListener('click', () => {
   if(actionInFlight) return;
   actionInFlight = true;
-  const action = currentControl === 'pause' ? 'resume' : 'pause';
-  postControl(action).finally(()=>{ actionInFlight = false; });
-}
-
-function stopScan(){
+  postControl(currentControl === 'pause' ? 'resume' : 'pause').finally(() => { actionInFlight = false; });
+});
+btnStop.addEventListener('click', () => {
   if(actionInFlight) return;
   if(!confirm('Je i sigurt qe do te ndalosh skanimin? Gjetjet e deritanishme do te ruhen.')) return;
   actionInFlight = true;
-  postControl('stop').finally(()=>{ actionInFlight = false; });
-}
+  postControl('stop').finally(() => { actionInFlight = false; });
+});
 
+function setStatus(text, cls){
+  $('statusText').textContent = text;
+  $('statusPill').className = 'status-pill' + (cls ? ' ' + cls : '');
+}
 function applyControlUI(control){
   currentControl = control;
+  head.setPaused(control === 'pause');
   if(control === 'pause'){
-    btnPauseResume.textContent = '▶ Resume';
-    document.getElementById('engineStatus').textContent = '● PAUSED';
-    document.getElementById('engineStatus').style.color = '#f59e0b';
+    btnPauseResume.innerHTML = '&#9654; Resume';
+    setStatus('PAUSED', 'paused');
   } else {
-    btnPauseResume.textContent = '⏸ Pause';
-    if(document.getElementById('engineStatus').textContent !== '● DONE'){
-      document.getElementById('engineStatus').textContent = '● ACTIVE';
-      document.getElementById('engineStatus').style.color = '#22c55e';
-    }
+    btnPauseResume.innerHTML = '&#9208; Pause';
+    if(!finished) setStatus('ACTIVE', '');
   }
 }
 
-function addLogLine(text, isFail){
+// ---- live log + callouts --------------------------------------------------------------------------------
+const log = $('liveLog');
+const calloutBox = $('callouts');
+const VERDICT_TEXT = {FAIL:'VULNERABLE', PASS:'RESISTED', REVIEW:'REVIEW', ERROR:'ERROR'};
+let nextSlot = 0;
+
+function clock(){
+  return new Date().toTimeString().slice(0, 8);
+}
+function addLog(html, cls){
   const div = document.createElement('div');
-  div.textContent = text;
-  if(isFail){ div.style.color = '#ef4444'; }
+  div.className = cls || 'log-line';
+  div.innerHTML = html;
+  const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 24;
   log.appendChild(div);
-  while(log.children.length > 40){ log.removeChild(log.firstChild); }
+  while(log.children.length > 80){ log.removeChild(log.firstChild); }
+  if(stick) log.scrollTop = log.scrollHeight;
+}
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function showCallout(ev){
+  const slot = (nextSlot++ % 6) + 1;
+  const old = calloutBox.querySelector('.slot-' + slot);
+  if(old) old.remove();
+  const v = (ev.verdict || 'PASS').toLowerCase();
+  const card = document.createElement('div');
+  card.className = 'callout slot-' + slot + (v === 'fail' ? ' fail' : '');
+  const label = ev.module || OWASP_LABELS[ev.owasp] || ev.owasp || 'Test';
+  card.innerHTML =
+    '<div class="callout-label">' + esc(label) + '</div>' +
+    '<div class="callout-sub"><span>' + esc(ev.rule_id) + ' &middot; ' + esc(ev.owasp) + '</span>' +
+    '<span class="chip ' + v + '">' + (VERDICT_TEXT[ev.verdict] || esc(ev.verdict)) + '</span></div>';
+  calloutBox.appendChild(card);
 }
 
+let lastSeenId = 0;
+let seeded = false;
+function consumeRecent(recent){
+  if(!recent || !recent.length) return;
+  const fresh = recent.filter(e => e.id > lastSeenId).sort((a, b) => a.id - b.id);
+  if(!seeded){
+    // First poll (page opened mid-scan): do not replay history into the callouts, just remember where we are.
+    seeded = true;
+    lastSeenId = Math.max(...recent.map(e => e.id));
+    fresh.slice(-6).forEach(e => addLog(logRow(e)));
+    return;
+  }
+  if(!fresh.length) return;
+  fresh.forEach(e => addLog(logRow(e)));
+  lastSeenId = fresh[fresh.length - 1].id;
+  // At most two callouts per poll: a confirmed finding always wins, otherwise the newest result.
+  const loud = fresh.filter(e => e.verdict === 'FAIL' || e.verdict === 'REVIEW');
+  (loud.length ? loud.slice(-2) : [fresh[fresh.length - 1]]).forEach(showCallout);
+  head.pulse(Math.min(1, 0.25 + fresh.length * 0.1));
+}
+function logRow(e){
+  const v = (e.verdict || 'PASS').toLowerCase();
+  return '<time>' + clock() + '</time><span class="rid">' + esc(e.rule_id) + '</span>' +
+         '<span class="v ' + v + '">' + (VERDICT_TEXT[e.verdict] || esc(e.verdict)) + '</span>';
+}
+
+// ---- polling --------------------------------------------------------------------------------------------
+let lastPhaseText = '';
+let prevFindings = 0;
+let finished = false;
+
 function poll(){
-  fetch('/api/scan-status/' + taskId).then(r=>r.json()).then(data=>{
-    const pct = data.total > 0 ? Math.round((data.done/data.total)*100) : 0;
-    document.getElementById('progressPct').textContent = pct + '%';
-    document.getElementById('progressCount').textContent = data.done + ' / ' + data.total + ' payloads';
-    document.getElementById('findingsCount').textContent = data.findings;
-    targetScale = 1.0 + Math.min(data.findings * 0.03, 0.35);
+  fetch('/api/scan-status/' + taskId).then(r => r.json()).then(data => {
+    const pct = data.total > 0 ? Math.min(100, Math.round((data.done / data.total) * 100)) : 0;
+    $('progressPct').textContent = pct + '%';
+    $('progressBar').style.width = pct + '%';
+    $('progressCount').textContent = data.done + ' / ' + data.total + ' payloads';
+    $('findingsCount').textContent = data.findings;
+    $('testedCount').textContent = data.done;
+    $('totalCount').textContent = data.total;
 
-    // last_rule_id is either a bare rule id (no spaces, e.g. "OUT-004" or
-    // "ai-LLM01-1") while the static/AI-powered engine is testing payloads,
-    // or a human sentence (e.g. "Running PyRIT module...") once that phase
-    // is done and an external module (garak/PyRIT/recon/etc) has taken
-    // over. Tell them apart on whitespace so the log/label always reflects
-    // what is actually running right now, instead of freezing on the last
-    // payload count once the static phase ends.
+    // last_rule_id is a bare rule id while the static/AI engine is testing payloads, or a sentence
+    // (e.g. "Running PyRIT module...") once an external module has taken over.
     const isPhaseMessage = data.last_rule_id && /\s/.test(data.last_rule_id);
-
-    if(data.done > lastDone && !isPhaseMessage){
-      pulseRandomNodes(30, cyanColor);
-      if(data.last_rule_id){
-        addLogLine('[' + String(data.done).padStart(3,'0') + '] testing ' + data.last_rule_id + ' ... sent', false);
-      }
-      lastDone = data.done;
-    }
-
     if(isPhaseMessage && data.last_rule_id !== lastPhaseText){
-      document.getElementById('phaseLabel').textContent = data.last_rule_id;
-      addLogLine('  >> ' + data.last_rule_id, false);
+      $('phaseLabel').textContent = data.last_rule_id;
+      addLog('&rsaquo; ' + esc(data.last_rule_id), 'log-note');
       lastPhaseText = data.last_rule_id;
     } else if(!isPhaseMessage && lastPhaseText){
-      document.getElementById('phaseLabel').textContent = '';
+      $('phaseLabel').textContent = '';
       lastPhaseText = '';
     }
 
-    if(data.findings > (poll._prevFindings || 0)){
-      alertFlash = 1.0;
-      pulseRandomNodes(80, redColor);
-      addLogLine('  >> VULNERABILITY DETECTED', true);
-    }
-    poll._prevFindings = data.findings;
+    consumeRecent(data.recent);
+    if(data.findings > prevFindings && seeded){ head.alert(); }
+    prevFindings = data.findings;
 
     applyControlUI(data.control || 'run');
 
     if(data.status === 'completed' || data.status === 'stopped'){
-      document.getElementById('engineStatus').textContent = data.status === 'stopped' ? '● STOPPED' : '● DONE';
-      document.getElementById('engineStatus').style.color = data.status === 'stopped' ? '#ef4444' : '#3b82f6';
+      finished = true;
+      setStatus(data.status === 'stopped' ? 'STOPPED' : 'DONE', data.status === 'stopped' ? 'stopped' : 'done');
       btnPauseResume.disabled = true;
       btnStop.disabled = true;
-      setTimeout(()=>{ window.location.href = '/results/' + data.result_id; }, 1200);
+      setTimeout(() => { window.location.href = '/results/' + data.result_id; }, 1400);
     } else {
-      setTimeout(poll, 500);
+      setTimeout(poll, 700);
     }
-  }).catch(()=>{ setTimeout(poll, 1000); });
+  }).catch(() => { setTimeout(poll, 1200); });
 }
 poll();
 </script>
