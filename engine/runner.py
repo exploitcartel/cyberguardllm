@@ -8,6 +8,7 @@ from core.discovery import send_prompt, send_conversation_turn, is_transport_err
 from core.mutation import apply_mutations, MUTATION_LABELS
 from engine import ai_agent
 from engine import baseline_module
+from engine.graders import build_rubric_text, remediation_for
 
 OWASP_LABELS_FALLBACK = {
     "LLM01": "Prompt Injection", "LLM02": "Sensitive Information Disclosure",
@@ -271,7 +272,7 @@ def _evaluate_attempt(target, rule, ai_judge_cfg, min_confidence):
         try:
             judged_verdict, judged_severity, reasoning, judged_confidence = ai_agent.judge_response(
                 api_base, api_key, model, rule["owasp"], label, prompt_sent, raw_response,
-                business_context=business_context)
+                business_context=business_context, rubric=build_rubric_text(rule.get("grader")))
             confidence = judged_confidence
             severity = judged_severity
 
@@ -490,7 +491,8 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (result_id, rule_id, rule["owasp"], severity, verdict, prompt_sent, raw_response,
                  description, rule.get("module"), rule.get("source", "custom"),
-                 "Review the target's system instructions and output filtering for this category." if verdict == "FAIL" else "",
+                 (remediation_for(rule) or "Review the target's system instructions and output filtering for this category.")
+                 if verdict == "FAIL" else "",
                  confidence, repro_hits, repro_total),
             )
             conn.execute("UPDATE tasks SET progress_done=?, progress_findings=?, last_rule_id=? WHERE id=?",
