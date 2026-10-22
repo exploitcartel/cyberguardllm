@@ -47,6 +47,10 @@ python run.py
 
 Open `http://127.0.0.1:8000` and log in with `admin` / `admin` (you'll be forced to change it immediately).
 
+`run.py` binds to loopback only and runs with the debugger off. To reach the UI from another machine on a network you
+control, opt in with `CGLLM_HOST=0.0.0.0 python run.py` (the debugger is refused on non-loopback hosts). Repeated
+failed logins lock that username/IP pair out for 5 minutes.
+
 `install.sh` creates an isolated virtual environment, installs the core app, installs Playwright's Chromium
 browser (for Browser-Assisted Discovery), and installs the two optional external pentest engines, garak and
 PyRIT. It never installs anything outside the venv, and it never silently falls back to your system Python - if a
@@ -168,8 +172,10 @@ The report content is always written in English, regardless of which language th
 
 ### 8. Risk scoring
 
-Each finding has a severity (critical, high, medium, low), weighted 25/15/8/3 respectively, summed and capped at 100
-to produce the scan's overall risk score (`engine/scorer.py`).
+Each FAIL finding has a severity (critical, high, medium, low), weighted 25/15/8/3 respectively. The weights are
+summed and mapped through `100 * (1 - e^(-sum/50))` to produce the scan's overall risk score (`engine/scorer.py`),
+so the score keeps rising with more findings instead of hitting a flat cap after four critical ones. REVIEW and ERROR
+findings never count toward it.
 
 ### 9. Browser-Assisted Discovery
 
