@@ -549,12 +549,9 @@ def targets_bulk_delete():
 
 
 def _external_tool_status():
-    garak_ok = pyrit_ok = False
-    try:
-        import garak  # noqa: F401
-        garak_ok = True
-    except Exception:
-        pass
+    from engine.garak_module import _available as _garak_available
+    garak_ok = _garak_available()
+    pyrit_ok = False
     try:
         import pyrit  # noqa: F401
         pyrit_ok = True

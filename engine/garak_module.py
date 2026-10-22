@@ -100,10 +100,29 @@ def _deep_find_texts(obj, limit=5):
     return found
 
 
+def _garak_python() -> str:
+    """
+    garak and PyRIT need incompatible versions of 'datasets', so garak can
+    live in its own venv-garak/ next to the main venv. If that venv exists
+    its interpreter is used for detection and for the garak subprocess;
+    otherwise garak is expected in the same environment as the app.
+    """
+    scripts = "Scripts" if os.name == "nt" else "bin"
+    exe = "python.exe" if os.name == "nt" else "python"
+    candidate = os.path.join(PROJECT_ROOT, "venv-garak", scripts, exe)
+    return candidate if os.path.exists(candidate) else sys.executable
+
+
 def _available() -> bool:
+    py = _garak_python()
+    if py == sys.executable:
+        try:
+            import garak  # noqa: F401
+            return True
+        except Exception:
+            return False
     try:
-        import garak  # noqa: F401
-        return True
+        return subprocess.run([py, "-c", "import garak"], capture_output=True, timeout=60).returncode == 0
     except Exception:
         return False
 
@@ -152,7 +171,7 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
         env = dict(os.environ)
         env["PYTHONPATH"] = PROJECT_ROOT + os.pathsep + env.get("PYTHONPATH", "")
         cmd = [
-            sys.executable, "-m", "garak",
+            _garak_python(), "-m", "garak",
             "--model_type", "integrations.garak_generator.CyberGuardGenerator",
             "--model_name", str(target_row["id"]),
             "--probes", ",".join(probes),
