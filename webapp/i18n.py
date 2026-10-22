@@ -65,6 +65,7 @@ TRANSLATIONS = {
                         "al": "Fut URL-në dhe token-in. Do zbulojmë vetë auth scheme, body format dhe response field."},
     "field_target_name": {"en": "Target name", "al": "Emri i objektivit"},
     "field_target_url": {"en": "Target URL", "al": "URL e objektivit"},
+    "optional": {"en": "optional", "al": "opsionale"},
     "field_session_token": {"en": "Session Token", "al": "Token Sesioni"},
     "btn_detect": {"en": "Detect", "al": "Zbulo"},
     "btn_cancel": {"en": "Cancel", "al": "Anulo"},

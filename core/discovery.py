@@ -4,7 +4,9 @@ import re
 import time
 import json
 
-AUTH_SCHEMES = ["bearer", "cookie", "x-session-token", "x-auth-token", "query"]
+# "none" = send no credentials at all, for chat endpoints that need no token. It is
+# tried last when a token was supplied, and is the only scheme tried when it was not.
+AUTH_SCHEMES = ["bearer", "cookie", "x-session-token", "x-auth-token", "query", "none"]
 
 # A small rotation of realistic, current desktop browser User-Agent strings.
 # Used only in stealth mode, so an authorized scan against a target with
@@ -380,8 +382,9 @@ def discover_target(url: str, token: str, timeout: float = 25.0):
     """
     ping_prompt = "hello"
     results_log = []
+    token = (token or "").strip()
 
-    for auth_scheme in AUTH_SCHEMES:
+    for auth_scheme in (AUTH_SCHEMES if token else ["none"]):
         headers = _build_headers(auth_scheme, token)
         params = {"token": token} if auth_scheme == "query" else {}
 

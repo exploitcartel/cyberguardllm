@@ -439,7 +439,7 @@ def target_save():
     if err: return err
     name = request.form.get("name")
     url = request.form.get("url")
-    token = request.form.get("token")
+    token = (request.form.get("token") or "").strip()  # may be empty: some targets need no credentials
     auth_scheme = request.form.get("auth_scheme")
     body_format = request.form.get("body_format")
     body_encoding = request.form.get("body_encoding", "json") or "json"
