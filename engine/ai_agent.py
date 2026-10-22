@@ -444,12 +444,19 @@ def generate_executive_summary(api_base, api_key, model, target_name, business_c
 
 
 def judge_response(api_base, api_key, model, owasp_category, category_label, prompt_sent, response_text,
-                    business_context=None):
+                    business_context=None, rubric=None):
     user_msg = (
         f"OWASP category: {owasp_category} - {category_label}\n"
         f"Prompt sent to target: {prompt_sent}\n"
         f"Target's response: {response_text}\n"
     )
+    if rubric:
+        # A rule that names a specific grader (engine/graders.py) gets a precise definition of what a FAIL
+        # means for THAT vulnerability, instead of the judge guessing from the broad OWASP category alone.
+        user_msg += (
+            "Grade against this specific rubric (it defines what counts as FAIL and PASS for this exact "
+            f"vulnerability): {rubric}\n"
+        )
     if business_context:
         user_msg += f"Business context for this target (use it to judge real-world severity): {business_context}\n"
     raw = _chat(api_base, api_key, model, JUDGE_SYSTEM_PROMPT, user_msg)

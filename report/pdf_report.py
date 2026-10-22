@@ -497,9 +497,14 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
                     f"<font color='#6b7280'>[{f['owasp']} - {OWASP_NAMES.get(f['owasp'], f['owasp'])}]</font>",
                     body))
                 elements.append(Paragraph(f["description"] or "-", body))
-                elements.append(Paragraph(
-                    f"<b>Recommendation:</b> {RECOMMENDATIONS.get(f['owasp'], 'Review the targets handling of this category and apply defense-in-depth controls.')}",
-                    body))
+                try:
+                    own_rec = (f["recommendation"] or "").strip()
+                except (IndexError, KeyError):
+                    own_rec = ""
+                if own_rec.startswith("Review the target's system instructions and output filtering"):
+                    own_rec = ""  # the generic runner default; the per-category text below is better
+                rec_text = own_rec or RECOMMENDATIONS.get(f['owasp'], 'Review the targets handling of this category and apply defense-in-depth controls.')
+                elements.append(Paragraph(f"<b>Recommendation:</b> {rec_text}", body))
                 elements.append(Spacer(1, 0.35 * cm))
 
     # ---------- Needs manual review ----------
