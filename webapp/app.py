@@ -144,6 +144,20 @@ def _set_session_cookie(resp, username):
                     samesite="Lax", secure=request.is_secure)
 
 
+@app.context_processor
+def _asset_versions():
+    """
+    Version (file mtime) of the head scene module, appended to its import URL. Without it a browser may keep using
+    a cached copy of the script after an update (static files are served without an explicit max-age, so browsers
+    apply heuristic caching) and then run new page code against the old script.
+    """
+    try:
+        v = int(os.path.getmtime(os.path.join(BASE_DIR, "static", "js", "head-scene.js")))
+    except OSError:
+        v = 0
+    return {"head_scene_v": v}
+
+
 def _row_get_app(row, key, default=None):
     """sqlite3.Row supports index/key access but not .get(); this shims it."""
     try:

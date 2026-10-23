@@ -25,7 +25,7 @@ class LiveScanPageTests(CyberGuardTestCase):
     def test_page_renders_the_single_surface_console_with_target_and_config(self):
         self._seed()
         page = self.client.get("/scan/1/live").get_data(as_text=True)
-        for needle in ('id="stage"', 'id="headCanvas"', 'id="callouts"', 'id="liveLog"', 'id="progressBar"',
+        for needle in ('id="stage"', 'id="headCanvas"', 'id="tickets"', 'id="links"', 'id="liveLog"', 'id="progressBar"',
                        'id="btnPauseResume"', 'id="btnStop"', "Target: Bot", "Config: Full Audit",
                        "createHeadScene", "CC BY 3.0", "Lee Perry-Smith"):
             self.assertIn(needle, page)
@@ -107,3 +107,55 @@ class ThemeAndGlobeTests(CyberGuardTestCase):
             self.assertIn(present, js)
         for gone in ("RingGeometry", "CylinderGeometry", "PLATFORM_Y", "LineDashedMaterial"):
             self.assertNotIn(gone, js)
+
+
+class TicketsTests(CyberGuardTestCase):
+    def _scan(self, verdicts):
+        conn = self.get_conn()
+        conn.execute("INSERT INTO targets (name,url,token_encrypted,created_at) VALUES ('Bot','http://t','e','2026')")
+        conn.execute("INSERT INTO scan_configs (name,categories,created_at) VALUES ('c','LLM01','2026')")
+        conn.execute("INSERT INTO tasks (target_id,scan_config_id,status,progress_total,progress_done,created_at) "
+                     "VALUES (1,1,'running',100,10,'2026')")
+        conn.execute("INSERT INTO scan_results (task_id,target_id,timestamp,status) VALUES (1,1,'2026','running')")
+        conn.execute("UPDATE tasks SET result_id=1 WHERE id=1")
+        for i, verdict in enumerate(verdicts, start=1):
+            conn.execute("""INSERT INTO findings (scan_result_id,rule_id,owasp,severity,verdict,prompt_sent,
+                            raw_response,description,module) VALUES (1,?,?,?,?,?,?,?,?)""",
+                         (f"R-{i}", "LLM06", "high", verdict, "p", "r", "d", "Tool & Function Discovery"))
+        conn.commit()
+        conn.close()
+
+    def test_status_api_hits_are_only_fail_and_review_newest_first(self):
+        self._scan(["FAIL", "PASS", "REVIEW", "PASS", "ERROR", "PASS"])
+        data = self.client.get("/api/scan-status/1").get_json()
+        self.assertEqual([h["rule_id"] for h in data["hits"]], ["R-3", "R-1"])
+        self.assertEqual({h["verdict"] for h in data["hits"]}, {"FAIL", "REVIEW"})
+
+    def test_hits_are_not_pushed_out_by_a_long_run_of_harmless_results(self):
+        self._scan(["FAIL"] + ["PASS"] * 30)
+        data = self.client.get("/api/scan-status/1").get_json()
+        self.assertEqual(len(data["recent"]), 8)
+        self.assertNotIn("FAIL", [r["verdict"] for r in data["recent"]])
+        self.assertEqual([h["rule_id"] for h in data["hits"]], ["R-1"])
+
+    def test_hits_are_capped_at_eight(self):
+        self._scan(["FAIL"] * 12)
+        self.assertEqual(len(self.client.get("/api/scan-status/1").get_json()["hits"]), 8)
+
+    def test_page_has_the_ticket_system_and_a_cache_busted_scene_import(self):
+        self._scan(["FAIL"])
+        page = self.client.get("/scan/1/live").get_data(as_text=True)
+        for needle in ("function addTicket", "head.alertPulses(3)", "head.setReserve", "head.getShield()",
+                       "ticket-hit", "createElementNS(SVGNS, 'line')", "/static/js/head-scene.js?v="):
+            self.assertIn(needle, page)
+        self.assertNotIn("showCallout", page)
+        self.assertRegex(page, r"head-scene\.js\?v=\d+")
+
+    def test_login_page_import_is_cache_busted_too(self):
+        self.client.post("/logout")
+        self.assertRegex(self.client.get("/login").get_data(as_text=True), r"head-scene\.js\?v=\d+")
+
+    def test_scene_exposes_the_shield_and_the_pulse_sequence(self):
+        js = self.client.get("/static/js/head-scene.js").get_data(as_text=True)
+        for needle in ("alertPulses(n = 3)", "getShield()", "setReserve(px)", "state.queue"):
+            self.assertIn(needle, js)
