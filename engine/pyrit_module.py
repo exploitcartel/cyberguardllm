@@ -93,7 +93,7 @@ def _insert_explainer(conn, result_id, rule_id, message, recommendation=""):
         """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
            description, module, source, recommendation)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (result_id, rule_id, "LLM01", "low", "PASS", "", "", message, None, "pyrit", recommendation),
+        (result_id, rule_id, "LLM01", "low", "ERROR", "", "", message, None, "pyrit", recommendation),
     )
     conn.commit()
 
@@ -118,18 +118,20 @@ async def _run_one_objective_async(target_id, objective_text, ai_api_base, ai_ap
     transcript = []
 
     class _RecordingTarget(CyberGuardTarget):
-        def _send_text(self, prompt_text: str) -> str:
-            response_text = super()._send_text(prompt_text)
+        def _send_text(self, prompt_text: str, history=None) -> str:
+            response_text = super()._send_text(prompt_text, history)
             transcript.append({"prompt": prompt_text, "response": response_text})
             return response_text
 
-    objective_target = _RecordingTarget(target_id)
-
+    # PyRIT's central memory must exist BEFORE any target is constructed (a PromptTarget registers itself with it
+    # in __init__); building the target first failed with "Central memory instance has not been set".
     try:
         from pyrit.setup import IN_MEMORY, initialize_pyrit_async
         await initialize_pyrit_async(memory_db_type=IN_MEMORY)
     except Exception:
         pass  # older/newer PyRIT may not need or expose this; continue regardless
+
+    objective_target = _RecordingTarget(target_id=target_id)
 
     ran = False
     degraded_reason = None
@@ -266,7 +268,9 @@ def run_pyrit_scan(conn, result_id, target_row, objective_keys, timeout_s=300):
             if confidence < min_confidence:
                 verdict = "REVIEW"
         except Exception as e:
-            verdict, severity, reasoning, confidence = "PASS", "low", f"AI judge call failed: {e}", None
+            verdict, severity, reasoning, confidence = "ERROR", "low", (
+                f"AI judge call failed ({e}); this transcript could not be evaluated. Scan/configuration issue, "
+                "not a security result."), None
 
         if verdict == "FAIL":
             findings_count += 1
