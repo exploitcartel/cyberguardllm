@@ -158,7 +158,7 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
             """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
                description, module, source, recommendation)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (result_id, "garak-not-installed", "LLM01", "low", "PASS", "", "",
+            (result_id, "garak-not-installed", "LLM01", "low", "ERROR", "", "",
              "The Garak module was enabled for this scan config but the 'garak' package is not installed. "
              "Run: pip install -r requirements.txt",
              None, "garak", "Install garak to use this module: pip install garak"),
@@ -185,7 +185,7 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
                 """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
                    description, module, source, recommendation)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                (result_id, "garak-run-error", "LLM01", "low", "PASS", "", str(e),
+                (result_id, "garak-run-error", "LLM01", "low", "ERROR", "", str(e),
                  f"Garak module failed to run: {e}", None, "garak",
                  "Check that garak is installed correctly and the target is reachable."),
             )
@@ -198,7 +198,7 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
                 """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
                    description, module, source, recommendation)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                (result_id, "garak-no-report", "LLM01", "low", "PASS", "", "",
+                (result_id, "garak-no-report", "LLM01", "low", "ERROR", "", "",
                  "Garak ran but produced no report.jsonl file; see the task's activity log for details.",
                  None, "garak", ""),
             )

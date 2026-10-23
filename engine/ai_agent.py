@@ -199,7 +199,7 @@ Respond ONLY with compact JSON in this exact shape, nothing else:
 """
 
 
-def _chat_openai_compatible(api_base, api_key, model, system_prompt, user_prompt, timeout):
+def _chat_openai_compatible(api_base, api_key, model, system_prompt, user_prompt, timeout, max_tokens=400):
     url = api_base.rstrip("/") + "/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     body = {
@@ -209,7 +209,7 @@ def _chat_openai_compatible(api_base, api_key, model, system_prompt, user_prompt
             {"role": "user", "content": user_prompt},
         ],
         "temperature": 0.9,
-        "max_tokens": 400,
+        "max_tokens": max_tokens,
     }
     resp = requests.post(url, headers=headers, json=body, timeout=timeout)
     resp.raise_for_status()
@@ -217,7 +217,7 @@ def _chat_openai_compatible(api_base, api_key, model, system_prompt, user_prompt
     return data["choices"][0]["message"]["content"].strip()
 
 
-def _chat_anthropic(api_base, api_key, model, system_prompt, user_prompt, timeout):
+def _chat_anthropic(api_base, api_key, model, system_prompt, user_prompt, timeout, max_tokens=400):
     url = (api_base or PROVIDER_DEFAULTS["anthropic"]["api_base"]).rstrip("/") + "/v1/messages"
     headers = {
         "x-api-key": api_key,
@@ -228,7 +228,7 @@ def _chat_anthropic(api_base, api_key, model, system_prompt, user_prompt, timeou
         "model": model,
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_prompt}],
-        "max_tokens": 400,
+        "max_tokens": max_tokens,
         # No "temperature" here: newer Claude models (e.g. claude-haiku-5-5)
         # reject it outright with a 400 invalid_request_error ("temperature
         # is deprecated for this model"), unlike older models where it was
@@ -243,13 +243,13 @@ def _chat_anthropic(api_base, api_key, model, system_prompt, user_prompt, timeou
     return "".join(b.get("text", "") for b in data.get("content", []) if isinstance(b, dict)).strip()
 
 
-def _chat_gemini(api_base, api_key, model, system_prompt, user_prompt, timeout):
+def _chat_gemini(api_base, api_key, model, system_prompt, user_prompt, timeout, max_tokens=400):
     base = (api_base or PROVIDER_DEFAULTS["gemini"]["api_base"]).rstrip("/")
     url = f"{base}/v1beta/models/{model}:generateContent?key={api_key}"
     body = {
         "systemInstruction": {"parts": [{"text": system_prompt}]},
         "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-        "generationConfig": {"temperature": 0.9, "maxOutputTokens": 400},
+        "generationConfig": {"temperature": 0.9, "maxOutputTokens": max_tokens},
     }
     resp = requests.post(url, headers={"Content-Type": "application/json"}, json=body, timeout=timeout)
     resp.raise_for_status()
@@ -265,14 +265,16 @@ _PROVIDER_FUNCS = {
 }
 
 
-def _chat(api_base, api_key, model, system_prompt, user_prompt, timeout=30):
+def _chat(api_base, api_key, model, system_prompt, user_prompt, timeout=30, max_tokens=None):
     # Lazy import: storage.db has no reverse dependency on this module, but
     # importing lazily here keeps this module usable standalone/in tests
     # without the DB layer, consistent with the rest of the codebase.
     from storage.db import get_setting
     provider = get_setting("ai_provider", "openai_compatible") or "openai_compatible"
     fn = _PROVIDER_FUNCS.get(provider, _chat_openai_compatible)
-    return fn(api_base, api_key, model, system_prompt, user_prompt, timeout)
+    if max_tokens is None:
+        return fn(api_base, api_key, model, system_prompt, user_prompt, timeout)
+    return fn(api_base, api_key, model, system_prompt, user_prompt, timeout, max_tokens=max_tokens)
 
 
 def generate_adversarial_prompt(api_base, api_key, model, owasp_category, category_label,
@@ -438,7 +440,9 @@ def generate_executive_summary(api_base, api_key, model, target_name, business_c
         f"Findings summary:\n{findings_summary}"
     )
     try:
-        return _chat(api_base, api_key, model, EXEC_SUMMARY_SYSTEM_PROMPT, user_prompt, timeout=45).strip()
+        # The default 400-token cap cut the summary off mid-sentence in the PDF ("... such as revealing protected").
+        return _chat(api_base, api_key, model, EXEC_SUMMARY_SYSTEM_PROMPT, user_prompt, timeout=60,
+                     max_tokens=1200).strip()
     except Exception:
         return ""
 
