@@ -1,7 +1,26 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="page-header"><div><h1>{{ t('activity_title') }}</h1><p>{{ t('activity_sub') }}</p></div></div>
+<div class="page-header"><div><h1>{{ t('activity_title') }}</h1><p>{{ t('errors_sub') if tab == 'errors' else t('activity_sub') }}</p></div></div>
+<div class="tabs">
+  <a href="/activity" class="{{ 'active' if tab == 'activity' }}">{{ t('tab_activity') }}</a>
+  <a href="/activity?tab=errors" class="{{ 'active' if tab == 'errors' }}">{{ t('tab_errors') }}{% if errors %} ({{ errors|length }}){% endif %}</a>
+</div>
 <div class="card">
+  {% if tab == 'errors' %}
+  <table>
+    <tr><th>{{ t('col_time') }}</th><th>{{ t('col_source') }}</th><th>{{ t('col_what') }}</th><th>{{ t('col_scan') }}</th></tr>
+    {% for e in errors %}
+    <tr>
+      <td style="white-space:nowrap;">{{ e.timestamp|fmtdate }}</td>
+      <td>{{ e.source }}</td>
+      <td><strong>{{ e.message }}</strong>{% if e.detail %}<details><summary style="cursor:pointer;color:var(--text-muted);font-size:13px;">{{ t('col_details') }}</summary><div style="font-size:13.5px;margin-top:6px;">{{ e.detail }}</div></details>{% endif %}</td>
+      <td>{% if e.result_id %}<a href="/results/{{ e.result_id }}">#{{ e.result_id }}</a>{% elif e.task_id %}task #{{ e.task_id }}{% else %}-{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">{{ t('no_errors_yet') }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
   <table>
     <tr><th>{{ t('col_time') }}</th><th>{{ t('col_user') }}</th><th>{{ t('col_action') }}</th><th>{{ t('col_details') }}</th></tr>
     {% for a in logs %}
@@ -10,5 +29,6 @@
     <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">{{ t('no_activity_yet') }}</td></tr>
     {% endfor %}
   </table>
+  {% endif %}
 </div>
 {% endblock %}

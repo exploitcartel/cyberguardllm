@@ -1,6 +1,7 @@
 import os
 
 from webapp.app import app
+from engine.runner import reap_orphaned_tasks
 
 if __name__ == "__main__":
     # Safe by default: loopback only, debugger off. The Werkzeug debugger
@@ -19,4 +20,7 @@ if __name__ == "__main__":
     if debug and host != "127.0.0.1":
         raise SystemExit("Refusing to run with CGLLM_DEBUG=1 on a non-loopback host: the debugger allows "
                          "remote code execution. Use CGLLM_HOST=127.0.0.1 with CGLLM_DEBUG=1.")
+    # Anything still "running" was orphaned by the previous server process; clear it. Only done here, in the process
+    # that serves the app, so importing webapp.app elsewhere can never stop a live scan.
+    reap_orphaned_tasks()
     app.run(host=host, port=port, debug=debug)
