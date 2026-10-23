@@ -50,3 +50,43 @@ class TasksWatchLiveLinkTests(CyberGuardTestCase):
 if __name__ == "__main__":
     import unittest
     unittest.main()
+
+
+class TaskRowLinkTests(CyberGuardTestCase):
+    """Recent-task rows are clickable: finished scans open their results, running ones their live view."""
+
+    def _task(self, status, with_result=True):
+        conn = self.get_conn()
+        conn.execute("INSERT INTO targets (name,url,token_encrypted,created_at) VALUES ('T','http://t','e','2026')")
+        conn.execute("INSERT INTO scan_configs (name,categories,created_at) VALUES ('cfg','LLM01','2026')")
+        conn.execute("INSERT INTO tasks (target_id,scan_config_id,status,created_at) VALUES (1,1,?,'2026')", (status,))
+        if with_result:
+            conn.execute("INSERT INTO scan_results (task_id,target_id,timestamp,status) VALUES (1,1,'2026',?)", (status,))
+            conn.execute("UPDATE tasks SET result_id=1 WHERE id=1")
+        conn.commit()
+        conn.close()
+        return self.client.get("/tasks").get_data(as_text=True)
+
+    def test_finished_task_row_links_to_its_results(self):
+        html = self._task("completed")
+        self.assertIn('data-href="/results/1"', html)
+        self.assertIn('class="row-link-a"', html)
+        self.assertIn("View results", html)
+        self.assertNotIn("/scan/1/live", html)
+
+    def test_stopped_and_errored_tasks_also_open_results(self):
+        for status in ("stopped", "error"):
+            self.assertIn('data-href="/results/1"', self._task(status) if status == "stopped" else self._task(status))
+
+    def test_running_task_row_opens_the_live_view_even_though_it_has_a_result_row(self):
+        html = self._task("running")
+        self.assertIn('data-href="/scan/1/live"', html)
+        self.assertNotIn('data-href="/results/1"', html)
+
+    def test_task_without_a_result_is_not_a_link(self):
+        html = self._task("error", with_result=False)
+        self.assertNotIn("data-href=", html)
+
+    def test_row_click_script_ignores_clicks_on_links_and_buttons(self):
+        html = self._task("completed")
+        self.assertIn("closest('a, button, form, input, select')", html)
