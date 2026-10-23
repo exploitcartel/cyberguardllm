@@ -156,7 +156,7 @@ class HardStopTests(unittest.TestCase):
             # more than the (patched-down) global cap of 5 - the run must
             # stop at the cap, not after exhausting every category's budget.
             runner._run_ai_powered(conn, task_id=1, result_id=1, target={},
-                                    categories=["LLM01", "LLM02", "LLM05", "LLM06"], max_attempts=10)
+                                    categories=["LLM01", "LLM02", "LLM10", "LLM03"], max_attempts=10)
 
         self.assertLessEqual(len(calls), 5, "must never exceed the global attempt cap, however many categories are selected")
         cap_finding = conn.execute("SELECT * FROM findings WHERE rule_id='ai-global-cap-reached'").fetchone()

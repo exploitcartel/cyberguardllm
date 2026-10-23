@@ -44,7 +44,7 @@ class RuleModuleShapeTests(unittest.TestCase):
         for r in _module_rules():
             for key in REQUIRED:
                 self.assertIn(key, r, f"{r.get('id')} missing {key}")
-            self.assertIn(r["owasp"], {"LLM01", "LLM02", "LLM05", "LLM06", "LLM07", "LLM08", "LLM09", "LLM10"})
+            self.assertIn(r["owasp"], {"LLM01", "LLM02", "LLM10", "LLM03", "LLM08", "LLM09", "LLM07", "LLM06"})
             self.assertIn(r["severity"], ("critical", "high", "medium", "low"))
             self.assertIn(r["level"], ("low", "medium", "aggressive"))
             self.assertIn(r["grader"], GRADERS, r["id"])
@@ -88,9 +88,9 @@ class GraderTests(unittest.TestCase):
             return '{"verdict": "PASS", "severity": "low", "confidence": 90, "reasoning": "ok"}'
 
         with mock.patch.object(ai_agent, "_chat", fake_chat):
-            ai_agent.judge_response("http://x", "k", "m", "LLM06", "Excessive Agency", "p", "r",
+            ai_agent.judge_response("http://x", "k", "m", "LLM03", "Excessive Agency", "p", "r",
                                     rubric=build_rubric_text("bola"))
-            ai_agent.judge_response("http://x", "k", "m", "LLM06", "Excessive Agency", "p", "r")
+            ai_agent.judge_response("http://x", "k", "m", "LLM03", "Excessive Agency", "p", "r")
         self.assertIn("specific rubric", captured[0])
         self.assertIn("object-level authorization", captured[0].lower())
         self.assertNotIn("specific rubric", captured[1])
@@ -143,7 +143,7 @@ class UiTests(CyberGuardTestCase):
         rid = conn.execute("SELECT id FROM scan_results").fetchone()["id"]
         conn.execute("""INSERT INTO findings (scan_result_id,rule_id,owasp,severity,verdict,prompt_sent,raw_response,
                         description,recommendation) VALUES (?,?,?,?,?,?,?,?,?)""",
-                     (rid, "SSRF-001", "LLM06", "high", "FAIL", "p", "r", "d", GRADERS["ssrf"]["remediation"]))
+                     (rid, "SSRF-001", "LLM03", "high", "FAIL", "p", "r", "d", GRADERS["ssrf"]["remediation"]))
         fid = conn.execute("SELECT id FROM findings").fetchone()["id"]
         conn.commit()
         page = self.client.get(f"/findings/{fid}").get_data(as_text=True)
@@ -160,7 +160,7 @@ class StaticScanIntegrationTests(CyberGuardTestCase):
         conn.execute("""INSERT INTO targets (name, url, token_encrypted, auth_scheme, body_format, response_field,
                         status, created_at) VALUES ('T','http://t/chat','enc','none','message','reply','active','2026')""")
         tid = conn.execute("SELECT id FROM targets").fetchone()["id"]
-        conn.execute("INSERT INTO scan_configs (name, categories, created_at) VALUES ('c','LLM06','2026')")
+        conn.execute("INSERT INTO scan_configs (name, categories, created_at) VALUES ('c','LLM03','2026')")
         cid = conn.execute("SELECT id FROM scan_configs").fetchone()["id"]
         conn.execute("INSERT INTO tasks (target_id, scan_config_id, status, created_at) VALUES (?,?,?,?)",
                      (tid, cid, "running", "2026"))
@@ -177,7 +177,7 @@ class StaticScanIntegrationTests(CyberGuardTestCase):
                 mock.patch.object(runner, "send_prompt", lambda t, p: by_prompt[p]), \
                 mock.patch.object(runner.baseline_module, "get_baseline", lambda t: None), \
                 mock.patch.object(runner, "_get_ai_judge_config", lambda: None):
-            runner._run_static(conn, task_id, rid, target, ["LLM06"], None)
+            runner._run_static(conn, task_id, rid, target, ["LLM03"], None)
 
         rows = conn.execute("SELECT * FROM findings WHERE scan_result_id=?", (rid,)).fetchall()
         self.assertEqual(len(rows), len(rules))

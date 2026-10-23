@@ -274,8 +274,8 @@ TRANSLATIONS = {
         "al": "Për çdo teknikë të zgjedhur, çdo rregull single-prompt në librari dërgohet gjithashtu në formë të "
               "fshehur, për të testuar nëse një target që blokon sulmin në tekst të thjeshtë e blokon edhe atë të "
               "fshehur. Kjo e shumëzon kohën e skanimit afërsisht me (1 + numri i teknikave të zgjedhura)."},
-    "enable_canary_checkbox": {"en": "Run out-of-band canary checks (LLM06, needs canary_base_url in Settings)",
-                                "al": "Ekzekuto kontrolle canary jashtë-brezi (LLM06, kërkon canary_base_url te Settings)"},
+    "enable_canary_checkbox": {"en": "Run out-of-band canary checks (LLM03, needs canary_base_url in Settings)",
+                                "al": "Ekzekuto kontrolle canary jashtë-brezi (LLM03, kërkon canary_base_url te Settings)"},
     "canary_scan_explanation": {
         "en": "Proves, instead of just claiming, whether the target actually performs an unauthorized outbound "
               "action (fetching a URL), by giving it a unique one-time URL and checking server-side whether it "
@@ -284,8 +284,8 @@ TRANSLATIONS = {
               "e një URL), duke i dhënë një URL unike njëpërdorimshe dhe duke kontrolluar nga ana e serverit nëse "
               "u kërkua realisht. Funksionon vetëm nëse targeti mund ta arrijë realisht këtë app nëpër rrjet."},
 
-    "enable_recon_checkbox": {"en": "AI recon: extract system prompt and generate personalized payloads (LLM07)",
-                               "al": "AI recon: nxjerr system prompt-in dhe gjeneron payload personalizuar (LLM07)"},
+    "enable_recon_checkbox": {"en": "AI recon: extract system prompt and generate personalized payloads (LLM08)",
+                               "al": "AI recon: nxjerr system prompt-in dhe gjeneron payload personalizuar (LLM08)"},
     "recon_explanation": {
         "en": "Before scoring findings normally, this probes the target for its own system prompt / hidden "
               "instructions. If it extracts something credible, and an AI API is configured in Settings, it asks "
@@ -308,7 +308,7 @@ TRANSLATIONS = {
     "chain_static_hint": {"en": "Based on OWASP category pairing, not written from these specific findings",
                            "al": "Bazuar ne kombinim kategorie OWASP, jo shkruar nga keto gjetje specifike"},
     "chain_ai_badge": {"en": "AI analysis", "al": "Analize AI"},
-    "canary_title": {"en": "Out-of-band canary (LLM06)", "al": "Canary jashtë-brezi (LLM06)"},
+    "canary_title": {"en": "Out-of-band canary (LLM03)", "al": "Canary jashtë-brezi (LLM03)"},
     "canary_explanation": {
         "en": "Base URL this app is reachable at FROM the target you are testing (not necessarily from this "
               "machine's own localhost), used by the canary module to build unique one-time URLs. Leave blank to "

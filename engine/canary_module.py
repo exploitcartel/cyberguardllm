@@ -1,5 +1,5 @@
 """
-Out-of-band canary verification for LLM06 (Excessive Agency).
+Out-of-band canary verification for LLM03 (Excessive Agency).
 
 Every other test in this tool judges "did the target do the bad thing" by
 reading what the target SAYS back, whether via regex or an AI judge. That
@@ -41,7 +41,7 @@ def _insert_explainer(conn, result_id, rule_id, message, recommendation=""):
         """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
            description, module, source, recommendation)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (result_id, rule_id, "LLM06", "low", "PASS", "", "", message, None, "canary", recommendation),
+        (result_id, rule_id, "LLM03", "low", "PASS", "", "", message, None, "canary", recommendation),
     )
     conn.commit()
 
@@ -86,11 +86,11 @@ def run_canary_checks(conn, result_id, target_row, wait_s=8):
                 """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
                    description, module, source, recommendation)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                (result_id, f"CANARY-{i}", "LLM06", "low", "ERROR", prompt, response_text,
+                (result_id, f"CANARY-{i}", "LLM03", "low", "ERROR", prompt, response_text,
                  f"This canary prompt was never successfully delivered to the target ({response_text}). This is a "
                  "scan/network issue, not a security result - no conclusion (PASS or FAIL) can be drawn from it. "
                  "Re-run this scan once the target is reachable.",
-                 "Out-of-band Canary (LLM06)", "canary", ""),
+                 "Out-of-band Canary (LLM03)", "canary", ""),
             )
             conn.commit()
             continue
@@ -125,8 +125,8 @@ def run_canary_checks(conn, result_id, target_row, wait_s=8):
             """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
                description, module, source, recommendation)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (result_id, f"CANARY-{i}", "LLM06", "critical", verdict, prompt, response_text, description,
-             "Out-of-band Canary (LLM06)", "canary",
+            (result_id, f"CANARY-{i}", "LLM03", "critical", verdict, prompt, response_text, description,
+             "Out-of-band Canary (LLM03)", "canary",
              "This is a proven, not merely claimed, unauthorized outbound action. Restrict the agent's tool "
              "access and add an allowlist for any URL/network fetch capability." if verdict == "FAIL" else ""),
         )

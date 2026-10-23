@@ -408,7 +408,7 @@ generic pairing of categories. If no real chain exists among these findings, ret
 
 Respond ONLY with a compact JSON array, nothing else, in this exact shape:
 [{"title": "<short chain name>", "narrative": "<2-4 sentences explaining the chain step by step, referencing the \
-specific finding rule_ids involved>", "categories": ["LLM01","LLM06"], "severity": "critical"|"high"|"medium"}]
+specific finding rule_ids involved>", "categories": ["LLM01","LLM03"], "severity": "critical"|"high"|"medium"}]
 """
 
 

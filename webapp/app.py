@@ -198,12 +198,9 @@ def fmtdate(value, fmt="%b %d, %H:%M"):
     except Exception:
         return value
 
-OWASP_LABELS = {
-    "LLM01": "Prompt Injection", "LLM02": "Sensitive Info Disclosure",
-    "LLM05": "Improper Output Handling", "LLM06": "Excessive Agency",
-    "LLM07": "System Prompt Leakage", "LLM08": "Vector/Embedding Weaknesses",
-    "LLM09": "Misinformation", "LLM10": "Unbounded Consumption",
-}
+from core.owasp import LABELS as _OWASP_ALL, TESTABLE as _OWASP_TESTABLE  # noqa: E402
+# The categories a scan can cover, in 2026 code order (the out-of-scope ones are in the report only).
+OWASP_LABELS = {code: _OWASP_ALL[code] for code in _OWASP_TESTABLE}
 
 
 def current_user():

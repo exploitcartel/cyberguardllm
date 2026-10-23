@@ -28,35 +28,35 @@ scan result, and rendered as a dedicated section in the PDF report.
 from storage.db import now, get_setting
 
 STATIC_CHAIN_TEMPLATES = [
-    (frozenset({"LLM07", "LLM01"}),
+    (frozenset({"LLM08", "LLM01"}),
      "Leaked system prompt sharpens prompt injection",
-     "A system-prompt leak (LLM07) gives an attacker the target's own persona, domain vocabulary and internal "
+     "A system-prompt leak (LLM08) gives an attacker the target's own persona, domain vocabulary and internal "
      "rules. That context can be used to write a far more convincing, personalized prompt injection (LLM01) than "
      "a generic attack would achieve, since it fits naturally into what the target already expects to hear.",
      "high"),
-    (frozenset({"LLM01", "LLM06"}),
+    (frozenset({"LLM01", "LLM03"}),
      "Prompt injection chained into unauthorized agency",
      "A successful prompt injection (LLM01) is the usual way an attacker first gets a foothold; if the same target "
-     "also shows excessive agency (LLM06, e.g. acting on instructions to call a tool or fetch a URL), the "
+     "also shows excessive agency (LLM03, e.g. acting on instructions to call a tool or fetch a URL), the "
      "injection becomes the delivery mechanism for triggering that unauthorized action, not just a conversational "
      "bypass.",
      "critical"),
-    (frozenset({"LLM02", "LLM06"}),
+    (frozenset({"LLM02", "LLM03"}),
      "Sensitive data disclosure enables exfiltration via agency",
      "Sensitive information disclosure (LLM02) on its own leaks data to the conversation; combined with excessive "
-     "agency (LLM06), that same data could be pushed out through a tool call (e.g. an email or webhook action) "
+     "agency (LLM03), that same data could be pushed out through a tool call (e.g. an email or webhook action) "
      "instead of only being visible in the chat transcript, turning a disclosure into active exfiltration.",
      "critical"),
-    (frozenset({"LLM07", "LLM06"}),
+    (frozenset({"LLM08", "LLM03"}),
      "Leaked instructions reveal tools worth abusing",
-     "A system-prompt leak (LLM07) often reveals which tools or business logic the agent has access to; an "
-     "attacker can use that knowledge to target the excessive-agency weakness (LLM06) at the specific tool call "
+     "A system-prompt leak (LLM08) often reveals which tools or business logic the agent has access to; an "
+     "attacker can use that knowledge to target the excessive-agency weakness (LLM03) at the specific tool call "
      "that matters most, instead of probing blindly.",
      "high"),
-    (frozenset({"LLM09", "LLM06"}),
+    (frozenset({"LLM07", "LLM03"}),
      "Misinformation acted on by an over-privileged agent",
-     "If the target both states ungrounded claims as fact (LLM09) and acts on instructions with excessive agency "
-     "(LLM06), a false premise introduced earlier in the conversation could end up driving a real tool action, "
+     "If the target both states ungrounded claims as fact (LLM07) and acts on instructions with excessive agency "
+     "(LLM03), a false premise introduced earlier in the conversation could end up driving a real tool action, "
      "not just a wrong answer.",
      "high"),
     (frozenset({"LLM01", "LLM02"}),

@@ -164,9 +164,9 @@ if (stage && stage.offsetParent !== null) {
 
   // Illustrative callouts: well-known LLM attack classes this tool probes (OWASP LLM Top 10). Not live data.
   const THREATS = [
-    ['Prompt Injection', 'LLM01'], ['System Prompt Leakage', 'LLM07'], ['Excessive Agency', 'LLM06'],
-    ['Sensitive Information Disclosure', 'LLM02'], ['Improper Output Handling', 'LLM05'],
-    ['Vector & Embedding Weaknesses', 'LLM08'], ['Misinformation', 'LLM09'], ['Unbounded Consumption', 'LLM10'],
+    ['Prompt Injection', 'LLM01'], ['Hidden Context Exposure', 'LLM08'], ['Excessive Agency', 'LLM03'],
+    ['Sensitive Information Disclosure', 'LLM02'], ['Improper Output Handling', 'LLM10'],
+    ['Vector & Embedding Weaknesses', 'LLM09'], ['Misinformation', 'LLM07'], ['Unbounded Consumption', 'LLM06'],
   ];
   const box = document.getElementById('threats');
   let next = 0, slot = 0;

@@ -1,6 +1,6 @@
 """
 AI recon module: before (or alongside) the normal rule-based scan, this tries
-to extract the target's own system prompt / hidden instructions (an LLM07
+to extract the target's own system prompt / hidden instructions (an LLM08
 System Prompt Leakage probe in its own right), and when that succeeds AND an
 AI API is configured in Settings, asks that AI to write personalized
 adversarial prompts for the remaining OWASP categories using the target's own
@@ -127,7 +127,7 @@ def run_recon(conn, result_id, target, timeout_s=20):
             """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
                description, module, source, recommendation, confidence)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (result_id, RECON_RULE_ID, "LLM07", "medium", "FAIL", best_probe, best_response,
+            (result_id, RECON_RULE_ID, "LLM08", "medium", "FAIL", best_probe, best_response,
              "AI recon probe extracted what appears to be the target's real system prompt / hidden instructions. "
              f"Extracted content used to personalize follow-up attacks for this scan:\n{best_text[:2000]}",
              "AI Recon", "ai_recon",
@@ -142,7 +142,7 @@ def run_recon(conn, result_id, target, timeout_s=20):
         """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
            description, module, source, recommendation)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (result_id, RECON_RULE_ID, "LLM07", "low", "PASS", "; ".join(STATIC_LEAK_PROBES), "",
+        (result_id, RECON_RULE_ID, "LLM08", "low", "PASS", "; ".join(STATIC_LEAK_PROBES), "",
          "AI recon probes did not extract a credible system prompt leak. Personalized payload generation was "
          "skipped since there is no target-specific context to base it on.",
          "AI Recon", "ai_recon", ""),
@@ -167,7 +167,7 @@ def generate_and_run_personalized(conn, result_id, target, categories, extracted
             """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
                description, module, source, recommendation)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (result_id, "ai-recon-personalize-skipped", "LLM07", "low", "PASS", "", "",
+            (result_id, "ai-recon-personalize-skipped", "LLM08", "low", "PASS", "", "",
              "A system prompt was extracted by AI recon, but no AI API is configured in Settings, so personalized "
              "payload generation was skipped. Configure an AI API base/key to enable this.",
              "AI Recon", "ai_recon", "Configure an AI API base URL and key under Settings to enable this feature."),
@@ -189,7 +189,7 @@ def generate_and_run_personalized(conn, result_id, target, categories, extracted
             """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
                description, module, source, recommendation)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (result_id, "ai-recon-personalize-failed", "LLM07", "low", "PASS", "", "",
+            (result_id, "ai-recon-personalize-failed", "LLM08", "low", "PASS", "", "",
              "AI recon extracted a system prompt but the personalized payload generation call failed or returned "
              "nothing usable.",
              "AI Recon", "ai_recon", ""),

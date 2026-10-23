@@ -177,6 +177,7 @@ def init_db():
     conn.executescript(SCHEMA)
     conn.commit()
     _migrate(conn)
+    _migrate_owasp_2026(conn)
     _create_indexes(conn)
     conn.close()
 
@@ -295,6 +296,29 @@ def _migrate(conn):
             conn.commit()
         except sqlite3.OperationalError:
             pass  # column already exists
+
+
+def _migrate_owasp_2026(conn):
+    """
+    One-time conversion of stored category codes from the OWASP LLM Top 10 2025 numbering to the 2026 numbering
+    (see core/owasp.py): findings, custom rules, attack chains and the category lists saved in scan configs. A
+    stamp in the settings table makes it run once; a brand-new database is simply stamped. The single UPDATE ... CASE
+    reads the old value of each row, so no code is converted twice.
+    """
+    from core.owasp import EDITION, LEGACY_2025_TO_2026, remap_legacy_csv
+    if conn.execute("SELECT 1 FROM settings WHERE key='owasp_edition'").fetchone():
+        return
+    changed = {k: v for k, v in LEGACY_2025_TO_2026.items() if k != v}
+    case = "CASE owasp " + " ".join(f"WHEN '{k}' THEN '{v}'" for k, v in changed.items()) + " ELSE owasp END"
+    conn.execute(f"UPDATE findings SET owasp = {case}")
+    conn.execute(f"UPDATE custom_rules SET owasp = {case}")
+    for table, column in (("attack_chains", "categories"), ("scan_configs", "categories"),
+                          ("scan_configs", "ai_categories")):
+        for row in conn.execute(f"SELECT id, {column} FROM {table}").fetchall():
+            if row[1]:
+                conn.execute(f"UPDATE {table} SET {column}=? WHERE id=?", (remap_legacy_csv(row[1]), row[0]))
+    conn.execute("INSERT INTO settings (key, value) VALUES ('owasp_edition', ?)", (EDITION,))
+    conn.commit()
 
 
 def now():

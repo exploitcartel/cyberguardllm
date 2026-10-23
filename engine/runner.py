@@ -12,12 +12,8 @@ from engine import ai_agent
 from engine import baseline_module
 from engine.graders import build_rubric_text, remediation_for
 
-OWASP_LABELS_FALLBACK = {
-    "LLM01": "Prompt Injection", "LLM02": "Sensitive Information Disclosure",
-    "LLM05": "Improper Output Handling", "LLM06": "Excessive Agency",
-    "LLM07": "System Prompt Leakage", "LLM08": "Vector and Embedding Weaknesses",
-    "LLM09": "Misinformation", "LLM10": "Unbounded Consumption",
-}
+from core.owasp import LABELS as _OWASP_ALL, TESTABLE as _OWASP_TESTABLE  # noqa: E402
+OWASP_LABELS_FALLBACK = {code: _OWASP_ALL[code] for code in _OWASP_TESTABLE}
 
 AI_ATTEMPTS_PER_CATEGORY = 3
 
@@ -546,8 +542,8 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
             is_anomaly, latency_ratio = (False, None) if verdict == "ERROR" else baseline_module.is_latency_anomaly(elapsed_ms, baseline)
             if is_anomaly:
                 description += (f" | Latency anomaly: this response took {latency_ratio:.1f}x longer than the "
-                                 f"benign control question, a possible sign of a hidden tool call (LLM06) or "
-                                 f"heavier-than-expected processing (LLM10); timing alone is not conclusive.")
+                                 f"benign control question, a possible sign of a hidden tool call (LLM03) or "
+                                 f"heavier-than-expected processing (LLM06); timing alone is not conclusive.")
 
             conn.execute(
                 """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
@@ -570,7 +566,7 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
                     """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent,
                        raw_response, description, module, source, recommendation)
                        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                    (result_id, "scan-aborted-target-unresponsive", "LLM10", "low", "ERROR", "", "",
+                    (result_id, "scan-aborted-target-unresponsive", "LLM06", "low", "ERROR", "", "",
                      f"The static scan stopped after {consecutive_errors} consecutive requests got no response "
                      f"(timeouts, connection errors or rate limiting), so the remaining payloads were not sent. "
                      "This is a scan/target issue, not a security result. Common causes: the target is down or "
@@ -1128,7 +1124,7 @@ def _execute(task_id: int):
             from engine.canary_module import run_canary_checks
             run_canary_checks(conn, result_id, target)
         _run_optional_module(conn, result_id, "canary-module-crash", "The out-of-band canary check",
-                              "Out-of-band Canary (LLM06)", "canary", _do_canary)
+                              "Out-of-band Canary (LLM03)", "canary", _do_canary)
 
     if config["enable_recon"]:
         conn.execute("UPDATE tasks SET last_rule_id='Running AI recon...' WHERE id=?", (task_id,))

@@ -132,7 +132,7 @@ class RunScanTests(CyberGuardTestCase):
         self.assertFalse(stopped)
         f = conn.execute("SELECT * FROM findings").fetchone()
         self.assertEqual((f["rule_id"], f["verdict"], f["source"], f["owasp"]),
-                         ("crescendo-unauthorized_commitment", "FAIL", "crescendo", "LLM06"))
+                         ("crescendo-unauthorized_commitment", "FAIL", "crescendo", "LLM03"))
         self.assertIn("[Turn 2] msg-2", f["prompt_sent"])
         self.assertIn("progress per turn: 40 > 100", f["description"])
         from engine.graders import GRADERS

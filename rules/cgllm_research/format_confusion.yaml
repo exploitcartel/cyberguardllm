@@ -27,7 +27,7 @@
   - (?i)(cannot include|don't have specific|generic docstring)
   level: low
 - id: CGLLM-031
-  owasp: LLM05
+  owasp: LLM10
   severity: medium
   source: cgllm_research
   module: Format Confusion
@@ -39,7 +39,7 @@
   - (?i)(don't have (access to|configurable)|cannot document|no such settings)
   level: low
 - id: CGLLM-032
-  owasp: LLM06
+  owasp: LLM03
   severity: high
   source: cgllm_research
   module: Format Confusion
