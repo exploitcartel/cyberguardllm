@@ -111,3 +111,66 @@ class AiPoweredAbortTests(CyberGuardTestCase):
         ids = [r["rule_id"] for r in conn.execute("SELECT rule_id FROM findings ORDER BY id")]
         self.assertEqual(ids[-1], "scan-aborted-target-unresponsive")
         self.assertEqual(len(ids), runner.AI_MAX_CONSECUTIVE_TRANSPORT_ERRORS + 1)
+
+
+class EmptyAttackPromptTests(CyberGuardTestCase):
+    """The attacking model returned nothing for ~1/3 of the attempts in a real scan; the empty prompt was sent to the
+    target and the greeting it answered with was scored PASS/REVIEW."""
+
+    def _setup(self):
+        conn = self.get_conn()
+        conn.execute("""INSERT INTO targets (name,url,token_encrypted,auth_scheme,body_format,response_field,status,
+                        created_at) VALUES ('T','http://t','e','none','message','reply','active','2026')""")
+        conn.execute("INSERT INTO scan_configs (name,categories,created_at) VALUES ('c','LLM01','2026')")
+        conn.execute("INSERT INTO tasks (target_id,scan_config_id,status,created_at) VALUES (1,1,'running','2026')")
+        conn.execute("INSERT INTO scan_results (task_id,target_id,timestamp,status) VALUES (1,1,'2026','running')")
+        conn.commit()
+        return conn, conn.execute("SELECT * FROM targets").fetchone()
+
+    def _run(self, conn, target, generated):
+        settings = {"ai_api_base": "http://ai", "ai_api_key_encrypted": "x", "ai_model": "m",
+                    "ai_judge_min_confidence": "60"}
+        sent = []
+        replies = iter(generated)
+
+        def fake_generate(*a, **k):
+            value = next(replies)
+            if value is None:
+                raise runner.ai_agent.EmptyModelOutput("the attacking model returned an empty reply (stop reason: refusal)")
+            return value
+
+        with mock.patch.object(runner, "get_setting", lambda k, d=None: settings.get(k, d)), \
+                mock.patch("core.crypto.decrypt_token", lambda x: "key"), \
+                mock.patch.object(runner, "send_prompt", lambda t, p, **k: sent.append(p) or "I resisted"), \
+                mock.patch.object(runner.ai_agent, "generate_adversarial_prompt", fake_generate), \
+                mock.patch.object(runner.ai_agent, "judge_response", lambda *a, **k: ("PASS", "low", "ok", 90)):
+            runner._run_ai_powered(conn, 1, 1, target, ["LLM01"], intensity="test")
+        return sent
+
+    def test_empty_attack_prompt_is_never_sent_and_is_recorded_as_error(self):
+        conn, target = self._setup()
+        sent = self._run(conn, target, [None, "real attack"] + ["x"] * 20)
+        self.assertNotIn("", sent)
+        self.assertEqual(sent[0] if sent[0] != "Hello" else sent[1], "real attack")
+        rows = conn.execute("SELECT rule_id, verdict, prompt_sent, description FROM findings ORDER BY id").fetchall()
+        first = rows[0]
+        self.assertEqual((first["rule_id"], first["verdict"]), ("ai-LLM01-1", "ERROR"))
+        self.assertIn("Nothing was sent to the target", first["description"])
+        self.assertIn("stop reason: refusal", first["description"])
+        self.assertEqual(rows[1]["verdict"], "PASS")
+
+    def test_repeated_empty_replies_abort_with_one_explanation(self):
+        conn, target = self._setup()
+        sent = self._run(conn, target, [None] * 10)
+        self.assertEqual([p for p in sent if p != "Hello"], [])
+        ids = [r["rule_id"] for r in conn.execute("SELECT rule_id FROM findings ORDER BY id")]
+        self.assertEqual(ids[-1], "ai-attacker-declined")
+        self.assertEqual(len(ids), runner.AI_MAX_CONSECUTIVE_EMPTY_PROMPTS + 1)
+
+    def test_generate_adversarial_prompt_raises_on_an_empty_reply(self):
+        from engine import ai_agent
+        with mock.patch.object(ai_agent, "_chat", lambda *a, **k: "   "):
+            with self.assertRaises(ai_agent.EmptyModelOutput):
+                ai_agent.generate_adversarial_prompt("http://x", "k", "m", "LLM01", "Prompt Injection")
+        with mock.patch.object(ai_agent, "_chat", lambda *a, **k: " a prompt "):
+            self.assertEqual(ai_agent.generate_adversarial_prompt("http://x", "k", "m", "LLM01", "PI"), "a prompt")

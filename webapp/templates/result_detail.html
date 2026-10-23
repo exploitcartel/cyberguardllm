@@ -48,7 +48,7 @@
       <td>{{ f.rule_id }}</td>
       <td>{{ f.owasp }}</td>
       <td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td>
-      <td><span class="badge badge-{{ 'fail' if f.verdict=='FAIL' else ('review' if f.verdict=='REVIEW' else ('error' if f.verdict=='ERROR' else 'pass')) }}">{{ f.verdict }}</span>{% if f.confidence is not none %} <span style="color:var(--text-muted);font-size:13.5px;">{{ f.confidence }}%</span>{% endif %}{% if f.reproducibility_total %} <span style="color:var(--text-muted);font-size:13.5px;" title="{{ t('reproducibility_hint') }}">{{ f.reproducibility_hits }}/{{ f.reproducibility_total }}</span>{% endif %}</td>
+      <td><span class="badge badge-{{ 'fail' if f.verdict=='FAIL' else ('review' if f.verdict=='REVIEW' else ('error' if f.verdict in ('ERROR','INFO') else 'pass')) }}">{{ f.verdict }}</span>{% if f.confidence is not none %} <span style="color:var(--text-muted);font-size:13.5px;">{{ f.confidence }}%</span>{% endif %}{% if f.reproducibility_total %} <span style="color:var(--text-muted);font-size:13.5px;" title="{{ t('reproducibility_hint') }}">{{ f.reproducibility_hits }}/{{ f.reproducibility_total }}</span>{% endif %}</td>
       <td>{% if f.verdict=='FAIL' %}<span class="badge badge-triage-{{ f.triage_status or 'open' }}">{{ t('triage_' ~ (f.triage_status or 'open')) }}</span>{% else %}-{% endif %}</td>
       <td><a href="/findings/{{ f.id }}" class="btn" style="padding:5px 10px;">{{ t('btn_details') }}</a></td>
     </tr>

@@ -1119,7 +1119,17 @@ def result_pdf(result_id):
     findings = conn.execute("SELECT * FROM findings WHERE scan_result_id=?", (result_id,)).fetchall()
     attack_chains = conn.execute("SELECT * FROM attack_chains WHERE scan_result_id=?", (result_id,)).fetchall()
     benchmark = _compute_benchmark(conn, result["target_id"])
+    scan_config = None
+    try:
+        task = conn.execute("SELECT * FROM tasks WHERE id=?", (result["task_id"],)).fetchone()
+        if task:
+            scan_config = conn.execute("SELECT * FROM scan_configs WHERE id=?", (task["scan_config_id"],)).fetchone()
+    except Exception:
+        scan_config = None
     conn.close()
+    ai_info = None
+    if get_setting("ai_api_key_encrypted", ""):
+        ai_info = f"{get_setting('ai_provider', 'openai_compatible')} / {get_setting('ai_model', '')}"
     exec_summary_text = _build_exec_summary(result, target, findings)
     project_root = os.path.dirname(BASE_DIR)
     # On disk the file keeps a unique per-scan name (two scans of one target must not overwrite each other);
@@ -1128,7 +1138,8 @@ def result_pdf(result_id):
     filename = report_download_name(target["name"])
     generate_pdf_report(result, findings, target, out_path, severity_breakdown_rows(findings),
                          owasp_breakdown_rows(findings), attack_chains=attack_chains,
-                         exec_summary_text=exec_summary_text, benchmark=benchmark)
+                         exec_summary_text=exec_summary_text, benchmark=benchmark,
+                         scan_config=scan_config, ai_info=ai_info)
     log_activity(username, "Report Exported", filename)
     return send_file(out_path, as_attachment=True, download_name=filename)
 

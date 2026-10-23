@@ -131,6 +131,7 @@ const POINT_FRAG = /* glsl */ `
  * Mounts the head into `canvas` (which `wrap` sizes) and returns a controller:
  *   pulse(amount)  - scan activity (a payload was sent): brightens the mesh and speeds up the data packets
  *   alert()        - a finding was confirmed: the head and the globe flash red once
+ *   (drag the head with the mouse or a finger to turn it; it keeps its momentum; double-click resets the view)
  *   alertPulses(n) - the same flash n times in a row (the scan found something: pulse red 3 times)
  *   setReserve(px) - horizontal room (total, both sides) the page needs for tickets; the globe shrinks to fit
  *                    in what is left instead of running under them
@@ -342,6 +343,8 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
 
   let reservePx = 0;
   const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
+  // Manual view: dragging turns the head and the globe together; releasing keeps a little momentum.
+  const view = { yaw: 0, pitch: 0, vyaw: 0, vpitch: 0, dragging: false, lastX: 0, lastY: 0 };
   const resize = () => {
     const w = wrap.clientWidth;
     const h = wrap.clientHeight;
@@ -371,6 +374,30 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
   window.addEventListener("pointermove", onMove);
   wrap.addEventListener("pointerleave", onLeave);
 
+  canvas.style.cursor = "grab";
+  canvas.style.touchAction = "none";
+  const onDown = (e) => {
+    view.dragging = true; view.lastX = e.clientX; view.lastY = e.clientY; view.vyaw = 0; view.vpitch = 0;
+    canvas.style.cursor = "grabbing";
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* not supported: dragging still works while over the canvas */ }
+  };
+  const onDrag = (e) => {
+    if (!view.dragging) return;
+    const dx = e.clientX - view.lastX;
+    const dy = e.clientY - view.lastY;
+    view.lastX = e.clientX; view.lastY = e.clientY;
+    view.yaw += dx * 0.008;
+    view.pitch = Math.max(-0.9, Math.min(0.9, view.pitch + dy * 0.006));
+    view.vyaw = dx * 0.008; view.vpitch = dy * 0.006;
+  };
+  const onUp = () => { view.dragging = false; canvas.style.cursor = "grab"; };
+  const onReset = () => { view.yaw = 0; view.pitch = 0; view.vyaw = 0; view.vpitch = 0; };
+  canvas.addEventListener("pointerdown", onDown);
+  canvas.addEventListener("pointermove", onDrag);
+  canvas.addEventListener("pointerup", onUp);
+  canvas.addEventListener("pointercancel", onUp);
+  canvas.addEventListener("dblclick", onReset);
+
   let tabHidden = false;
   const onVis = () => { tabHidden = document.hidden; };
   document.addEventListener("visibilitychange", onVis);
@@ -399,13 +426,21 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
 
     pointer.x += (pointer.tx - pointer.x) * 0.06;
     pointer.y += (pointer.ty - pointer.y) * 0.06;
-    headGroup.rotation.y = BASE_YAW + pointer.x * 0.38 + (reduceMotion ? 0 : Math.sin(clock * 0.35) * 0.1);
-    headGroup.rotation.x = -0.04 + pointer.y * 0.12;
+    if (!view.dragging) {
+      // momentum after letting go
+      view.yaw += view.vyaw; view.pitch = Math.max(-0.9, Math.min(0.9, view.pitch + view.vpitch));
+      view.vyaw *= 0.93; view.vpitch *= 0.93;
+      if (Math.abs(view.vyaw) < 0.0002) view.vyaw = 0;
+      if (Math.abs(view.vpitch) < 0.0002) view.vpitch = 0;
+    }
+    const follow = view.dragging ? 0 : 1;   // the pointer-follow tilt would fight the drag
+    headGroup.rotation.y = BASE_YAW + view.yaw + follow * pointer.x * 0.38 + (reduceMotion ? 0 : Math.sin(clock * 0.35) * 0.1);
+    headGroup.rotation.x = -0.04 + view.pitch + follow * pointer.y * 0.12;
     headGroup.position.y = reduceMotion ? 0 : Math.sin(clock * 0.8) * 0.015;
 
     // the globe turns slowly against the head, tilted, and nudges with the pointer too
-    cageGroup.rotation.y = clock * 0.16 - pointer.x * 0.15;
-    cageGroup.rotation.x = 0.32 + pointer.y * 0.06;
+    cageGroup.rotation.y = clock * 0.16 + view.yaw - follow * pointer.x * 0.15;
+    cageGroup.rotation.x = 0.32 + view.pitch + follow * pointer.y * 0.06;
 
     // packets run along the arcs, faster while the scan is busy
     for (let i = 0; i < arcs.length; i++) {
@@ -458,6 +493,11 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
       ro.disconnect();
       window.removeEventListener("pointermove", onMove);
       wrap.removeEventListener("pointerleave", onLeave);
+      canvas.removeEventListener("pointerdown", onDown);
+      canvas.removeEventListener("pointermove", onDrag);
+      canvas.removeEventListener("pointerup", onUp);
+      canvas.removeEventListener("pointercancel", onUp);
+      canvas.removeEventListener("dblclick", onReset);
       document.removeEventListener("visibilitychange", onVis);
       disposables.forEach((d) => d.dispose());
       renderer.dispose();

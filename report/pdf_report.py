@@ -11,6 +11,45 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.units import cm
 import os
+from xml.sax.saxutils import escape
+
+
+def _excerpt(text, limit=450):
+    """One-line, XML-escaped excerpt of a prompt/response for the report, '-' when empty."""
+    t = " ".join(str(text or "").split())
+    if len(t) > limit:
+        t = t[:limit].rstrip() + " ..."
+    return escape(t) if t else "<i>(empty)</i>"
+
+
+def _evidence(f, limit=450):
+    """The prompt that was sent and the target's reply, so a reader does not have to open the app to see them."""
+    return (f"<br/><b>Prompt sent:</b> {_excerpt(_row_get(f, 'prompt_sent'), limit)}"
+            f"<br/><b>Target reply:</b> {_excerpt(_row_get(f, 'raw_response'), limit)}")
+
+
+def _tally(findings):
+    """Overall and per-category verdict counts. INFO notes and anything else that is not a result are skipped."""
+    total = {"PASS": 0, "FAIL": 0, "REVIEW": 0, "ERROR": 0}
+    per = {}
+    for f in findings:
+        v = f["verdict"]
+        if v not in total:
+            continue
+        total[v] += 1
+        per.setdefault(f["owasp"], {"PASS": 0, "FAIL": 0, "REVIEW": 0, "ERROR": 0})[v] += 1
+    return total, per
+
+
+def _duration(started, finished):
+    from datetime import datetime
+    try:
+        seconds = int((datetime.fromisoformat(finished) - datetime.fromisoformat(started)).total_seconds())
+    except Exception:
+        return "-"
+    h, rem = divmod(max(seconds, 0), 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}h {m}m {s}s" if h else (f"{m}m {s}s" if m else f"{s}s")
 
 
 def _row_get(row, key, default=None):
@@ -274,7 +313,7 @@ def _fallback_exec_summary(target, findings, risk_score, business_context):
 
 
 def generate_pdf_report(scan_result, findings, target, output_path, severity_breakdown_data, owasp_breakdown_data,
-                         attack_chains=None, exec_summary_text=None, benchmark=None):
+                         attack_chains=None, exec_summary_text=None, benchmark=None, scan_config=None, ai_info=None):
     tmp_dir = os.path.dirname(output_path) or "."
     pie_path = os.path.join(tmp_dir, f"_pie_{scan_result['id']}.png")
     bar_path = os.path.join(tmp_dir, f"_bar_{scan_result['id']}.png")
@@ -341,7 +380,20 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
         ["Target URL", target["url"]],
         ["Scan started", scan_result["timestamp"] or "-"],
         ["Scan finished", _row_get(scan_result, "finished_at") or "-"],
+        ["Duration", _duration(scan_result["timestamp"], _row_get(scan_result, "finished_at"))],
         ["Scan mode", (scan_result["mode"] or "offline").replace("_", " ").title()],
+    ]
+    if scan_config is not None:
+        summary_data.append(["Scan configuration", _row_get(scan_config, "name", "-")])
+        if (scan_result["mode"] or "") == "ai_powered":
+            summary_data.append(["AI-Powered intensity", str(_row_get(scan_config, "ai_intensity", "-")).title()])
+    if ai_info:
+        summary_data.append(["AI model (attacker and judge)", ai_info])
+    tested_codes = sorted({f["owasp"] for f in findings if f["verdict"] in ("PASS", "FAIL", "REVIEW")})
+    if tested_codes:
+        summary_data.append(["Categories tested", ", ".join(tested_codes)])
+    summary_data += [
+        ["OWASP edition", "OWASP Top 10 for LLM Applications 2026"],
         ["Proxy used", _row_get(scan_result, "proxy_used") or "No"],
         ["Total findings", str(scan_result["total_findings"])],
         ["Overall risk score", f"{scan_result['risk_score']} / 100"],
@@ -385,7 +437,53 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
         "with remediation guidance, so the target's owner can harden it before a real attacker finds the same gaps.",
         body))
     elements.append(Spacer(1, 0.6 * cm))
-    elements.append(Image(pie_path, width=8 * cm, height=8 * cm, hAlign="CENTER"))
+    elements.append(Image(pie_path, width=5.5 * cm, height=5.5 * cm, hAlign="CENTER"))
+    elements.append(PageBreak())
+
+    # ---------- Results at a glance ----------
+    totals, per_category = _tally(findings)
+    elements.append(Paragraph("Results at a Glance", h2))
+    elements.append(Spacer(1, 0.3 * cm))
+    elements.append(Paragraph(
+        f"This scan evaluated <b>{sum(totals.values())}</b> test attempt(s). What each outcome means: "
+        "<b>Resisted</b> - the target did not show the weakness being tested. <b>Vulnerable</b> - the target "
+        "showed it (a confirmed finding, counted in the risk score). <b>Needs review</b> - the judge was not "
+        "confident either way, so a person should read the transcript; it is not counted in the risk score. "
+        "<b>Not evaluated</b> - the scan could not get a usable response (a timeout, an unreachable target, or the "
+        "attacking model declining to write a prompt); this says nothing about the target's security.", body))
+    elements.append(Spacer(1, 0.3 * cm))
+    glance = [["Resisted", "Vulnerable", "Needs review", "Not evaluated"],
+              [str(totals["PASS"]), str(totals["FAIL"]), str(totals["REVIEW"]), str(totals["ERROR"])]]
+    gt = Table(glance, colWidths=[3.9 * cm] * 4)
+    gt.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#131B2E")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTSIZE", (0, 1), (-1, 1), 16),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("TOPPADDING", (0, 1), (-1, 1), 8), ("BOTTOMPADDING", (0, 1), (-1, 1), 8),
+    ]))
+    elements.append(gt)
+    elements.append(Spacer(1, 0.5 * cm))
+    elements.append(Paragraph("By OWASP category", h3))
+    cat_rows = [["Category", "Tested", "Resisted", "Vulnerable", "Needs review", "Not evaluated"]]
+    for code in sorted(per_category):
+        c = per_category[code]
+        cat_rows.append([Paragraph(f"{code} - {OWASP_NAMES.get(code, code)}", body),
+                         str(c["PASS"] + c["FAIL"] + c["REVIEW"]), str(c["PASS"]), str(c["FAIL"]),
+                         str(c["REVIEW"]), str(c["ERROR"])])
+    ct = Table(cat_rows, colWidths=[6.2 * cm, 1.8 * cm, 1.9 * cm, 2.1 * cm, 2.2 * cm, 2.4 * cm])
+    ct.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#131B2E")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f8fa")]),
+    ]))
+    elements.append(ct)
     elements.append(PageBreak())
 
     # ---------- Page 3: Table of contents ----------
@@ -394,12 +492,13 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
     toc_items = [
         "1. Executive Summary",
         "2. Assessment Overview",
-        "3. Table of Contents",
-        "4. OWASP LLM Top 10 Coverage",
-        "5. Attack Chain Analysis",
-        "6. Detailed Findings",
-        "7. Remediation Recommendations",
-        "8. Out of Scope for Black-Box Testing",
+        "3. Results at a Glance",
+        "4. Table of Contents",
+        "5. OWASP LLM Top 10 Coverage",
+        "6. Attack Chain Analysis",
+        "7. Detailed Findings (including items needing review)",
+        "8. Remediation Recommendations",
+        "9. Out of Scope for Black-Box Testing",
     ]
     for item in toc_items:
         elements.append(Paragraph(item, toc_entry))
@@ -471,7 +570,7 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
                 f["rule_id"], Paragraph(owasp_label.replace(chr(10), "<br/>"), body),
                 f["severity"].title(),
                 (f["source"] or "custom"),
-                Paragraph(f["description"] or "-", body),
+                Paragraph(escape(f["description"] or "-") + _evidence(f, 350), body),
             ])
         t = Table(table_data, colWidths=[2.3 * cm, 3.0 * cm, 2 * cm, 2.3 * cm, 5.7 * cm])
         t.setStyle(TableStyle([
@@ -525,7 +624,7 @@ def generate_pdf_report(scan_result, findings, target, output_path, severity_bre
             review_table.append([
                 f["rule_id"], f["owasp"],
                 f"{_row_get(f, 'confidence', '-')}%" if _row_get(f, 'confidence') is not None else "-",
-                Paragraph(f["description"] or "-", body),
+                Paragraph(escape(f["description"] or "-") + _evidence(f, 400), body),
             ])
         rt = Table(review_table, colWidths=[3.2 * cm, 1.8 * cm, 2.2 * cm, 8.7 * cm])
         rt.setStyle(TableStyle([
