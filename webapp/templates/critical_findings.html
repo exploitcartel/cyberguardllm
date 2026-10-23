@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header"><div><h1>{{ t('results_title') }}</h1><p>{{ t('critical_findings_sub') }}</p></div><a href="/results/compare" class="btn">{{ t('btn_compare_scans') }}</a></div>
+{% include "_results_tabs.html" %}
+
+<div class="chips">
+  {% for key, n in chips %}
+  <a href="/results/critical?severity={{ key }}" class="{{ 'active' if key == severity }}">{{ t('sev_' ~ key) }} ({{ n }})</a>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>{{ t('col_severity') }}</th><th>{{ t('col_finding') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_target') }}</th><th>{{ t('col_scan') }}</th><th>{{ t('col_date') }}</th><th>{{ t('col_triage') }}</th><th></th></tr>
+    {% for f in findings %}
+    <tr>
+      <td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td>
+      <td><a href="/findings/{{ f.id }}"><strong>{{ f.rule_id }}</strong></a>{% if f.module and not f.module.startswith('AI-Powered') %}<div style="color:var(--text-muted);font-size:13px;">{{ f.module }}</div>{% endif %}</td>
+      <td>{{ f.owasp }}<div style="color:var(--text-muted);font-size:13px;">{{ owasp_names.get(f.owasp, '') }}</div></td>
+      <td>{{ f.target_name or '-' }}</td>
+      <td><a href="/results/{{ f.scan_id }}">#{{ f.scan_id }}</a></td>
+      <td>{{ f.timestamp|fmtdate }}</td>
+      <td><span class="badge badge-triage-{{ f.triage_status or 'open' }}">{{ t('triage_' ~ (f.triage_status or 'open')) }}</span></td>
+      <td><a href="/findings/{{ f.id }}" class="btn" style="padding:5px 10px;">{{ t('btn_details') }}</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" style="text-align:center;color:var(--text-muted);">{{ t('no_critical_findings') }}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

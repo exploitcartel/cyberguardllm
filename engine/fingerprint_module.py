@@ -104,7 +104,7 @@ def run_fingerprint(conn, result_id, target, timeout_s=20):
         """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
            description, module, source, recommendation)
            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (result_id, "guardrail-fingerprint", "LLM01", "low", "PASS", TRIGGER_PROMPT, response_text,
+        (result_id, "guardrail-fingerprint", "LLM01", "low", "INFO", TRIGGER_PROMPT, response_text,
          description, "Guardrail Fingerprinting", "fingerprint", ""),
     )
     conn.commit()
