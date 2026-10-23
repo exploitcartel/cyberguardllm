@@ -40,7 +40,8 @@ seed_admin()
 # process exiting (crash, Ctrl+C, a `git pull` + restart) - nothing in this
 # fresh process is driving it, so its own Stop button would never take
 # effect. Clear those now instead of leaving them stuck.
-reap_orphaned_tasks()
+# (This now happens in run.py, once, in the process that actually serves the app. Doing it on import meant any
+# other process that merely imported this module - a test run, a script - stopped a scan running in the server.)
 # Parse the rule library once at startup so the first visit to Scan Configs / Rules is as fast as the rest.
 load_all_rules()
 
@@ -1482,9 +1483,11 @@ def activity_page():
     username, err = require_login()
     if err: return err
     conn = get_conn()
+    tab = "errors" if request.args.get("tab") == "errors" else "activity"
     logs = conn.execute("SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 100").fetchall()
+    errors = conn.execute("SELECT * FROM error_log ORDER BY id DESC LIMIT 200").fetchall()
     conn.close()
-    return render_template("activity.html", **ctx(active="activity", logs=logs))
+    return render_template("activity.html", **ctx(active="activity", logs=logs, errors=errors, tab=tab))
 
 
 def _mask_api_key(api_key_encrypted):

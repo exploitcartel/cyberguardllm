@@ -463,6 +463,13 @@ TRANSLATIONS = {
     "col_user": {"en": "User", "al": "Përdoruesi"},
     "col_action": {"en": "Action", "al": "Veprimi"},
     "col_details": {"en": "Details", "al": "Detaje"},
+    "tab_activity": {"en": "Activity", "al": "Aktiviteti"},
+    "tab_errors": {"en": "Errors", "al": "Gabimet"},
+    "col_source": {"en": "Source", "al": "Burimi"},
+    "col_what": {"en": "What happened", "al": "Çfarë ndodhi"},
+    "no_errors_yet": {"en": "No errors recorded.", "al": "Asnjë gabim i regjistruar."},
+    "errors_sub": {"en": "Why scans stopped early or skipped a check: timeouts, unreachable targets, crashed modules, restarts.",
+                   "al": "Pse skanimet u ndalën herët ose anashkaluan një kontroll: timeout, objektiva të paarritshëm, module të rrëzuara, rinisje."},
     "no_activity_yet": {"en": "No activity yet.", "al": "S'ka aktivitet ende."},
 
     # ---- settings.html ----

@@ -2,7 +2,7 @@ import socket
 import threading
 import time
 from urllib.parse import urlparse
-from storage.db import get_conn, now, get_setting
+from storage.db import get_conn, now, get_setting, log_error
 from engine.loader import load_rules_by_categories
 from engine.evaluator import evaluate, evaluate_explained, evaluate_multiturn, evaluate_persistence
 from engine.scorer import compute_risk_score_rows
@@ -181,6 +181,7 @@ def _run_optional_module(conn, result_id, rule_id, step_label, module_label, sou
     try:
         fn()
     except Exception as e:
+        log_error(module_label, rule_id, f"{step_label} crashed: {e!r}", result_id=result_id)
         try:
             conn.execute(
                 """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
@@ -1047,6 +1048,8 @@ def _execute(task_id: int):
             stopped = _run_ai_powered(conn, task_id, result_id, target, ai_categories,
                                        max_attempts=config["ai_max_attempts"], intensity=ai_intensity, config=config)
     except Exception as e:
+        log_error("scanner", "scan-crashed", f"The scan stopped on an unexpected error: {e!r}",
+                  task_id=task_id, result_id=result_id)
         conn.execute("UPDATE scan_results SET status='error' WHERE id=?", (result_id,))
         conn.execute("UPDATE tasks SET status='error' WHERE id=?", (task_id,))
         conn.commit()
@@ -1215,6 +1218,10 @@ def reap_orphaned_tasks():
     conn = get_conn()
     orphaned = conn.execute("SELECT id, result_id FROM tasks WHERE status='running'").fetchall()
     for row in orphaned:
+        log_error("scanner", "task-reaped",
+                  "A process started (or imported the app) while this scan was still marked running, so it was "
+                  "stopped. Only one server process should use this database; a second one, a test run or a "
+                  "restart ends any scan in progress.", task_id=row["id"], result_id=row["result_id"], conn=conn)
         conn.execute("UPDATE tasks SET status='stopped', control='stop' WHERE id=?", (row["id"],))
         if row["result_id"] is not None:
             conn.execute("UPDATE scan_results SET status='stopped' WHERE id=? AND status='running'",

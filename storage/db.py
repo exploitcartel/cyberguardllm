@@ -169,7 +169,41 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- Why a scan did not do what was expected: every ERROR finding is copied here by the trigger below, and
+-- log_error() adds the failures that never become a finding (a crashed scan, a task stopped by a restart).
+CREATE TABLE IF NOT EXISTS error_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT,
+    source TEXT,
+    message TEXT,
+    detail TEXT,
+    task_id INTEGER,
+    result_id INTEGER
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_error_finding AFTER INSERT ON findings
+WHEN NEW.verdict = 'ERROR'
+BEGIN
+    INSERT INTO error_log (timestamp, source, message, detail, result_id)
+    VALUES (strftime('%Y-%m-%dT%H:%M:%f', 'now'), COALESCE(NEW.module, NEW.source, 'scanner'), NEW.rule_id,
+            NEW.description, NEW.scan_result_id);
+END;
 """
+
+
+def log_error(source, message, detail="", task_id=None, result_id=None, conn=None):
+    """Record a failure for the Activity Log > Errors tab. Never raises: logging must not break the caller."""
+    own = conn is None
+    try:
+        c = conn or get_conn()
+        c.execute("INSERT INTO error_log (timestamp, source, message, detail, task_id, result_id) VALUES (?,?,?,?,?,?)",
+                  (datetime.utcnow().isoformat(), source, message, detail, task_id, result_id))
+        c.commit()
+        if own:
+            c.close()
+    except Exception:
+        pass
 
 
 def init_db():
