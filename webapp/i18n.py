@@ -359,6 +359,7 @@ TRANSLATIONS = {
     "chart_out_of_scope": {"en": "out of scope", "al": "jashtë fushëveprimit"},
     "chart_tested": {"en": "tested", "al": "testuar"},
     "chart_not_tested": {"en": "not tested yet", "al": "ende pa testuar"},
+    "view_all": {"en": "View all", "al": "Shiko të gjitha"},
     "btn_view_results": {"en": "View results", "al": "Shiko rezultatet"},
     "open_scan_hint": {"en": "Open this scan", "al": "Hap këtë skanim"},
     "btn_watch_live": {"en": "Watch live", "al": "Shiko live"},

@@ -97,3 +97,35 @@ class DashboardAndCriticalTests(CyberGuardTestCase):
         from pathlib import Path
         html = Path("webapp/templates/target_trend.html").read_text(encoding="utf-8")
         self.assertIn("typeof Chart === 'undefined'", html)
+
+
+class RecentScansRowsTests(CyberGuardTestCase):
+    def _scan(self, status, task_id=None):
+        conn = self.get_conn()
+        conn.execute("INSERT INTO targets (name,url,token_encrypted,created_at) VALUES ('Alpha','http://a','e','2026')")
+        if task_id:
+            conn.execute("INSERT INTO scan_configs (name,categories,created_at) VALUES ('c','LLM01','2026')")
+            conn.execute("INSERT INTO tasks (id,target_id,scan_config_id,status,created_at) VALUES (?,1,1,'running','2026')",
+                         (task_id,))
+        conn.execute("INSERT INTO scan_results (task_id,target_id,timestamp,status) VALUES (?,1,'2026-01-01T10:00:00',?)",
+                     (task_id, status))
+        conn.commit()
+        conn.close()
+        return self.client.get("/dashboard").get_data(as_text=True)
+
+    def test_finished_scan_row_opens_its_results(self):
+        page = self._scan("completed")
+        self.assertIn('class="row-link" data-href="/results/1"', page)
+        self.assertIn('<a href="/results/1" class="row-link-a">Alpha</a>', page)
+        self.assertIn('href="/results">View all', page)
+
+    def test_running_scan_row_opens_the_live_view(self):
+        page = self._scan("running", task_id=7)
+        self.assertIn('data-href="/scan/7/live"', page)
+        self.assertNotIn('data-href="/results/1"', page)
+
+    def test_the_click_handler_is_global_so_every_page_with_clickable_rows_gets_it(self):
+        page = self.client.get("/dashboard").get_data(as_text=True)
+        self.assertIn("closest('tr.row-link')", page)
+        self.assertIn("closest('a, button, form, input, select')", page)
+        self.assertIn("tr.row-link", self.client.get("/static/css/style.css").get_data(as_text=True))
