@@ -175,6 +175,7 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
             "--model_type", "integrations.garak_generator.CyberGuardGenerator",
             "--model_name", str(target_row["id"]),
             "--probes", ",".join(probes),
+            "--generations", "1",
             "--report_prefix", report_prefix,
         ]
         try:
