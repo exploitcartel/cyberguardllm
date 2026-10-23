@@ -95,6 +95,8 @@ AI_POWERED_GLOBAL_ATTEMPT_CAP = 400
 MAX_CONSECUTIVE_TRANSPORT_ERRORS = 5
 # AI-Powered attempts can each wait up to 180 s, so it gives up sooner.
 AI_MAX_CONSECUTIVE_TRANSPORT_ERRORS = 3
+# The attacking model returning nothing this many times in a row means it is declining to write attack prompts.
+AI_MAX_CONSECUTIVE_EMPTY_PROMPTS = 3
 
 # Before any payload is sent, check that the target's host:port accepts a TCP connection (no data is sent). A scan
 # against a host that cannot be reached - the machine moved to another network, the VM is off, a typo in the IP -
@@ -734,6 +736,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
 
     hit_global_cap = False
     consecutive_transport_errors = 0
+    consecutive_empty_prompts = 0
     for owasp_code in cats:
         if hit_global_cap:
             break
@@ -778,6 +781,41 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                     api_base, api_key, model, owasp_code, label, prev_prompt, prev_response,
                     previous_reasoning=prev_reasoning, technique_hint=technique_hint,
                     attempt_number=attempt, attempts_budget=effective_budget)
+                consecutive_empty_prompts = 0
+            except ai_agent.EmptyModelOutput as e:
+                # Nothing was written, so nothing is sent: an empty prompt is not an attack, and scoring the
+                # target's reply to it would count a wasted attempt as "resisted".
+                consecutive_empty_prompts += 1
+                conn.execute(
+                    """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent,
+                       raw_response, description, module, source, recommendation)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (result_id, rule_id, owasp_code, "low", "ERROR", "", "",
+                     f"AI-generated adversarial attempt #{attempt} for {owasp_code} ({label}) could not run: {e}. "
+                     "Nothing was sent to the target. This is not a security result; the attacking model most "
+                     "likely declined to write this attack prompt.",
+                     "AI-Powered Adversarial Agent", "ai_agent",
+                     "Try a different attacking model under Settings if this keeps happening."))
+                if consecutive_empty_prompts >= AI_MAX_CONSECUTIVE_EMPTY_PROMPTS:
+                    conn.execute(
+                        """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent,
+                           raw_response, description, module, source, recommendation)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                        (result_id, "ai-attacker-declined", owasp_code, "low", "ERROR", "", "",
+                         f"The AI-Powered scan stopped after the attacking model returned no prompt "
+                         f"{consecutive_empty_prompts} times in a row ({e}). It appears to be declining to write "
+                         "adversarial prompts, so the remaining attempts were not made. This is a scan/model "
+                         "issue, not a security result.",
+                         "AI-Powered Adversarial Agent", "ai_agent",
+                         "Use a different attacking model (Settings > AI API) and re-run."))
+                    conn.execute("UPDATE tasks SET progress_done=?, last_rule_id=? WHERE id=?",
+                                 (total, "ai-attacker-declined", task_id))
+                    conn.commit()
+                    return False
+                conn.execute("UPDATE tasks SET progress_done=?, progress_findings=?, last_rule_id=? WHERE id=?",
+                             (step, findings_count, rule_id, task_id))
+                conn.commit()
+                continue
             except Exception as e:
                 # A broken provider/model/key would otherwise fail the exact
                 # same way on every remaining attempt and category, silently
@@ -923,7 +961,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 conn.execute(
                     """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response, description, module, source, recommendation)
                        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                    (result_id, f"ai-{owasp_code}-extension", owasp_code, "low", "PASS", "", "",
+                    (result_id, f"ai-{owasp_code}-extension", owasp_code, "low", "INFO", "", "",
                      f"Budget for {owasp_code} ({label}) extended by {AI_BREAKTHROUGH_EXTENSION_ATTEMPTS} attempts: "
                      f"after {attempt} attempts the target had not been confirmed vulnerable, but the judge's "
                      f"confidence it fully resisted was only {confidence}% (within {AI_BREAKTHROUGH_CONFIDENCE_MARGIN} "

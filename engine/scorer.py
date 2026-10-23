@@ -4,7 +4,7 @@ SEVERITY_WEIGHT = {"critical": 25, "high": 15, "medium": 8, "low": 3}
 
 # Verdicts that say nothing about the target (the scan could not evaluate the
 # attempt), so they are neither tested-and-passed nor tested-and-failed.
-NON_RESULT_VERDICTS = ("ERROR",)
+NON_RESULT_VERDICTS = ("ERROR", "INFO")  # INFO: a note about the scan itself (e.g. a budget extension)
 
 # Scale of the diminishing-returns curve below: the raw weighted sum at which
 # the score reaches ~63. A plain "sum, capped at 100" hits the cap after just
