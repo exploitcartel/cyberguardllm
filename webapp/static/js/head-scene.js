@@ -130,7 +130,12 @@ const POINT_FRAG = /* glsl */ `
 /**
  * Mounts the head into `canvas` (which `wrap` sizes) and returns a controller:
  *   pulse(amount)  - scan activity (a payload was sent): brightens the mesh and speeds up the data packets
- *   alert()        - a finding was confirmed: the head and the globe flash red
+ *   alert()        - a finding was confirmed: the head and the globe flash red once
+ *   alertPulses(n) - the same flash n times in a row (the scan found something: pulse red 3 times)
+ *   setReserve(px) - horizontal room (total, both sides) the page needs for tickets; the globe shrinks to fit
+ *                    in what is left instead of running under them
+ *   getShield()    - {cx, cy, r}: the globe's circle in CSS pixels inside `wrap`, so the page can draw tickets
+ *                    outside it and connect them to its edge with a thin line
  *   setPaused(b)   - slows everything down while the scan is paused
  *   dispose()
  * `theme` is "dark" (default) or "light". `onFail` is called once if WebGL or the model is unavailable.
@@ -146,7 +151,10 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
     renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !lowPower, powerPreference: "high-performance" });
   } catch (e) {
     onFail();
-    return { pulse() {}, alert() {}, setPaused() {}, dispose() {} };
+    return { pulse() {}, alert() {}, alertPulses() {}, setPaused() {}, dispose() {},
+             setReserve() {},
+             getShield: () => ({ cx: wrap.clientWidth / 2, cy: wrap.clientHeight / 2,
+                                 r: Math.min(wrap.clientWidth, wrap.clientHeight) * 0.38 }) };
   }
   const pixelRatio = Math.min(window.devicePixelRatio || 1, lowPower ? 1.5 : 2);
   renderer.setPixelRatio(pixelRatio);
@@ -163,7 +171,7 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
   const disposables = [];
   const track = (o) => { disposables.push(o); return o; };
 
-  const state = { activity: 0, alert: 0, speed: 1, paused: false };
+  const state = { activity: 0, alert: 0, speed: 1, paused: false, queue: 0 };
   const ridgeUniforms = { uScan: { value: -2 }, uFreq: { value: lowPower ? 12 : 18 },
                           uAlert: { value: 0 }, uActivity: { value: 0 }, uLight: { value: light ? 1 : 0 } };
   const pointUniforms = { uTime: { value: 0 }, uScale: { value: 1 }, uAlert: { value: 0 }, uActivity: { value: 0 },
@@ -332,6 +340,7 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
     () => { if (!disposed) onFail(); },
   );
 
+  let reservePx = 0;
   const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
   const resize = () => {
     const w = wrap.clientWidth;
@@ -341,7 +350,8 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
     camera.aspect = w / h;
     // Back the camera off until the whole globe fits in both directions (tall narrow areas are width-limited).
     const halfFov = (camera.fov * Math.PI) / 360;
-    camera.position.set(0, CENTER_Y + 0.07, ((CAGE_RADIUS + 0.2) / Math.tan(halfFov)) / Math.min(1, camera.aspect));
+    const usableAspect = Math.max(0.25, (w - reservePx) / h);
+    camera.position.set(0, CENTER_Y + 0.07, ((CAGE_RADIUS + 0.2) / Math.tan(halfFov)) / Math.min(1, usableAspect));
     camera.lookAt(0, CENTER_Y, 0);
     camera.updateProjectionMatrix();
     const dist = camera.position.z;
@@ -381,6 +391,8 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
     state.speed += ((state.paused ? 0.12 : 1) - state.speed) * 0.08;
     state.activity *= 0.94;
     state.alert *= 0.94;
+    // queued pulses: start the next red flash as soon as the previous one has faded
+    if (state.queue > 0 && state.alert < 0.12) { state.alert = 1; state.activity = 1; state.queue--; }
     const step = dt * (reduceMotion ? 0 : state.speed);
     clock += step;
     scanPhase += step * 0.55 * (1 + state.activity * 1.6);
@@ -422,6 +434,23 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
   return {
     pulse(amount = 0.6) { state.activity = Math.min(1, state.activity + amount); },
     alert() { state.alert = 1; state.activity = 1; },
+    setReserve(px) {
+      const next = Math.max(0, Math.round(px));
+      if (next !== reservePx) { reservePx = next; resize(); }
+    },
+    alertPulses(n = 3) { state.queue = Math.max(state.queue, Math.max(0, n)); },
+    getShield() {
+      const w = wrap.clientWidth;
+      const h = wrap.clientHeight;
+      camera.updateMatrixWorld();
+      const centre = new THREE.Vector3(0, CENTER_Y, 0);
+      const ndc = centre.clone().project(camera);
+      const dist = camera.position.distanceTo(centre);
+      const halfFov = (camera.fov * Math.PI) / 360;
+      // silhouette radius of a sphere seen in perspective: angular radius asin(R / d)
+      const r = (Math.tan(Math.asin(Math.min(0.99, CAGE_RADIUS / dist))) / Math.tan(halfFov)) * (h / 2);
+      return { cx: ((ndc.x + 1) / 2) * w, cy: ((1 - ndc.y) / 2) * h, r };
+    },
     setPaused(paused) { state.paused = !!paused; },
     dispose() {
       disposed = true;

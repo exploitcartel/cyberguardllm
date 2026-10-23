@@ -1239,12 +1239,19 @@ def get_task_progress(task_id: int):
     conn = get_conn()
     task = conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
     recent = []
+    hits = []
     if task and task["result_id"] is not None:
         # The most recent findings (any verdict) for the live page's callouts and log: what was just tested and
         # how it came out. id lets the page tell which ones it has already shown.
         recent = [dict(r) for r in conn.execute(
             "SELECT id, rule_id, owasp, verdict, module FROM findings WHERE scan_result_id=? "
             "ORDER BY id DESC LIMIT 8", (task["result_id"],)).fetchall()]
+        # The most recent hits (confirmed vulnerabilities and REVIEW items), newest first, independent of how many
+        # harmless results came after them: the live page shows these as tickets, including when it is opened
+        # in the middle of a scan.
+        hits = [dict(r) for r in conn.execute(
+            "SELECT id, rule_id, owasp, verdict, module FROM findings WHERE scan_result_id=? "
+            "AND verdict IN ('FAIL','REVIEW') ORDER BY id DESC LIMIT 8", (task["result_id"],)).fetchall()]
     conn.close()
     if not task:
         return None
@@ -1256,5 +1263,6 @@ def get_task_progress(task_id: int):
         "last_rule_id": task["last_rule_id"],
         "result_id": task["result_id"],
         "recent": recent,
+        "hits": hits,
         "control": task["control"] if "control" in task.keys() and task["control"] else "run",
     }

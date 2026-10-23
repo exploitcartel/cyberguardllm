@@ -155,7 +155,7 @@ function setLang(lang){
   "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
 </script>
 <script type="module">
-import { createHeadScene } from '/static/js/head-scene.js';
+import { createHeadScene } from '/static/js/head-scene.js?v={{ head_scene_v }}';
 
 const stage = document.getElementById('headStage');
 // The left panel is hidden on narrow screens; do not load three.js and the model for a view nobody can see.

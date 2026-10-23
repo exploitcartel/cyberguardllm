@@ -53,22 +53,41 @@
     font-size:14px;text-align:center;padding:24px;}
   .head-wrap.no-webgl .no-webgl-note{display:flex;}
 
-  .callout{position:absolute;width:clamp(170px,19%,230px);padding:10px 13px;border-radius:11px;
+  /* Tickets: one per hit (a confirmed vulnerability or a REVIEW item), placed OUTSIDE the network globe and joined to
+     its edge by a thin line. A fresh vulnerable hit pulses red three times and its ticket swells and pulses with it. */
+  .links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;}
+  .link{stroke:var(--s-accent);stroke-opacity:.45;stroke-width:1;fill:none;}
+  .link-dot{fill:var(--s-accent);fill-opacity:.8;}
+  .link.fail{stroke:var(--s-red);stroke-opacity:.8;} .link-dot.fail{fill:var(--s-red);fill-opacity:1;}
+  .link.review{stroke:var(--s-amber);stroke-opacity:.7;} .link-dot.review{fill:var(--s-amber);}
+  .link.hit{animation:link-hit 1.9s ease-in-out .4s both;}
+  .link-dot.hit{animation:dot-hit 1.9s ease-in-out .4s both;transform-box:fill-box;transform-origin:center;}
+  @keyframes link-hit{0%,100%{stroke-width:1;}15%,55%,90%{stroke-width:2.6;stroke-opacity:1;}35%,75%{stroke-width:1;}}
+  @keyframes dot-hit{0%,100%{transform:scale(1);}15%,55%,90%{transform:scale(2.4);}35%,75%{transform:scale(1);}}
+
+  .ticket{position:absolute;width:clamp(150px,20%,184px);padding:9px 12px;border-radius:11px;
     background:var(--s-card);border:1px solid var(--s-cardline);backdrop-filter:blur(6px);
-    animation:callout-in .5s cubic-bezier(.22,1,.36,1) both;pointer-events:none;}
-  @keyframes callout-in{from{opacity:0;transform:translateY(8px) scale(.97);}to{opacity:1;transform:none;}}
-  .callout-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-  .callout-label{font:600 13px/1.25 var(--font);color:var(--s-text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-  .callout-sub{margin-top:7px;display:flex;align-items:center;justify-content:space-between;gap:8px;font:12px var(--mono);color:var(--s-sub);}
-  .callout-sub span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    transform-origin:center;transition:transform .3s ease, box-shadow .3s ease;
+    animation:ticket-in .45s cubic-bezier(.22,1,.36,1) both;pointer-events:none;}
+  @keyframes ticket-in{from{opacity:0;transform:translateY(8px) scale(.96);}to{opacity:1;transform:none;}}
+  .ticket.fail{border-color:rgba(248,113,113,.55);}
+  .ticket.review{border-color:rgba(251,191,36,.5);}
+  .ticket.big{transform:scale(1.06);box-shadow:0 0 14px rgba(248,113,113,.28);}
+  .ticket.hit{animation:ticket-in .45s cubic-bezier(.22,1,.36,1) both, ticket-hit 1.9s ease-in-out .4s forwards;}
+  @keyframes ticket-hit{
+    0%{transform:scale(1);box-shadow:0 0 0 0 rgba(248,113,113,0);}
+    15%,55%,90%{transform:scale(1.13);box-shadow:0 0 26px 3px rgba(248,113,113,.6);}
+    35%,75%{transform:scale(1.04);box-shadow:0 0 6px rgba(248,113,113,.2);}
+    100%{transform:scale(1.06);box-shadow:0 0 14px rgba(248,113,113,.28);}
+  }
+  .ticket-label{font:600 13px/1.25 var(--font);color:var(--s-text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .ticket-sub{margin-top:7px;display:flex;align-items:center;justify-content:space-between;gap:8px;font:12px var(--mono);color:var(--s-sub);}
+  .ticket-sub span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .chip{font:700 10.5px var(--mono);letter-spacing:.06em;padding:3px 7px;border-radius:6px;flex-shrink:0;}
   .chip.fail{color:var(--c-fail);background:rgba(248,113,113,.2);}
   .chip.pass{color:var(--c-pass);background:rgba(52,211,153,.16);}
   .chip.review{color:var(--c-review);background:rgba(251,191,36,.18);}
   .chip.error{color:var(--c-error);background:rgba(148,163,184,.2);}
-  .callout.fail{border-color:rgba(248,113,113,.5);}
-  .slot-1{left:3%;top:9%;} .slot-2{right:3%;top:6%;} .slot-3{left:1%;top:40%;}
-  .slot-4{right:1%;top:38%;} .slot-5{left:5%;top:70%;} .slot-6{right:5%;top:68%;}
 
   .stage-foot{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px 18px;
     padding:14px 26px 18px;border-top:1px solid var(--s-line);}
@@ -108,9 +127,8 @@
     .head-wrap{height:62vh;flex:none;}
     .stage-side{border-left:0;border-top:1px solid var(--s-line);}
     .log{max-height:260px;}
-    .slot-3,.slot-4,.slot-5,.slot-6{display:none;}
   }
-  @media (prefers-reduced-motion:reduce){.callout{animation:none;}.bar > span{transition:none;}}
+  @media (prefers-reduced-motion:reduce){.ticket,.ticket.hit,.link.hit,.link-dot.hit{animation:none;}.ticket.hit{transform:scale(1.06);}.bar > span{transition:none;}}
 </style>
 
 <section class="stage" id="stage">
@@ -133,7 +151,8 @@
       <div class="head-wrap" id="headWrap">
         <canvas id="headCanvas" aria-hidden="true"></canvas>
         <div class="no-webgl-note">3D view is unavailable in this browser. The scan itself is running normally.</div>
-        <div id="callouts"></div>
+        <svg class="links" id="links" aria-hidden="true"></svg>
+        <div id="tickets"></div>
       </div>
       <div class="stage-foot">
         <div class="pct" id="progressPct">0%</div>
@@ -166,7 +185,7 @@
   "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
 </script>
 <script type="module">
-import { createHeadScene } from '/static/js/head-scene.js';
+import { createHeadScene } from '/static/js/head-scene.js?v={{ head_scene_v }}';
 
 const taskId = {{ task_id }};
 const OWASP_LABELS = {{ owasp_labels | tojson }};
@@ -214,11 +233,9 @@ function applyControlUI(control){
   }
 }
 
-// ---- live log + callouts --------------------------------------------------------------------------------
+// ---- live log --------------------------------------------------------------------------------------------
 const log = $('liveLog');
-const calloutBox = $('callouts');
 const VERDICT_TEXT = {FAIL:'VULNERABLE', PASS:'RESISTED', REVIEW:'REVIEW', ERROR:'ERROR'};
-let nextSlot = 0;
 
 function clock(){
   return new Date().toTimeString().slice(0, 8);
@@ -233,20 +250,126 @@ function addLog(html, cls){
   if(stick) log.scrollTop = log.scrollHeight;
 }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function logRow(e){
+  const v = (e.verdict || 'PASS').toLowerCase();
+  return '<time>' + clock() + '</time><span class="rid">' + esc(e.rule_id) + '</span>' +
+         '<span class="v ' + v + '">' + (VERDICT_TEXT[e.verdict] || esc(e.verdict)) + '</span>';
+}
 
-function showCallout(ev){
-  const slot = (nextSlot++ % 6) + 1;
-  const old = calloutBox.querySelector('.slot-' + slot);
-  if(old) old.remove();
-  const v = (ev.verdict || 'PASS').toLowerCase();
-  const card = document.createElement('div');
-  card.className = 'callout slot-' + slot + (v === 'fail' ? ' fail' : '');
+// ---- tickets outside the globe, joined to it by a thin line ------------------------------------------------
+const wrap = $('headWrap');
+const ticketBox = $('tickets');
+const linkSvg = $('links');
+const SVGNS = 'http://www.w3.org/2000/svg';
+const MAX_TICKETS = 8;
+// side + row (0 = top .. 3 = bottom); the order spreads new tickets over both sides before filling a side
+const SLOTS = [['L',0],['R',0],['L',2],['R',2],['L',1],['R',1],['L',3],['R',3]];
+const tickets = [];            // {el, line, dot, side, row, id}
+let slotCursor = 0;
+
+function placeTicket(t){
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  const s = head.getShield();
+  const margin = 14, gap = 20;
+  const cw = t.el.offsetWidth, ch = t.el.offsetHeight;
+  const usable = Math.max(0, h - margin * 2 - ch);
+  t.el.style.top = (margin + usable * (t.row / 3)) + 'px';
+  t.el.style.left = (t.side === 'L'
+      ? Math.max(margin, s.cx - s.r - gap - cw)
+      : Math.min(w - margin - cw, s.cx + s.r + gap)) + 'px';
+}
+function layoutTickets(){
+  // Tickets sit in a column on each side of the globe; tell the scene how much width that takes so the globe
+  // shrinks to fit between them instead of running under them (matches the .ticket width in the CSS above).
+  const cw = Math.min(184, Math.max(150, wrap.clientWidth * 0.2));
+  head.setReserve(2 * (cw + 20 + 14));
+  tickets.forEach(placeTicket);
+}
+layoutTickets();
+new ResizeObserver(layoutTickets).observe(wrap);
+
+// Redraws the connector lines every frame: they run from the ticket's inner edge to the globe's edge, along the
+// line towards the globe's centre, so they stay attached while the window is resized.
+function drawLinks(){
+  if(tickets.length){
+    const s = head.getShield();
+    tickets.forEach(t => {
+      const x = t.el.offsetLeft, y = t.el.offsetTop, cw = t.el.offsetWidth, ch = t.el.offsetHeight;
+      const ax = t.side === 'L' ? x + cw : x, ay = y + ch / 2;
+      const dx = ax - s.cx, dy = ay - s.cy, len = Math.hypot(dx, dy) || 1;
+      const sx = s.cx + dx / len * s.r, sy = s.cy + dy / len * s.r;
+      t.line.setAttribute('x1', ax); t.line.setAttribute('y1', ay);
+      t.line.setAttribute('x2', sx); t.line.setAttribute('y2', sy);
+      t.dot.setAttribute('cx', sx); t.dot.setAttribute('cy', sy);
+    });
+  }
+  requestAnimationFrame(drawLinks);
+}
+requestAnimationFrame(drawLinks);
+
+function removeTicket(t){
+  t.el.remove(); t.line.remove(); t.dot.remove();
+  tickets.splice(tickets.indexOf(t), 1);
+}
+
+// opts.pulse: a new vulnerable hit - the ticket swells and pulses, its line and the globe flash red three times
+function addTicket(ev, opts){
+  opts = opts || {};
+  if(tickets.length >= MAX_TICKETS) removeTicket(tickets[0]);
+  const [side, row] = SLOTS[slotCursor++ % SLOTS.length];
+  // free the slot if an older ticket still sits on it
+  const clash = tickets.find(t => t.side === side && t.row === row);
+  if(clash) removeTicket(clash);
+
+  const v = (ev.verdict || 'FAIL').toLowerCase();
+  const el = document.createElement('div');
+  el.className = 'ticket ' + v;
   const label = ev.module || OWASP_LABELS[ev.owasp] || ev.owasp || 'Test';
-  card.innerHTML =
-    '<div class="callout-label">' + esc(label) + '</div>' +
-    '<div class="callout-sub"><span>' + esc(ev.rule_id) + ' &middot; ' + esc(ev.owasp) + '</span>' +
+  el.innerHTML =
+    '<div class="ticket-label">' + esc(label) + '</div>' +
+    '<div class="ticket-sub"><span>' + esc(ev.owasp) + ' &middot; ' + esc(ev.rule_id) + '</span>' +
     '<span class="chip ' + v + '">' + (VERDICT_TEXT[ev.verdict] || esc(ev.verdict)) + '</span></div>';
-  calloutBox.appendChild(card);
+  ticketBox.appendChild(el);
+
+  const line = document.createElementNS(SVGNS, 'line');
+  line.setAttribute('class', 'link ' + v);
+  const dot = document.createElementNS(SVGNS, 'circle');
+  dot.setAttribute('r', 3);
+  dot.setAttribute('class', 'link-dot ' + v);
+  linkSvg.appendChild(line); linkSvg.appendChild(dot);
+
+  const t = {el, line, dot, side, row, id: ev.id};
+  tickets.push(t);
+  placeTicket(t);
+
+  // the newest hit is the biggest; older ones settle back to normal size
+  tickets.forEach(o => { if(o !== t) o.el.classList.remove('big', 'hit'); });
+  if(opts.pulse){
+    el.classList.add('hit');
+    line.classList.add('hit'); dot.classList.add('hit');
+    el.addEventListener('animationend', e => { if(e.animationName === 'ticket-hit'){ el.classList.remove('hit'); el.classList.add('big'); } });
+  }
+  return t;
+}
+
+const seenHits = new Set();
+let hitsSeeded = false;
+function consumeHits(hits){
+  const list = (hits || []).slice().sort((a, b) => a.id - b.id);
+  if(!hitsSeeded){
+    // Page opened mid-scan: show the hits so far as quiet tickets, with no pulses.
+    hitsSeeded = true;
+    list.forEach(e => { seenHits.add(e.id); addTicket(e); });
+    return 0;
+  }
+  let vulnerable = 0;
+  list.filter(e => !seenHits.has(e.id)).forEach(e => {
+    seenHits.add(e.id);
+    if(e.verdict === 'FAIL'){ addTicket(e, {pulse: true}); vulnerable++; }
+    else { addTicket(e); head.pulse(0.5); }
+  });
+  if(vulnerable) head.alertPulses(3);
+  return vulnerable;
 }
 
 let lastSeenId = 0;
@@ -255,7 +378,7 @@ function consumeRecent(recent){
   if(!recent || !recent.length) return;
   const fresh = recent.filter(e => e.id > lastSeenId).sort((a, b) => a.id - b.id);
   if(!seeded){
-    // First poll (page opened mid-scan): do not replay history into the callouts, just remember where we are.
+    // First poll (page opened mid-scan): do not replay history, just remember where we are.
     seeded = true;
     lastSeenId = Math.max(...recent.map(e => e.id));
     fresh.slice(-6).forEach(e => addLog(logRow(e)));
@@ -264,20 +387,12 @@ function consumeRecent(recent){
   if(!fresh.length) return;
   fresh.forEach(e => addLog(logRow(e)));
   lastSeenId = fresh[fresh.length - 1].id;
-  // At most two callouts per poll: a confirmed finding always wins, otherwise the newest result.
-  const loud = fresh.filter(e => e.verdict === 'FAIL' || e.verdict === 'REVIEW');
-  (loud.length ? loud.slice(-2) : [fresh[fresh.length - 1]]).forEach(showCallout);
   head.pulse(Math.min(1, 0.25 + fresh.length * 0.1));
-}
-function logRow(e){
-  const v = (e.verdict || 'PASS').toLowerCase();
-  return '<time>' + clock() + '</time><span class="rid">' + esc(e.rule_id) + '</span>' +
-         '<span class="v ' + v + '">' + (VERDICT_TEXT[e.verdict] || esc(e.verdict)) + '</span>';
 }
 
 // ---- polling --------------------------------------------------------------------------------------------
 let lastPhaseText = '';
-let prevFindings = 0;
+let prevFindings = null;
 let finished = false;
 
 function poll(){
@@ -303,7 +418,8 @@ function poll(){
     }
 
     consumeRecent(data.recent);
-    if(data.findings > prevFindings && seeded){ head.alert(); }
+    const newHits = consumeHits(data.hits);
+    if(data.findings > prevFindings && prevFindings !== null && !newHits){ head.alertPulses(1); }
     prevFindings = data.findings;
 
     applyControlUI(data.control || 'run');
