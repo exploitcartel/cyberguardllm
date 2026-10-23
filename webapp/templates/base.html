@@ -125,6 +125,11 @@ document.addEventListener('submit', function(e){ cgllmCsrfFill(e.target); }, tru
     {% endif %}
     {% endwith %}
     <script>
+document.addEventListener('click', function(e){
+  var row = e.target.closest('tr.row-link');
+  if(!row || e.target.closest('a, button, form, input, select')) return;
+  window.location.href = row.getAttribute('data-href');
+});
 function setTheme(mode){
   document.cookie = "theme=" + mode + "; path=/; max-age=31536000";
   location.reload();

@@ -45,13 +45,15 @@
 </div>
 
 <div class="card">
-  <h3 style="margin-top:0;">{{ t('recent_scans') }}</h3>
+  <div class="card-head"><h3>{{ t('recent_scans') }}</h3><a href="/results">{{ t('view_all') }} &rarr;</a></div>
   <table>
     <tr><th>{{ t('col_date') }}</th><th>{{ t('col_target') }}</th><th>{{ t('col_findings') }}</th><th>{{ t('col_risk_score') }}</th><th>{{ t('col_status') }}</th></tr>
     {% for s in recent_scans %}
-    <tr>
+    {# a running scan opens its live view; every other scan opens its results #}
+    {% set dest = ('/scan/' ~ s.task_id ~ '/live') if (s.status == 'running' and s.task_id) else ('/results/' ~ s.id) %}
+    <tr class="row-link" data-href="{{ dest }}" title="{{ t('open_scan_hint') }}">
       <td>{{ s.timestamp|fmtdate }}</td>
-      <td><a href="/results/{{ s.id }}">{{ s.target_name or '-' }}</a></td>
+      <td><a href="{{ dest }}" class="row-link-a">{{ s.target_name or '-' }}</a></td>
       <td>{{ s.total_findings }}</td>
       <td>{{ s.risk_score }}</td>
       <td><span class="badge badge-{{ s.status }}">{{ s.status }}</span></td>
