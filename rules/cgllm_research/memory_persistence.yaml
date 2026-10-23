@@ -46,7 +46,7 @@
   - (?i)(don't have|cannot verify|not able to confirm).*(admin|access)
   level: low
 - id: PERSIST-003
-  owasp: LLM07
+  owasp: LLM08
   severity: medium
   source: cgllm_research
   module: Memory Persistence

@@ -72,33 +72,28 @@ RECOMMENDATIONS = {
     "LLM02": "Apply strict output filtering for secrets, PII and internal system details. Minimize what the system "
              "prompt and context window expose to the model, and never place credentials or private data in a prompt "
              "the model can be tricked into repeating.",
-    "LLM05": "Never pass model output directly into a shell, SQL query, template renderer, or browser DOM without "
+    "LLM10": "Never pass model output directly into a shell, SQL query, template renderer, or browser DOM without "
               "sanitization. Treat generated content the same way you would treat untrusted user input.",
-    "LLM06": "Reduce the agent's standing permissions to the minimum required for its task, require human confirmation "
+    "LLM03": "Reduce the agent's standing permissions to the minimum required for its task, require human confirmation "
               "for high-impact or irreversible actions, and log every tool call the agent makes.",
-    "LLM07": "Do not rely on the system prompt as a security boundary. Assume it can leak, and ensure no secrets, "
+    "LLM08": "Do not rely on the system prompt as a security boundary. Assume it can leak, and ensure no secrets, "
               "credentials or proprietary logic are placed inside it.",
-    "LLM08": "Validate and sanitize data before it is embedded, and monitor for anomalous vectors or poisoning in "
+    "LLM09": "Validate and sanitize data before it is embedded, and monitor for anomalous vectors or poisoning in "
               "retrieval-augmented generation (RAG) pipelines.",
-    "LLM09": "Add retrieval grounding and citation requirements for factual claims, and present AI generated content "
+    "LLM07": "Add retrieval grounding and citation requirements for factual claims, and present AI generated content "
               "with a clear confidence indicator so downstream consumers do not treat it as verified fact.",
-    "LLM10": "Apply rate limiting, input size caps, and timeouts on model and tool calls to prevent resource "
+    "LLM06": "Apply rate limiting, input size caps, and timeouts on model and tool calls to prevent resource "
               "exhaustion and denial-of-wallet style abuse.",
 }
 
-OWASP_NAMES = {
-    "LLM01": "Prompt Injection", "LLM02": "Sensitive Information Disclosure",
-    "LLM05": "Improper Output Handling", "LLM06": "Excessive Agency",
-    "LLM07": "System Prompt Leakage", "LLM08": "Vector and Embedding Weaknesses",
-    "LLM09": "Misinformation", "LLM10": "Unbounded Consumption",
-}
+from core.owasp import LABELS as OWASP_NAMES  # noqa: E402  (all ten 2026 categories, in code order)
 
 OUT_OF_SCOPE_NOTES = {
-    "LLM03": ("Supply Chain", "Supply-chain risk (compromised base models, poisoned third-party components, "
+    "LLM04": ("Supply Chain", "Supply-chain risk (compromised base models, poisoned third-party components, "
               "vulnerable plugins/dependencies) cannot be assessed by sending prompts to a live endpoint, it "
               "requires reviewing the model's provenance, an SBOM (software bill of materials) for the serving "
               "stack, and the vetting process for any third-party components, plugins, or fine-tunes in use."),
-    "LLM04": ("Data and Model Poisoning", "Whether the training or fine-tuning data was poisoned cannot be "
+    "LLM05": ("Data and Model Poisoning", "Whether the training or fine-tuning data was poisoned cannot be "
               "determined from the outside by sending test prompts, it requires access to training data "
               "provenance, data validation pipelines, and the model's training/fine-tuning process itself."),
 }

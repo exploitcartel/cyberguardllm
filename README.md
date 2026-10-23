@@ -89,9 +89,9 @@ The library is split into two kinds of content, both visible and clearly labeled
   Neural Drift, Context Poisoning, Confidence Exploit, Encoding Cascade, Language Switching Bypass, Format Confusion,
   Business Logic Bypass, Persona Hijacking, Emotional Manipulation, and Authority Impersonation.
 
-Every payload is tagged with one of the OWASP LLM Top 10 categories currently covered: LLM01 Prompt Injection, LLM02
-Sensitive Information Disclosure, LLM05 Improper Output Handling, LLM06 Excessive Agency, LLM07 System Prompt
-Leakage, LLM08 Vector and Embedding Weaknesses, LLM09 Misinformation, and LLM10 Unbounded Consumption.
+Every payload is tagged with one of the OWASP Top 10 for LLM Applications **2026** categories currently covered: LLM01 Prompt Injection, LLM02 Sensitive Information Disclosure, LLM03 Excessive Agency, LLM06 Unbounded Consumption, LLM07 Misinformation, LLM08 Hidden Context Exposure (the broadened successor of System Prompt Leakage), LLM09 Vector and Embedding Weaknesses, and LLM10 Improper Output Handling. LLM04 Supply Chain and LLM05 Data and Model Poisoning cannot be tested by prompting a live endpoint and are listed as out of scope in every report.
+
+The 2026 edition renumbered several categories compared with 2025 (for example Excessive Agency is now LLM03, it was LLM06). The whole app uses the 2026 codes from `core/owasp.py`. A database created before this change is converted automatically, once, the first time the app starts; for your own rule files written against the 2025 numbering, run `python scripts/remap_owasp_2026.py <file>` once per file.
 
 ### 3. Offline scanning vs AI-Powered scanning
 
@@ -305,7 +305,7 @@ just broader:
   plain-text attack still blocks a disguised one. Each mutated variant is its own finding (rule id suffixed
   `-MUT-<technique>`), so a target that only blocks the obvious phrasing shows up clearly. This roughly multiplies
   scan time by (1 + number of techniques selected), so it is opt-in per scan config.
-- **Out-of-band canary verification for LLM06** (`engine/canary_module.py`): every other test in this tool judges
+- **Out-of-band canary verification for LLM03** (`engine/canary_module.py`): every other test in this tool judges
   a target by what it *says* back. This instead proves, rather than infers, whether a tool-calling agent actually
   performs an unauthorized outbound action: it gives the target a unique, single-use URL pointing back at this
   app and asks it to fetch/visit that URL as part of a normal-sounding task, then checks server-side (via an
@@ -396,7 +396,7 @@ These six features all build on the AI API already configurable under Settings (
 including Claude via a compatible gateway), pushing it further than only judging a response at the end of a test:
 
 - **AI recon and personalized payloads** (`engine/recon_module.py`, opt-in per scan config: "AI recon"): before
-  normal scoring, this probes the target for its own system prompt / hidden instructions (an LLM07 test in its own
+  normal scoring, this probes the target for its own system prompt / hidden instructions (an LLM08 test in its own
   right). If something credible leaks, and an AI API is configured, that AI writes attack prompts personalized to
   this target's own persona and domain for the selected categories, instead of only generic canned payloads, the
   same way a pentester crafts attacks after recon rather than before it. Without an AI API, the leak probing still
@@ -440,10 +440,10 @@ have a live AI API key to test against).
 These four additions target the offline/heuristic side of the tool specifically, since every AI-powered feature
 above still needs an AI API configured, and most scans never have one:
 
-- **Filled-out LLM09 and LLM10 rule libraries** (`rules/cgllm_research/misinformation_consumption.yaml`): these two
-  categories were thin before (4 and 3 payloads respectively), and are now 10 and 9. LLM09 (Misinformation) covers
+- **Filled-out LLM07 and LLM06 rule libraries** (`rules/cgllm_research/misinformation_consumption.yaml`): these two
+  categories were thin before (4 and 3 payloads respectively), and are now 10 and 9. LLM07 (Misinformation) covers
   confident-sounding fabricated facts, fake citations, and overconfident claims on topics the target cannot actually
-  know; LLM10 (Unbounded Consumption) covers resource-exhaustion-style prompts (asking for huge, expensive, or
+  know; LLM06 (Unbounded Consumption) covers resource-exhaustion-style prompts (asking for huge, expensive, or
   repeated generations) and over-reliance patterns, all as realistic black-box payloads with their own
   fail/pass conditions, same as every other rule in the library.
 - **Baseline / control-prompt check** (`engine/baseline_module.py`, runs automatically, no configuration needed):
@@ -453,7 +453,7 @@ above still needs an AI API configured, and most scans never have one:
   reaction to the payload) is downgraded to REVIEW instead of reported as a confirmed FAIL, cutting down on offline
   false positives. Separately, any prompt whose response takes much longer than the baseline (configurable
   multiplier, skipped when the baseline itself is near-instant) gets a note flagging a possible hidden tool call or
-  unusually expensive processing, which is itself a weak LLM06/LLM10 signal worth a human look.
+  unusually expensive processing, which is itself a weak LLM03/LLM06 signal worth a human look.
 - **Guardrail / WAF fingerprinting** (`engine/fingerprint_module.py`, opt-in per scan config: "Guardrail
   fingerprinting"): sends one generic jailbreak-style probe and matches the refusal wording against a short list of
   publicly-known refusal-phrasing patterns for common moderation styles (OpenAI-style, Anthropic-style, generic
@@ -461,26 +461,26 @@ above still needs an AI API configured, and most scans never have one:
   not even refuse (so there was nothing to fingerprint, a compliance case), or that it refused with unrecognized
   phrasing (likely a custom/unlabeled guardrail). This is informational, not a vulnerability by itself, it exists to
   help a human analyst pick which follow-up techniques are more likely to work against this specific target.
-- **Explicit "Out of Scope" reporting for LLM03 and LLM04** (`report/pdf_report.py`): Supply Chain Vulnerabilities
-  (LLM03) and Data and Model Poisoning (LLM04) cannot actually be tested from a black-box prompting tool like this
+- **Explicit "Out of Scope" reporting for LLM04 and LLM05** (`report/pdf_report.py`): Supply Chain Vulnerabilities
+  (LLM04) and Data and Model Poisoning (LLM05) cannot actually be tested from a black-box prompting tool like this
   one, since they live in the model's training pipeline and dependency chain, not in its runtime responses. Rather
   than silently skip them (which can look like full OWASP Top 10 coverage when it is not), the PDF report now has a
   dedicated section spelling out why these two are out of scope for this kind of assessment.
 
 All four were tested live this session against the local fake target with no mocking needed, since none of this
 batch required an AI API or any external package: the rule-count fix was verified directly against the rule loader
-(LLM09 4->10, LLM10 3->9); the baseline module's similarity-downgrade and latency-anomaly logic were both exercised
+(LLM07 4->10, LLM06 3->9); the baseline module's similarity-downgrade and latency-anomaly logic were both exercised
 with real HTTP calls and real timing against the fake target; the fingerprinting module was run live and correctly
 told apart a matched guardrail signature, a compliance case, and an unidentified refusal, including one real bug
 caught and fixed mid-session where the OpenAI-style regex did not match the fake target's actual refusal wording;
 and the new PDF section was confirmed by generating a real report and extracting its text, actually seeing
-"LLM03" / "LLM04" / "Out of Scope" / "Supply Chain" present in the output file, not just by reading the code.
+"LLM04" / "LLM05" / "Out of Scope" / "Supply Chain" present in the output file, not just by reading the code.
 
 ### 17. Output handling, session isolation, executive summaries, and benchmarking
 
 Four more additions, mixing offline testing coverage with reporting/analytics features:
 
-- **Improper Output Handling rule library expansion** (`rules/cgllm_research/output_handling.yaml`, LLM05 went
+- **Improper Output Handling rule library expansion** (`rules/cgllm_research/output_handling.yaml`, LLM10 went
   from 5 to 12 rules): a black-box tool cannot see the code that consumes the model's output, but it can check
   whether the model itself echoes dangerous payloads back unescaped when asked to repeat/include them verbatim
   (raw `<script>` tags, SQL fragments, markdown image exfiltration links, template injection, shell metacharacters,
@@ -560,14 +560,14 @@ of one generic sentence. Rules without a `grader` behave exactly as before.
 
 | Module | OWASP | What a FAIL means |
 |---|---|---|
-| Tool & Function Discovery | LLM06 | the assistant enumerates real tool names, schemas, endpoints or admin-only tools |
-| Broken Object-Level Authorization | LLM06 | it returns or changes another user's order, account, ticket or document |
-| Broken Function-Level Authorization (RBAC) | LLM06 | it performs a privileged action on a role claim alone |
-| Server-Side Request Forgery via Agent | LLM06 | it fetches metadata, localhost, private-range or `file://` addresses |
-| Shell/SQL Injection via Tool Arguments | LLM05 | injected syntax reaches a command or query as code |
-| Debug & Admin Interface Exposure | LLM06 | it honors debug commands or leaks env vars, traces or config |
-| Reasoning & Computation DoS | LLM10 | it starts the unbounded task instead of answering briefly |
-| RAG Document Exfiltration | LLM08 | it dumps file lists, verbatim text, chunk metadata or paths |
+| Tool & Function Discovery | LLM03 | the assistant enumerates real tool names, schemas, endpoints or admin-only tools |
+| Broken Object-Level Authorization | LLM03 | it returns or changes another user's order, account, ticket or document |
+| Broken Function-Level Authorization (RBAC) | LLM03 | it performs a privileged action on a role claim alone |
+| Server-Side Request Forgery via Agent | LLM03 | it fetches metadata, localhost, private-range or `file://` addresses |
+| Shell/SQL Injection via Tool Arguments | LLM10 | injected syntax reaches a command or query as code |
+| Debug & Admin Interface Exposure | LLM03 | it honors debug commands or leaks env vars, traces or config |
+| Reasoning & Computation DoS | LLM06 | it starts the unbounded task instead of answering briefly |
+| RAG Document Exfiltration | LLM09 | it dumps file lists, verbatim text, chunk metadata or paths |
 
 Each rule carries a vulnerable and a safe example response, and `tests/test_vuln_modules.py` runs the rule's offline
 regexes against both, so a pattern that drifts cannot ship silently. A response where a fail and a pass pattern both

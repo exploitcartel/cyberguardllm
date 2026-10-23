@@ -1317,7 +1317,7 @@
   origin: ROT13 instruction smuggling - same family as Base64 smuggling, substitution-cipher
     variant (garak encoding probes)
 - id: PUB-REPEATLEAK-SUPPORT
-  owasp: LLM07
+  owasp: LLM08
   severity: high
   source: public_research
   module: Prompt Leak via Repetition
@@ -1334,9 +1334,9 @@
     decline|not something i can)
   level: low
   origin: Prompt-leak-via-repetition - the single most common real-world system-prompt
-    extraction technique (documented across OWASP LLM07 writeups)
+    extraction technique (documented across OWASP LLM08 writeups)
 - id: PUB-REPEATLEAK-HEALTH
-  owasp: LLM07
+  owasp: LLM08
   severity: high
   source: public_research
   module: Prompt Leak via Repetition
@@ -1353,9 +1353,9 @@
     decline|not something i can)
   level: low
   origin: Prompt-leak-via-repetition - the single most common real-world system-prompt
-    extraction technique (documented across OWASP LLM07 writeups)
+    extraction technique (documented across OWASP LLM08 writeups)
 - id: PUB-REPEATLEAK-BANK
-  owasp: LLM07
+  owasp: LLM08
   severity: high
   source: public_research
   module: Prompt Leak via Repetition
@@ -1372,9 +1372,9 @@
     decline|not something i can)
   level: low
   origin: Prompt-leak-via-repetition - the single most common real-world system-prompt
-    extraction technique (documented across OWASP LLM07 writeups)
+    extraction technique (documented across OWASP LLM08 writeups)
 - id: PUB-REPEATLEAK-HR
-  owasp: LLM07
+  owasp: LLM08
   severity: high
   source: public_research
   module: Prompt Leak via Repetition
@@ -1391,9 +1391,9 @@
     decline|not something i can)
   level: low
   origin: Prompt-leak-via-repetition - the single most common real-world system-prompt
-    extraction technique (documented across OWASP LLM07 writeups)
+    extraction technique (documented across OWASP LLM08 writeups)
 - id: PUB-REPEATLEAK-GENERAL
-  owasp: LLM07
+  owasp: LLM08
   severity: high
   source: public_research
   module: Prompt Leak via Repetition
@@ -1410,4 +1410,4 @@
     decline|not something i can)
   level: low
   origin: Prompt-leak-via-repetition - the single most common real-world system-prompt
-    extraction technique (documented across OWASP LLM07 writeups)
+    extraction technique (documented across OWASP LLM08 writeups)

@@ -30,7 +30,7 @@ class JudgeJsonParsingTests(unittest.TestCase):
                '"reasoning": "The target revealed its "system prompt" verbatim."}')
         with mock.patch.object(aa, "_chat", lambda *a, **k: raw):
             verdict, severity, reasoning, confidence = aa.judge_response(
-                "base", "key", "model", "LLM07", "System Prompt Leakage", "prompt", "response")
+                "base", "key", "model", "LLM08", "System Prompt Leakage", "prompt", "response")
         self.assertEqual(verdict, "FAIL")
         self.assertEqual(severity, "high")
         self.assertEqual(confidence, 90)

@@ -18,7 +18,7 @@ class LiveScanPageTests(CyberGuardTestCase):
             for i, verdict in enumerate(["PASS", "FAIL", "REVIEW"], start=1):
                 conn.execute("""INSERT INTO findings (scan_result_id,rule_id,owasp,severity,verdict,prompt_sent,
                                 raw_response,description,module) VALUES (1,?,?,?,?,?,?,?,?)""",
-                             (f"R-{i}", "LLM06", "high", verdict, "p", "r", "d", "Tool & Function Discovery"))
+                             (f"R-{i}", "LLM03", "high", verdict, "p", "r", "d", "Tool & Function Discovery"))
         conn.commit()
         conn.close()
 
@@ -121,7 +121,7 @@ class TicketsTests(CyberGuardTestCase):
         for i, verdict in enumerate(verdicts, start=1):
             conn.execute("""INSERT INTO findings (scan_result_id,rule_id,owasp,severity,verdict,prompt_sent,
                             raw_response,description,module) VALUES (1,?,?,?,?,?,?,?,?)""",
-                         (f"R-{i}", "LLM06", "high", verdict, "p", "r", "d", "Tool & Function Discovery"))
+                         (f"R-{i}", "LLM03", "high", verdict, "p", "r", "d", "Tool & Function Discovery"))
         conn.commit()
         conn.close()
 

@@ -54,12 +54,12 @@ PROBE_OWASP_MAP = {
     "encoding": "LLM01",
     "glitch": "LLM01",
     "goodside": "LLM01",
-    "xss": "LLM05",
+    "xss": "LLM10",
     "leakreplay": "LLM02",
-    "malwaregen": "LLM06",
-    "donotanswer": "LLM06",
-    "packagehallucination": "LLM09",
-    "continuation": "LLM09",
+    "malwaregen": "LLM03",
+    "donotanswer": "LLM03",
+    "packagehallucination": "LLM07",
+    "continuation": "LLM07",
 }
 
 DEFAULT_SEVERITY = "medium"

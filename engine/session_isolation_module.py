@@ -5,7 +5,7 @@ Information Disclosure).
 A fully black-box tool has only ONE credential for the target, so it cannot
 test true cross-USER leakage (user A's secret leaking to user B) the way a
 real multi-tenant penetration test with two separate accounts could. Being
-honest about that limit (the same way the PDF already is for LLM03/LLM04):
+honest about that limit (the same way the PDF already is for LLM04/LLM05):
 what this module tests instead is session-isolation discipline within the
 one session it has, which is still a legitimate and useful LLM02 signal:
 

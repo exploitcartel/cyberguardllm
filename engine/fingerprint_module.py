@@ -93,7 +93,7 @@ def run_fingerprint(conn, result_id, target, timeout_s=20):
     elif _looks_like_compliance(response_text):
         description = ("The target did not refuse this probe at all (no refusal language detected in the "
                         "response), so there is no guardrail refusal to fingerprint here. This probe itself is "
-                        "also tested as a regular LLM07 finding elsewhere in this scan if that category was "
+                        "also tested as a regular LLM08 finding elsewhere in this scan if that category was "
                         "selected.")
     else:
         description = ("Could not match the target's refusal to a known guardrail phrasing pattern. This likely "

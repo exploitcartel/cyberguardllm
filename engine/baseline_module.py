@@ -16,7 +16,7 @@ Used two ways:
    response should read nothing like "the capital of France is Paris."
 2. A latency baseline for the timing-based anomaly check in
    engine/runner.py (see _check_latency_anomaly), used as a side signal for
-   hidden tool calls (LLM06) or excessive processing (LLM10) without
+   hidden tool calls (LLM03) or excessive processing (LLM06) without
    needing to understand the response's content at all.
 """
 import difflib
