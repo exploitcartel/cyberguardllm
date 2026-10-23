@@ -668,7 +668,7 @@ depends on it.
    the reactive brain visualization while the scan runs.
 4. **Review results**: go to Results to see risk scores and finding counts per scan, or open a scan to see every
    individual finding, including the exact prompt sent and the target's raw response. FAIL findings can be triaged
-   (Open / False Positive / Accepted Risk) from the finding's detail page. Use "Compare" on the Results page to see
+   (Open / False Positive / Accepted Risk) from the finding's detail page. The dashboard's Total Scans, Total Targets and High / Critical cards are links; High / Critical opens **Results > Critical findings**, every confirmed vulnerability from every scan, worst first, each linking to its exact finding and to the scan it came from (filter by severity with the chips). The dashboard charts are drawn without any charting library, so they work offline. Use "Compare" on the Results page to see
    what changed between any two scans.
 5. **Export results**: from a scan's result page, export a PDF report, or JSON/CSV for a SIEM or ticketing system.
 6. **Add a custom rule** (Administrator): go to Rules Library, click "Add Custom Rule", and write your own payload

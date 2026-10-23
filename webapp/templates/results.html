@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-header"><div><h1>{{ t('results_title') }}</h1><p>{{ t('results_sub') }}</p></div><a href="/results/compare" class="btn">{{ t('btn_compare_scans') }}</a></div>
+{% set results_tab = 'all' %}{% include "_results_tabs.html" %}
 
 <div id="resultsToolbar" class="card" style="display:none;margin-bottom:14px;flex-direction:row;align-items:center;gap:14px;flex-wrap:wrap;">
   <strong id="resultsSelectedCount" style="color:var(--text);"></strong>

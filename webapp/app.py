@@ -353,6 +353,18 @@ def dashboard():
     owasp_labels = list(owasp_b.keys()) or list(OWASP_LABELS.keys())
     owasp_values = [owasp_b.get(k, {}).get("failed", 0) for k in owasp_labels]
 
+    # Per-category outcome counts for the coverage chart: every one of the ten 2026 categories, in code order, with
+    # what happened to the attempts made against it (INFO notes are not results and are left out).
+    from core.owasp import LABELS as _ALL_LABELS, OUT_OF_SCOPE as _OUT_OF_SCOPE
+    outcome = {}
+    for r in conn.execute("SELECT owasp, verdict, COUNT(*) AS c FROM findings "
+                          "WHERE verdict IN ('PASS','FAIL','REVIEW','ERROR') GROUP BY owasp, verdict"):
+        outcome.setdefault(r["owasp"], {})[r["verdict"].lower()] = r["c"]
+    owasp_rows = [{"code": code, "label": name, "out_of_scope": code in _OUT_OF_SCOPE,
+                   "pass": outcome.get(code, {}).get("pass", 0), "fail": outcome.get(code, {}).get("fail", 0),
+                   "review": outcome.get(code, {}).get("review", 0), "error": outcome.get(code, {}).get("error", 0)}
+                  for code, name in _ALL_LABELS.items()]
+
     recent_scans = conn.execute("""SELECT sr.*, t.name as target_name FROM scan_results sr
                                     LEFT JOIN targets t ON sr.target_id = t.id
                                     ORDER BY sr.timestamp DESC LIMIT 8""").fetchall()
@@ -361,7 +373,7 @@ def dashboard():
     return render_template("dashboard.html", **ctx(
         active="dashboard", total_scans=total_scans, total_targets=total_targets,
         high_critical=high_critical, avg_risk=avg_risk, severity=sev,
-        owasp_labels=owasp_labels, owasp_values=owasp_values, recent_scans=recent_scans,
+        owasp_labels=owasp_labels, owasp_values=owasp_values, owasp_rows=owasp_rows, recent_scans=recent_scans,
     ))
 
 
@@ -1034,6 +1046,49 @@ def results_delete():
     return redirect("/results")
 
 
+CRITICAL_SEVERITY_FILTERS = {
+    "high_critical": ("critical", "high"), "critical": ("critical",), "high": ("high",),
+    "medium": ("medium",), "low": ("low",), "all": ("critical", "high", "medium", "low"),
+}
+
+
+@app.route("/results/critical")
+def critical_findings():
+    """
+    Every confirmed vulnerability (verdict FAIL) across all scans, worst first, each linking to its exact finding and
+    to the scan it came from. The dashboard's High / Critical card is the count of this page's default view.
+    """
+    username, err = require_login()
+    if err: return err
+    severity = request.args.get("severity", "high_critical")
+    if severity not in CRITICAL_SEVERITY_FILTERS:
+        severity = "high_critical"
+    wanted = CRITICAL_SEVERITY_FILTERS[severity]
+    placeholders = ",".join("?" * len(wanted))
+    conn = get_conn()
+    rows = conn.execute(f"""SELECT f.id, f.rule_id, f.owasp, f.severity, f.confidence, f.triage_status, f.module,
+                                   sr.id AS scan_id, sr.timestamp, t.name AS target_name
+                            FROM findings f
+                            JOIN scan_results sr ON f.scan_result_id = sr.id
+                            LEFT JOIN targets t ON sr.target_id = t.id
+                            WHERE f.verdict='FAIL' AND f.severity IN ({placeholders})
+                            ORDER BY CASE f.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1
+                                                     WHEN 'medium' THEN 2 ELSE 3 END,
+                                     sr.timestamp DESC, f.id DESC
+                            LIMIT 500""", wanted).fetchall()
+    counts = {r["severity"]: r["c"] for r in conn.execute(
+        "SELECT severity, COUNT(*) AS c FROM findings WHERE verdict='FAIL' GROUP BY severity")}
+    conn.close()
+    from core.owasp import LABELS as _ALL_LABELS
+    chips = [("high_critical", counts.get("critical", 0) + counts.get("high", 0)),
+             ("critical", counts.get("critical", 0)), ("high", counts.get("high", 0)),
+             ("medium", counts.get("medium", 0)), ("low", counts.get("low", 0)),
+             ("all", sum(counts.values()))]
+    return render_template("critical_findings.html", **ctx(
+        active="results", results_tab="critical", findings=rows, severity=severity, chips=chips,
+        owasp_names=_ALL_LABELS))
+
+
 @app.route("/results/<int:result_id>")
 def result_detail(result_id):
     username, err = require_login()
@@ -1041,6 +1096,10 @@ def result_detail(result_id):
     conn = get_conn()
     result = conn.execute("""SELECT sr.*, t.name as target_name FROM scan_results sr
                               LEFT JOIN targets t ON sr.target_id=t.id WHERE sr.id=?""", (result_id,)).fetchone()
+    if result is None:
+        # A stale or mistyped scan number used to crash with a 500 (TypeError on the missing row).
+        conn.close()
+        return redirect("/results")
     findings = conn.execute("SELECT * FROM findings WHERE scan_result_id=?", (result_id,)).fetchall()
     attack_chains = conn.execute("SELECT * FROM attack_chains WHERE scan_result_id=?", (result_id,)).fetchall()
     benchmark = _compute_benchmark(conn, result["target_id"])

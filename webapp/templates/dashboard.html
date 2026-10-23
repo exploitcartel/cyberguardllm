@@ -1,24 +1,46 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+  .chart-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:200px;color:var(--text-muted);font-size:14.5px;text-align:center;}
+  .chart-empty b{font-size:34px;color:var(--success);line-height:1;}
+  .donut-wrap{display:flex;align-items:center;gap:26px;flex-wrap:wrap;justify-content:center;min-height:200px;}
+  .donut-wrap svg{width:190px;height:190px;flex-shrink:0;}
+  .donut-wrap svg a{cursor:pointer;} .donut-wrap svg circle.seg{transition:stroke-width .15s;}
+  .donut-wrap svg a:hover circle.seg{stroke-width:34;}
+  .donut-total{font:700 34px var(--mono);fill:var(--text);} .donut-sub{font:12px var(--font);fill:var(--text-muted);}
+  .legend{display:flex;flex-direction:column;gap:8px;font-size:14.5px;}
+  .legend a, .legend span.row{display:flex;align-items:center;gap:9px;color:var(--text);text-decoration:none;}
+  .legend a:hover{color:var(--accent);}
+  .legend i{width:11px;height:11px;border-radius:3px;flex-shrink:0;} .legend em{font-style:normal;color:var(--text-muted);margin-left:auto;padding-left:14px;font-family:var(--mono);}
+  .obars{display:flex;flex-direction:column;gap:9px;}
+  .okey{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--text-muted);margin-bottom:12px;}
+  .okey span{display:inline-flex;align-items:center;gap:6px;} .okey i{width:10px;height:10px;border-radius:3px;}
+  .orow{display:grid;grid-template-columns:minmax(120px,210px) 1fr auto;gap:12px;align-items:center;font-size:13.5px;}
+  .olabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;} .olabel b{font-family:var(--mono);margin-right:6px;}
+  .otrack{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--border);}
+  .otrack span{display:block;height:100%;} .orow.dim{opacity:.55;}
+  .ocount{font:12.5px var(--mono);color:var(--text-muted);white-space:nowrap;}
+</style>
+
 <div class="page-header">
   <div><h1>{{ t('dashboard_title') }}</h1><p>{{ t('dashboard_sub') }}</p></div>
 </div>
 
 <div class="grid grid-4" style="margin-bottom:16px;">
-  <div class="card"><div class="metric-label">{{ t('total_scans') }}</div><div class="metric-value">{{ total_scans }}</div></div>
-  <div class="card"><div class="metric-label">{{ t('total_targets') }}</div><div class="metric-value">{{ total_targets }}</div></div>
-  <div class="card"><div class="metric-label">{{ t('high_critical') }}</div><div class="metric-value" style="color:var(--danger);">{{ high_critical }}</div></div>
-  <div class="card"><div class="metric-label">{{ t('avg_risk_score') }}</div><div class="metric-value">{{ avg_risk }} / 100</div></div>
+  <a class="card card-link" href="/results"><div class="metric-label">{{ t('total_scans') }} <span class="card-go">&rarr;</span></div><div class="metric-value">{{ total_scans }}</div></a>
+  <a class="card card-link" href="/targets"><div class="metric-label">{{ t('total_targets') }} <span class="card-go">&rarr;</span></div><div class="metric-value">{{ total_targets }}</div></a>
+  <a class="card card-link" href="/results/critical"><div class="metric-label">{{ t('high_critical') }} <span class="card-go">&rarr;</span></div><div class="metric-value" style="color:var(--danger);">{{ high_critical }}</div></a>
+  <a class="card card-link" href="/results"><div class="metric-label">{{ t('avg_risk_score') }} <span class="card-go">&rarr;</span></div><div class="metric-value">{{ avg_risk }} / 100</div></a>
 </div>
 
 <div class="grid grid-2" style="margin-bottom:16px;">
   <div class="card">
     <h3 style="margin-top:0;">{{ t('findings_by_severity') }}</h3>
-    <canvas id="severityChart" height="180"></canvas>
+    <div id="severityChart"></div>
   </div>
   <div class="card">
     <h3 style="margin-top:0;">{{ t('owasp_coverage') }}</h3>
-    <canvas id="owaspChart" height="180"></canvas>
+    <div id="owaspChart"></div>
   </div>
 </div>
 
@@ -41,24 +63,69 @@
 </div>
 
 <script>
-const isDark = document.body.classList.contains('dark');
-const textColor = isDark ? '#e5e9f0' : '#111827';
-new Chart(document.getElementById('severityChart'), {
-  type: 'doughnut',
-  data: {
-    labels: ['Critical','High','Medium','Low'],
-    datasets: [{data: [{{ severity.critical }},{{ severity.high }},{{ severity.medium }},{{ severity.low }}],
-    backgroundColor: ['#E24B4A','#EF9F27','#378ADD','#97C459']}]
-  },
-  options: {plugins:{legend:{labels:{color:textColor}}}}
-});
-new Chart(document.getElementById('owaspChart'), {
-  type: 'bar',
-  data: {
-    labels: {{ owasp_labels|tojson }},
-    datasets: [{label:'findings', data: {{ owasp_values|tojson }}, backgroundColor:'#2563eb'}]
-  },
-  options: {indexAxis:'y', plugins:{legend:{display:false}}, scales:{x:{ticks:{color:textColor}},y:{ticks:{color:textColor}}}}
-});
+// Both charts are drawn here with plain SVG/HTML, with no charting library: the dashboard used to depend on Chart.js
+// from a CDN, and when that file could not be loaded both cards were simply blank.
+(function(){
+  var SEVERITY = {{ severity|tojson }};
+  var ROWS = {{ owasp_rows|tojson }};
+  var TX = {
+    none: {{ t('chart_no_findings')|tojson }}, findings: {{ t('findings_by_severity')|tojson }},
+    resisted: {{ t('chart_legend_resisted')|tojson }}, vulnerable: {{ t('chart_legend_vulnerable')|tojson }},
+    review: {{ t('chart_legend_review')|tojson }}, error: {{ t('chart_legend_error')|tojson }},
+    outOfScope: {{ t('chart_out_of_scope')|tojson }}, notTested: {{ t('chart_not_tested')|tojson }},
+    tested: {{ t('chart_tested')|tojson }}
+  };
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  // ---- findings by severity: a donut whose segments and legend rows open the matching critical-findings list
+  var sev = [
+    ['critical', {{ t('sev_critical')|tojson }}, '#E24B4A'], ['high', {{ t('sev_high')|tojson }}, '#EF9F27'],
+    ['medium', {{ t('sev_medium')|tojson }}, '#378ADD'], ['low', {{ t('sev_low')|tojson }}, '#97C459']
+  ];
+  var total = sev.reduce(function(a, s){ return a + (SEVERITY[s[0]] || 0); }, 0);
+  var box = document.getElementById('severityChart');
+  if(!total){
+    box.innerHTML = '<div class="chart-empty"><b>&#10003;</b>' + esc(TX.none) + '</div>';
+  } else {
+    var R = 70, C = 2 * Math.PI * R, offset = 0, segs = '', legend = '';
+    sev.forEach(function(s){
+      var n = SEVERITY[s[0]] || 0, href = '/results/critical?severity=' + s[0];
+      if(n){
+        var len = n / total * C;
+        segs += '<a href="' + href + '"><circle class="seg" cx="100" cy="100" r="' + R + '" fill="none" stroke="' + s[2] +
+                '" stroke-width="28" stroke-dasharray="' + len + ' ' + (C - len) + '" stroke-dashoffset="' + (-offset) +
+                '" transform="rotate(-90 100 100)"><title>' + esc(s[1]) + ': ' + n + '</title></circle></a>';
+        offset += len;
+      }
+      legend += '<a href="' + href + '"><i style="background:' + s[2] + '"></i>' + esc(s[1]) + '<em>' + n + '</em></a>';
+    });
+    box.innerHTML = '<div class="donut-wrap"><svg viewBox="0 0 200 200" role="img">' + segs +
+      '<text class="donut-total" x="100" y="106" text-anchor="middle">' + total + '</text>' +
+      '<text class="donut-sub" x="100" y="126" text-anchor="middle">' + esc(TX.findings.split(' ')[0]) + '</text></svg>' +
+      '<div class="legend">' + legend + '</div></div>';
+  }
+
+  // ---- OWASP coverage: for each of the ten 2026 categories, how its attempts came out
+  var COLORS = {pass: '#22c55e', review: '#f59e0b', fail: '#ef4444', error: '#9ca3af'};
+  var max = Math.max.apply(null, ROWS.map(function(r){ return r.pass + r.review + r.fail + r.error; }).concat([1]));
+  var html = '<div class="okey"><span><i style="background:' + COLORS.pass + '"></i>' + esc(TX.resisted) + '</span>' +
+             '<span><i style="background:' + COLORS.fail + '"></i>' + esc(TX.vulnerable) + '</span>' +
+             '<span><i style="background:' + COLORS.review + '"></i>' + esc(TX.review) + '</span>' +
+             '<span><i style="background:' + COLORS.error + '"></i>' + esc(TX.error) + '</span></div><div class="obars">';
+  ROWS.forEach(function(r){
+    var n = r.pass + r.review + r.fail + r.error, tip = '', bar = '', count;
+    ['pass', 'fail', 'review', 'error'].forEach(function(k){
+      if(r[k]){ bar += '<span style="width:' + (r[k] / max * 100) + '%;background:' + COLORS[k] + '"></span>'; }
+    });
+    if(r.out_of_scope){ count = TX.outOfScope; }
+    else if(!n){ count = TX.notTested; }
+    else { count = n + ' ' + TX.tested + (r.fail ? ' · ' + r.fail + ' ' + TX.vulnerable.toLowerCase() : ''); }
+    tip = r.pass + ' ' + TX.resisted + ', ' + r.fail + ' ' + TX.vulnerable + ', ' + r.review + ' ' + TX.review + ', ' + r.error + ' ' + TX.error;
+    html += '<div class="orow' + ((!n || r.out_of_scope) ? ' dim' : '') + '" title="' + esc(tip) + '">' +
+            '<div class="olabel"><b>' + r.code + '</b>' + esc(r.label) + '</div><div class="otrack">' + bar + '</div>' +
+            '<div class="ocount">' + esc(count) + '</div></div>';
+  });
+  document.getElementById('owaspChart').innerHTML = html + '</div>';
+})();
 </script>
 {% endblock %}

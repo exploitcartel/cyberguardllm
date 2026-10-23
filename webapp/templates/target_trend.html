@@ -56,7 +56,9 @@ const scores = {{ scans|map(attribute='risk_score')|list|tojson }};
 const benchmarkAvg = {{ comparison.benchmark_avg }};
 const benchmarkLine = labels.map(() => benchmarkAvg);
 {% endif %}
-new Chart(document.getElementById('trendChart'), {
+if(typeof Chart === 'undefined'){
+  document.getElementById('trendChart').insertAdjacentHTML('afterend', '<p style="color:var(--text-muted)">The chart library could not be loaded (it comes from a CDN), so the trend chart is unavailable. The scan history is listed below.</p>');
+} else new Chart(document.getElementById('trendChart'), {
   type: 'line',
   data: {
     labels: labels,
