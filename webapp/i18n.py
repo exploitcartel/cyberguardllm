@@ -336,6 +336,8 @@ TRANSLATIONS = {
     "btn_next_page": {"en": "Next", "al": "Para"},
     "col_config": {"en": "Config", "al": "Konfigurimi"},
     "no_tasks_yet": {"en": "No tasks yet.", "al": "S'ka detyra ende."},
+    "btn_view_results": {"en": "View results", "al": "Shiko rezultatet"},
+    "open_scan_hint": {"en": "Open this scan", "al": "Hap këtë skanim"},
     "btn_watch_live": {"en": "Watch live", "al": "Shiko live"},
     "btn_force_stop": {"en": "Force stop", "al": "Ndalo me force"},
     "confirm_force_stop": {"en": "Force-stop this task? Use this only if it is stuck showing \"running\" with the normal Stop having no effect.",
