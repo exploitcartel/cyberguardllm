@@ -173,7 +173,7 @@
       {% for c in configs %}
       <tr>
         {% if user_role in ('administrator','global_administrator') %}<td><input type="checkbox" class="config-check" value="{{ c.id }}"></td>{% endif %}
-        <td id="cfg-name-{{ c.id }}">{{ c.name }}</td><td>{{ c.categories }}</td><td>
+        <td id="cfg-name-{{ c.id }}">{{ c.name }}</td><td>{% set cats = (c.categories or '').split(',') | select | list %}{% for i in range(0, cats | length, 3) %}<div>{{ cats[i:i+3] | join(', ') }}</div>{% endfor %}</td><td>
         {% if c.ai_powered %}<span class="badge badge-cgllm">AI-Powered: {{ (c.ai_intensity or 'low') | capitalize }}</span>{% else %}<span class="badge badge-source">Offline</span>{% endif %}
         {% if c.enable_static is none or c.enable_static %}
         <span class="badge badge-{{ 'critical' if c.scan_level == 'aggressive' else ('high' if c.scan_level == 'medium' else 'low') }}">Static: {{ (c.scan_level or 'low') | capitalize }}</span>
