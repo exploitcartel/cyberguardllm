@@ -15,3 +15,11 @@ class ErrorLogTests(CyberGuardTestCase):
         page = self.client.get("/activity?tab=errors").get_data(as_text=True)
         self.assertIn("target-unreachable", page)
         self.assertIn("no route", page)
+
+
+class GarakPluginImportTests(CyberGuardTestCase):
+    def test_garak_plugin_modules_compile(self):
+        # garak runs these in its own venv, so no other test ever imports them; a typo only showed up in a live scan.
+        import py_compile
+        for path in ("integrations/garak_generator.py", "integrations/garak_plugins/cyberguard.py", "integrations/garak_run.py"):
+            py_compile.compile(path, doraise=True)
