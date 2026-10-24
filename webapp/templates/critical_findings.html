@@ -5,11 +5,13 @@
 
 <div class="chips">
   {% for key, n in chips %}
-  <a href="/results/critical?severity={{ key }}" class="{{ 'active' if key == severity }}">{{ t('sev_' ~ key) }} ({{ n }})</a>
+  <a href="{{ url_for('critical_findings',severity=key,**({'q':results_query} if results_query else {})) }}" class="{{ 'active' if key == severity }}">{{ t('sev_' ~ key) }} ({{ n }})</a>
   {% endfor %}
 </div>
 
 <div class="card">
+  {% include "_list_search.html" %}
+  {% include "_page_summary.html" %}
   <table>
     <tr><th>{{ t('col_severity') }}</th><th>{{ t('col_finding') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_target') }}</th><th>{{ t('col_scan') }}</th><th>{{ t('col_date') }}</th><th>{{ t('col_triage') }}</th><th></th></tr>
     {% for f in findings %}
@@ -27,5 +29,6 @@
     <tr><td colspan="8" style="text-align:center;color:var(--text-muted);">{{ t('no_critical_findings') }}</td></tr>
     {% endfor %}
   </table>
+  {% include "_pagination.html" %}
 </div>
 {% endblock %}

@@ -1289,7 +1289,7 @@ def force_stop_task(task_id: int):
     return True
 
 
-def get_task_progress(task_id: int):
+def get_task_progress(task_id: int, after=0):
     conn = get_conn()
     task = conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
     recent = []
@@ -1306,6 +1306,16 @@ def get_task_progress(task_id: int):
         hits = [dict(r) for r in conn.execute(
             "SELECT id, rule_id, owasp, verdict, module FROM findings WHERE scan_result_id=? "
             "AND verdict IN ('FAIL','REVIEW') ORDER BY id DESC LIMIT 8", (task["result_id"],)).fetchall()]
+    events=[]
+    garak=None
+    if task and task["result_id"] is not None:
+        rid=task["result_id"]
+        events=[dict(r) for r in conn.execute(
+            "SELECT e.id AS event_id,e.timestamp,e.kind,e.message,f.id,f.rule_id,f.owasp,f.verdict,f.module "
+            "FROM scan_events e LEFT JOIN findings f ON f.id=e.finding_id "
+            "WHERE e.result_id=? AND e.id>? ORDER BY e.id LIMIT 200",(rid,max(0,int(after)))).fetchall()]
+        row=conn.execute("SELECT * FROM garak_progress WHERE result_id=?",(rid,)).fetchone()
+        garak=dict(row) if row else None
     conn.close()
     if not task:
         return None
@@ -1318,5 +1328,9 @@ def get_task_progress(task_id: int):
         "result_id": task["result_id"],
         "recent": recent,
         "hits": hits,
+        "events": events,
+        "next_event": events[-1]["event_id"] if events else after,
+        "more_events": len(events)==200,
+        "garak": garak,
         "control": task["control"] if "control" in task.keys() and task["control"] else "run",
     }

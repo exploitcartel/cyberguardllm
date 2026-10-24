@@ -18,7 +18,10 @@ class GarakIntegrationTests(unittest.TestCase):
     def test_real_dan_probe_uses_the_same_http_adapter(self):
         self._run_probe('dan.AutoDANCached', 3)
 
-    def _run_probe(self, probe, count):
+    def test_results_are_visible_before_the_process_exits(self):
+        self._run_probe('test.Test', 8, verify_live=True)
+
+    def _run_probe(self, probe, count, verify_live=False):
         if not os.path.isfile(gm._garak_python()):
             self.skipTest('garak interpreter unavailable')
         received = []
@@ -27,6 +30,9 @@ class GarakIntegrationTests(unittest.TestCase):
             def do_POST(self):
                 data = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 received.append(data['message'])
+                if verify_live:
+                    import time
+                    time.sleep(.3)
                 body = json.dumps({'reply': 'fixture answer'}).encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -53,8 +59,26 @@ class GarakIntegrationTests(unittest.TestCase):
                     target = c.execute('SELECT * FROM targets WHERE id=1').fetchone()
                     env = {'GARAK_LOG_FILE': os.path.join(tmp,'garak.log'), 'XDG_DATA_HOME':tmp,
                            'XDG_CACHE_HOME':tmp, 'PYTHONUTF8':'1'}
+                    live_observed=[]
+                    def inspect_live():
+                        import time,sqlite3
+                        for _ in range(400):
+                            time.sleep(.05)
+                            observer=sqlite3.connect(db.DB_PATH)
+                            n=observer.execute('SELECT COUNT(*) FROM findings').fetchone()[0]
+                            gp=observer.execute('SELECT planned FROM garak_progress WHERE result_id=1').fetchone()
+                            observer.close()
+                            if n and len(received)<count:
+                                live_observed.append((n,gp[0] if gp else None));return
+                            if len(received)>=count:return
+                    watcher=threading.Thread(target=inspect_live,daemon=True)
+                    if verify_live:watcher.start()
                     with patch.dict(os.environ,env), patch('engine.runner._get_ai_judge_config', return_value=None):
                         gm.run_garak_scan(c, 1, target, [probe], timeout_s=90, task_id=1)
+                    if verify_live:
+                        watcher.join(timeout=3)
+                        self.assertTrue(live_observed, 'No result visible before process exit')
+                        self.assertEqual(live_observed[0][1],count)
                     rows = c.execute('SELECT rule_id,verdict,description,prompt_sent,raw_response FROM findings').fetchall()
                     self.assertEqual(len(received),count, [dict(r) for r in rows])
                     if probe == 'test.Test':
@@ -115,7 +139,7 @@ class GarakReportTests(unittest.TestCase):
             c.execute("INSERT INTO targets(name,url,token_encrypted) VALUES ('fixture','http://unused','')")
             c.execute("INSERT INTO scan_results(target_id,status) VALUES (1,'running')")
             c.commit()
-            def fake_run(cmd,*args):
+            def fake_run(cmd,*args,**kwargs):
                 prefix=cmd[cmd.index('--report_prefix')+1]
                 record={'entry_type':'attempt','status':2,'probe_classname':'dan.AutoDANCached',
                         'prompt':{'text':'exact attack'},'outputs':[{'text':'answer'}], 'detector_results':{}}

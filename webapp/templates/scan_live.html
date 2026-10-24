@@ -162,14 +162,14 @@
       <div class="stage-foot">
         <div class="pct" id="progressPct">0%</div>
         <div class="bar"><span id="progressBar"></span></div>
-        <div class="count" id="progressCount">0 / 0 payloads</div>
+        <div class="count" id="progressCount">Preparing scan...</div>
         <div class="phase" id="phaseLabel"></div>
       </div>
     </div>
 
     <aside class="stage-side">
       <div class="stats">
-        <div class="stat"><div class="stat-label">Findings</div><div class="stat-value red" id="findingsCount">0</div></div>
+        <div class="stat"><div class="stat-label">Confirmed findings</div><div class="stat-value red" id="findingsCount">0</div></div>
         <div class="stat"><div class="stat-label">Tested</div><div class="stat-value" id="testedCount">0</div></div>
         <div class="stat"><div class="stat-label">Total</div><div class="stat-value" id="totalCount">0</div></div>
       </div>
@@ -219,7 +219,10 @@ btnStop.addEventListener('click', () => {
   if(actionInFlight) return;
   if(!confirm('Je i sigurt qe do te ndalosh skanimin? Gjetjet e deritanishme do te ruhen.')) return;
   actionInFlight = true;
-  postControl('stop').finally(() => { actionInFlight = false; });
+  btnStop.textContent='Stopping…';
+  postControl('stop').then(r => { if(!r.ok) throw new Error(r.error || 'Stop failed'); })
+    .catch(e => { addLog(esc(e.message),'log-note'); btnStop.textContent='Stop'; })
+    .finally(() => { actionInFlight = false; });
 });
 
 function setStatus(text, cls){
@@ -240,6 +243,24 @@ function applyControlUI(control){
 
 // ---- live log --------------------------------------------------------------------------------------------
 const log = $('liveLog');
+const logStorageKey = 'cgllm-live-log-v2:' + taskId;
+let logEntries = [], lastEvent = 0;
+let savedScroll = null;
+try {
+  const saved = JSON.parse(sessionStorage.getItem(logStorageKey) || 'null');
+  if(saved){
+    logEntries = (saved.entries || []).slice(-500);
+    lastEvent = saved.cursor || 0;
+    log.innerHTML = logEntries.map(e => '<div class="' + e.cls + '">' + e.html + '</div>').join('');
+    savedScroll = saved.scroll;
+    requestAnimationFrame(() => { log.scrollTop = savedScroll == null ? log.scrollHeight : savedScroll; });
+  }
+} catch(e) {}
+function saveLog(){
+  try { sessionStorage.setItem(logStorageKey, JSON.stringify({entries:logEntries,cursor:lastEvent,scroll:log.scrollTop})); } catch(e) {}
+}
+window.addEventListener('pagehide',saveLog);
+log.addEventListener('scroll',saveLog,{passive:true});
 const VERDICT_TEXT = {FAIL:'VULNERABLE', PASS:'RESISTED', REVIEW:'REVIEW', ERROR:'ERROR'};
 
 function clock(){
@@ -251,13 +272,16 @@ function addLog(html, cls){
   div.innerHTML = html;
   const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 24;
   log.appendChild(div);
-  while(log.children.length > 80){ log.removeChild(log.firstChild); }
+  logEntries.push({html,cls:cls || 'log-line'});
+  if(logEntries.length > 500) logEntries.shift();
+  while(log.children.length > 500){ log.removeChild(log.firstChild); }
   if(stick) log.scrollTop = log.scrollHeight;
+  saveLog();
 }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function logRow(e){
   const v = (e.verdict || 'PASS').toLowerCase();
-  return '<time>' + clock() + '</time><span class="rid">' + esc(e.rule_id) + '</span>' +
+  return '<time>' + (e.timestamp ? esc(new Date(e.timestamp.endsWith('Z') ? e.timestamp : e.timestamp+'Z').toLocaleTimeString()) : clock()) + '</time><span class="rid">' + esc(e.rule_id) + '</span>' +
          '<span class="v ' + v + '">' + (VERDICT_TEXT[e.verdict] || esc(e.verdict)) + '</span>';
 }
 
@@ -326,6 +350,8 @@ function addTicket(ev, opts){
   const clash = tickets.find(t => t.side === side && t.row === row);
   if(clash) removeTicket(clash);
 
+  const existing=tickets.find(t => t.id===ev.id);
+  if(existing) removeTicket(existing);
   const v = (ev.verdict || 'FAIL').toLowerCase();
   const el = document.createElement('a');
   el.className = 'ticket ' + v;
@@ -406,34 +432,62 @@ let prevFindings = null;
 let finished = false;
 
 function poll(){
-  fetch('/api/scan-status/' + taskId).then(r => r.json()).then(data => {
-    const pct = data.total > 0 ? Math.min(100, Math.round((data.done / data.total) * 100)) : 0;
-    $('progressPct').textContent = pct + '%';
+  fetch('/api/scan-status/' + taskId + '?after=' + lastEvent).then(r => r.json()).then(data => {
+    const terminal=['completed','stopped','error'].includes(data.status);
+    const unknownPlan=data.garak && data.garak.planned == null;
+    const pct = data.total > 0 ? Math.min(terminal ? 100 : 99, Math.floor((data.done / data.total) * 100)) : 0;
+    $('progressPct').textContent = unknownPlan ? '…' : pct + '%';
     $('progressBar').style.width = pct + '%';
-    $('progressCount').textContent = data.done + ' / ' + data.total + ' payloads';
-    $('findingsCount').textContent = data.findings;
+    $('progressCount').textContent = unknownPlan ? 'Preparing the probe plan...' : data.done + ' / ' + data.total + ' payloads';
+    const waitingEvaluation=data.garak && !data.garak.evaluated && !terminal;
+    $('findingsCount').textContent = waitingEvaluation ? '—' : data.findings;
+    $('findingsCount').title = waitingEvaluation ? 'Waiting for the first detector evaluation' : 'Confirmed FAIL results';
+    let stats=$('garakStats');
+    if(data.garak){
+      if(!stats){ stats=document.createElement('div'); stats.id='garakStats'; stats.style.cssText='font:12px var(--mono);color:var(--s-muted);padding:8px 24px;display:flex;gap:14px;flex-wrap:wrap'; $('phaseLabel').parentNode.appendChild(stats); }
+      stats.textContent='Planned: '+(data.garak.planned ?? 'preparing')+' · Sent: '+data.garak.sent+' · Finished: '+data.garak.completed+' · Evaluated: '+data.garak.evaluated+' · Transport errors: '+data.garak.errors;
+    }
     $('testedCount').textContent = data.done;
-    $('totalCount').textContent = data.total;
+    $('totalCount').textContent = unknownPlan ? '…' : data.total;
 
     // last_rule_id is a bare rule id while the static/AI engine is testing payloads, or a sentence
     // (e.g. "Running PyRIT module...") once an external module has taken over.
     const isPhaseMessage = data.last_rule_id && /\s/.test(data.last_rule_id);
     if(isPhaseMessage && data.last_rule_id !== lastPhaseText){
       $('phaseLabel').textContent = data.last_rule_id;
-      addLog('&rsaquo; ' + esc(data.last_rule_id), 'log-note');
+      if(!data.events) addLog('&rsaquo; ' + esc(data.last_rule_id), 'log-note');
       lastPhaseText = data.last_rule_id;
     } else if(!isPhaseMessage && lastPhaseText){
       $('phaseLabel').textContent = '';
       lastPhaseText = '';
     }
 
-    consumeRecent(data.recent);
-    const newHits = consumeHits(data.hits);
+    let newHits=0;
+    if(data.events){
+      // Events have a durable cursor: no gaps on navigation/theme change, and no duplicate replay.
+      data.events.filter(e => e.event_id > lastEvent).forEach(e => {
+        if(e.kind==='finding' && e.id){
+          addLog(logRow(e));
+          if(hitsSeeded && ['FAIL','REVIEW'].includes(e.verdict)){
+            addTicket(e,{pulse:e.verdict==='FAIL'});
+            if(e.verdict==='FAIL'){head.alertPulses(3);newHits++;}
+          }
+          head.pulse(.4);
+        } else if(e.message){ addLog('&rsaquo; '+esc(e.message),'log-note'); }
+        lastEvent=e.event_id;
+      });
+      saveLog();
+      if(!hitsSeeded) consumeHits(data.hits);
+    } else {
+      consumeRecent(data.recent);
+      newHits=consumeHits(data.hits);
+    }
     if(data.findings > prevFindings && prevFindings !== null && !newHits){ head.alertPulses(1); }
     prevFindings = data.findings;
 
     applyControlUI(data.control || 'run');
 
+    if(terminal && data.more_events){ setTimeout(poll,100); return; }
     if(data.status === 'completed' || data.status === 'stopped' || data.status === 'error'){
       finished = true;
       setStatus(data.status === 'completed' ? 'DONE' : (data.status === 'error' ? 'ERROR' : 'STOPPED'),
@@ -442,7 +496,7 @@ function poll(){
       btnStop.disabled = true;
       setTimeout(() => { window.location.href = '/results/' + data.result_id; }, 1400);
     } else {
-      setTimeout(poll, 700);
+      setTimeout(poll, data.more_events ? 100 : 700);
     }
   }).catch(() => { setTimeout(poll, 1200); });
 }

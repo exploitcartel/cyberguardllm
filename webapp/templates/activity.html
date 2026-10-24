@@ -2,10 +2,12 @@
 {% block content %}
 <div class="page-header"><div><h1>{{ t('activity_title') }}</h1><p>{{ t('errors_sub') if tab == 'errors' else t('activity_sub') }}</p></div></div>
 <div class="tabs">
-  <a href="/activity" class="{{ 'active' if tab == 'activity' }}">{{ t('tab_activity') }}</a>
-  <a href="/activity?tab=errors" class="{{ 'active' if tab == 'errors' }}">{{ t('tab_errors') }}{% if errors %} ({{ errors|length }}){% endif %}</a>
+  <a href="{{ url_for('activity_page',**({'q':results_query} if results_query else {})) }}" class="{{ 'active' if tab == 'activity' }}">{{ t('tab_activity') }}</a>
+  <a href="{{ url_for('activity_page',tab='errors',**({'q':results_query} if results_query else {})) }}" class="{{ 'active' if tab == 'errors' }}">{{ t('tab_errors') }}{% if errors_total %} ({{ errors_total }}){% endif %}</a>
 </div>
 <div class="card">
+  {% include "_list_search.html" %}
+  {% include "_page_summary.html" %}
   {% if tab == 'errors' %}
   <table>
     <tr><th>{{ t('col_time') }}</th><th>{{ t('col_source') }}</th><th>{{ t('col_what') }}</th><th>{{ t('col_scan') }}</th></tr>
@@ -30,5 +32,6 @@
     {% endfor %}
   </table>
   {% endif %}
+  {% include "_pagination.html" %}
 </div>
 {% endblock %}

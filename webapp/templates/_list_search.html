@@ -1,0 +1,8 @@
+<form method="get" action="{{ url_for(pagination_endpoint, _anchor=pagination_anchor|default('')) }}" class="list-search">
+  {% for key,value in (search_filters|default({})).items() %}
+  <input type="hidden" name="{{ key }}" value="{{ value }}">
+  {% endfor %}
+  <input type="search" name="q" value="{{ results_query }}" placeholder="{{ t('search_placeholder') }}" aria-label="{{ t('search_placeholder') }}">
+  <button type="submit" class="btn">{{ t('btn_search') }}</button>
+  {% if results_query %}<a class="btn" href="{{ url_for(pagination_endpoint, _anchor=pagination_anchor|default(''), **(search_filters|default({}))) }}">{{ t('btn_clear_search') }}</a>{% endif %}
+</form>

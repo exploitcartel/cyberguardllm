@@ -165,6 +165,38 @@ CREATE TABLE IF NOT EXISTS activity_log (
     timestamp TEXT
 );
 
+CREATE TABLE IF NOT EXISTS garak_progress (
+    result_id INTEGER PRIMARY KEY REFERENCES scan_results(id) ON DELETE CASCADE,
+    planned INTEGER, sent INTEGER DEFAULT 0, completed INTEGER DEFAULT 0,
+    errors INTEGER DEFAULT 0, evaluated INTEGER DEFAULT 0, phase TEXT DEFAULT 'loading'
+);
+CREATE TABLE IF NOT EXISTS scan_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    result_id INTEGER REFERENCES scan_results(id) ON DELETE CASCADE,
+    event_key TEXT NOT NULL,
+    timestamp TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    kind TEXT NOT NULL, message TEXT, finding_id INTEGER,
+    UNIQUE(result_id,event_key)
+);
+CREATE TRIGGER IF NOT EXISTS trg_scan_event_finding AFTER INSERT ON findings
+BEGIN
+    INSERT OR IGNORE INTO scan_events(result_id,event_key,kind,message,finding_id)
+    VALUES(NEW.scan_result_id,'finding:'||NEW.id||':'||NEW.verdict,'finding',NEW.rule_id,NEW.id);
+END;
+CREATE TRIGGER IF NOT EXISTS trg_scan_event_verdict AFTER UPDATE OF verdict ON findings
+WHEN NEW.verdict != OLD.verdict
+BEGIN
+    INSERT OR IGNORE INTO scan_events(result_id,event_key,kind,message,finding_id)
+    VALUES(NEW.scan_result_id,'finding:'||NEW.id||':'||NEW.verdict,'finding',NEW.rule_id,NEW.id);
+END;
+CREATE TRIGGER IF NOT EXISTS trg_scan_event_phase AFTER UPDATE OF last_rule_id ON tasks
+WHEN NEW.result_id IS NOT NULL AND NEW.last_rule_id IS NOT OLD.last_rule_id
+ AND instr(NEW.last_rule_id,' ') > 0
+BEGIN
+    INSERT OR IGNORE INTO scan_events(result_id,event_key,kind,message)
+    VALUES(NEW.result_id,'phase:'||NEW.last_rule_id,'phase',NEW.last_rule_id);
+END;
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT

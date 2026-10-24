@@ -15,7 +15,8 @@
 {% endif %}
 
 <div class="card">
-  <input type="text" placeholder="{{ t('search_placeholder') }}" oninput="filterTable(this, 'targetsTable')" style="margin-bottom:12px;max-width:320px;">
+  {% include "_list_search.html" %}
+  {% include "_page_summary.html" %}
   <table id="targetsTable">
     <tr>
       {% if user_role in ('administrator','global_administrator') %}<th style="width:34px;"><input type="checkbox" id="targetsSelectAll"></th>{% endif %}
@@ -58,6 +59,7 @@
     <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">{{ t('no_targets_yet') }}</td></tr>
     {% endfor %}
   </table>
+  {% include "_pagination.html" %}
 </div>
 
 {% if user_role in ('administrator','global_administrator') %}

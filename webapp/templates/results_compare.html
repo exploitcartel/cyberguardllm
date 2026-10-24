@@ -26,45 +26,67 @@
 </div>
 
 {% if comparison %}
+{% include "_list_search.html" %}
 <div class="page-header"><div><h2 style="margin:0;">{{ from_result.target_name or '-' }}: #{{ from_id }} &rarr; #{{ to_id }}</h2></div></div>
 
 <div class="card" style="margin-bottom:16px;border-left:3px solid #22c55e;">
-  <h3 style="margin-top:0;color:#22c55e;">{{ t('compare_fixed_title') }} ({{ comparison.fixed|length }})</h3>
+  <h3 id="compare-fixed" style="margin-top:0;color:#22c55e;">{{ t('compare_fixed_title') }} ({{ comparison_counts.fixed }})</h3>
   {% if comparison.fixed %}
   <table>
     <tr><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_severity') }}</th></tr>
     {% for f in comparison.fixed %}
-    <tr><td>{{ f.rule_id }}</td><td>{{ f.owasp }}</td><td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td></tr>
+    <tr><td><a href="/findings/{{ f.id }}">{{ f.rule_id }}</a></td><td>{{ f.owasp }}</td><td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td></tr>
     {% endfor %}
   </table>
+  {% with page=comparison_pagers.fixed.page, total_pages=comparison_pagers.fixed.total_pages,
+          items_total=comparison_pagers.fixed.items_total, page_size=25,
+          pagination_endpoint='results_compare', pagination_params=comparison_pagers.fixed.pagination_params,
+          pagination_page_key='fixed_page', pagination_anchor='compare-fixed' %}
+    {% include "_page_summary.html" %}
+    {% include "_pagination.html" %}
+  {% endwith %}
   {% else %}
   <p style="color:var(--text-muted);">{{ t('compare_none') }}</p>
   {% endif %}
 </div>
 
 <div class="card" style="margin-bottom:16px;border-left:3px solid #ef4444;">
-  <h3 style="margin-top:0;color:#ef4444;">{{ t('compare_new_title') }} ({{ comparison.new|length }})</h3>
+  <h3 id="compare-new" style="margin-top:0;color:#ef4444;">{{ t('compare_new_title') }} ({{ comparison_counts.new }})</h3>
   {% if comparison.new %}
   <table>
     <tr><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_severity') }}</th></tr>
     {% for f in comparison.new %}
-    <tr><td>{{ f.rule_id }}</td><td>{{ f.owasp }}</td><td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td></tr>
+    <tr><td><a href="/findings/{{ f.id }}">{{ f.rule_id }}</a></td><td>{{ f.owasp }}</td><td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td></tr>
     {% endfor %}
   </table>
+  {% with page=comparison_pagers.new.page, total_pages=comparison_pagers.new.total_pages,
+          items_total=comparison_pagers.new.items_total, page_size=25,
+          pagination_endpoint='results_compare', pagination_params=comparison_pagers.new.pagination_params,
+          pagination_page_key='new_page', pagination_anchor='compare-new' %}
+    {% include "_page_summary.html" %}
+    {% include "_pagination.html" %}
+  {% endwith %}
   {% else %}
   <p style="color:var(--text-muted);">{{ t('compare_none') }}</p>
   {% endif %}
 </div>
 
 <div class="card" style="border-left:3px solid #f59e0b;">
-  <h3 style="margin-top:0;color:#f59e0b;">{{ t('compare_unchanged_title') }} ({{ comparison.unchanged|length }})</h3>
+  <h3 id="compare-unchanged" style="margin-top:0;color:#f59e0b;">{{ t('compare_unchanged_title') }} ({{ comparison_counts.unchanged }})</h3>
   {% if comparison.unchanged %}
   <table>
     <tr><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_severity') }}</th></tr>
     {% for f in comparison.unchanged %}
-    <tr><td>{{ f.rule_id }}</td><td>{{ f.owasp }}</td><td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td></tr>
+    <tr><td><a href="/findings/{{ f.id }}">{{ f.rule_id }}</a></td><td>{{ f.owasp }}</td><td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td></tr>
     {% endfor %}
   </table>
+  {% with page=comparison_pagers.unchanged.page, total_pages=comparison_pagers.unchanged.total_pages,
+          items_total=comparison_pagers.unchanged.items_total, page_size=25,
+          pagination_endpoint='results_compare', pagination_params=comparison_pagers.unchanged.pagination_params,
+          pagination_page_key='unchanged_page', pagination_anchor='compare-unchanged' %}
+    {% include "_page_summary.html" %}
+    {% include "_pagination.html" %}
+  {% endwith %}
   {% else %}
   <p style="color:var(--text-muted);">{{ t('compare_none') }}</p>
   {% endif %}

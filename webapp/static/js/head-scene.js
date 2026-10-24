@@ -142,8 +142,8 @@ const POINT_FRAG = /* glsl */ `
  * `theme` is "dark" (default) or "light". `onFail` is called once if WebGL or the model is unavailable.
  */
 export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark" } = {}) {
-  const light = theme === "light";
-  const BLEND = light ? THREE.NormalBlending : THREE.AdditiveBlending;
+  let light = theme === "light";
+  let BLEND = light ? THREE.NormalBlending : THREE.AdditiveBlending;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const lowPower = window.matchMedia("(max-width: 768px)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;
 
@@ -170,6 +170,7 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
   scene.add(cageGroup, headGroup);
 
   const disposables = [];
+  const themeLines = [];
   const track = (o) => { disposables.push(o); return o; };
 
   const state = { activity: 0, alert: 0, speed: 1, paused: false, queue: 0 };
@@ -180,12 +181,25 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
   const cageUniforms = { uTime: { value: 0 }, uScale: { value: 1 }, uAlert: { value: 0 }, uActivity: { value: 0 },
                          uLight: { value: light ? 1 : 0 } };
 
+  // Follow body theme changes without rebuilding the scene or losing scan/drag state.
+  const themeObserver = new MutationObserver(() => {
+    const next = document.body.classList.contains('light');
+    if(next === light) return;
+    light = next;
+    BLEND = light ? THREE.NormalBlending : THREE.AdditiveBlending;
+    [ridgeUniforms,pointUniforms,cageUniforms].forEach(u => { u.uLight.value = light ? 1 : 0; });
+    disposables.forEach(m => { if(m.isMaterial && m.transparent){ m.blending=BLEND; m.needsUpdate=true; } });
+    themeLines.forEach(([m,lc,dc,lo,darkOpacity]) => { m.color.setHex(light ? lc : dc); m.opacity=light ? lo : darkOpacity; });
+  });
+  themeObserver.observe(document.body,{attributes:true,attributeFilter:['class']});
+
   // ---- Network globe ("cage"): geodesic wireframe, glowing nodes at its vertices, and data arcs between distant
   // nodes with a packet travelling along each one.
   const ico = track(new THREE.IcosahedronGeometry(CAGE_RADIUS, 2));
   const cageLineMat = track(new THREE.LineBasicMaterial({
     color: light ? 0x2f5fd0 : 0x6fb6ff, transparent: true, opacity: light ? 0.3 : 0.2,
     blending: BLEND, depthWrite: false }));
+  themeLines.push([cageLineMat,0x2f5fd0,0x6fb6ff,.3,.2]);
   const cageEdges = new THREE.LineSegments(track(new THREE.EdgesGeometry(ico)), cageLineMat);
   cageEdges.renderOrder = -3;
   cageGroup.add(cageEdges);
@@ -231,6 +245,7 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
     const arcMat = track(new THREE.LineBasicMaterial({
       color: light ? 0x1d4ed8 : 0x9fdcff, transparent: true, opacity: light ? 0.38 : 0.3,
       blending: BLEND, depthWrite: false }));
+    themeLines.push([arcMat,0x1d4ed8,0x9fdcff,.38,.3]);
     let guard = 0;
     while (arcs.length < ARC_COUNT && guard++ < 400) {
       const a = verts[Math.floor(rnd() * verts.length)];
@@ -335,6 +350,7 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
       lGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(linePts), 3));
       const lMat = track(new THREE.LineBasicMaterial({ color: light ? 0x2f5fd0 : 0x9fdcff, transparent: true,
         opacity: light ? 0.4 : 0.28, blending: BLEND, depthWrite: false }));
+      themeLines.push([lMat,0x2f5fd0,0x9fdcff,.4,.28]);
       headGroup.add(new THREE.LineSegments(lGeo, lMat));
     },
     undefined,
@@ -491,6 +507,7 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
       disposed = true;
       cancelAnimationFrame(raf);
       ro.disconnect();
+      themeObserver.disconnect();
       window.removeEventListener("pointermove", onMove);
       wrap.removeEventListener("pointerleave", onLeave);
       canvas.removeEventListener("pointerdown", onDown);

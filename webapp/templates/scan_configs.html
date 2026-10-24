@@ -157,7 +157,9 @@
   </div>
   {% endif %}
   <div class="card">
-    <h3 style="margin-top:0;">{{ t('existing_configs') }}</h3>
+    <h3 id="existing-configs" style="margin-top:0;">{{ t('existing_configs') }}</h3>
+    {% include "_list_search.html" %}
+    {% include "_page_summary.html" %}
     {% if user_role in ('administrator','global_administrator') %}
     <div id="configsToolbar" style="display:none;margin-bottom:12px;flex-direction:row;align-items:center;gap:14px;flex-wrap:wrap;">
       <strong id="configsSelectedCount" style="color:var(--text);"></strong>
@@ -212,6 +214,7 @@
       <tr><td colspan="5" style="text-align:center;color:var(--text-muted);">{{ t('no_configs_yet') }}</td></tr>
       {% endfor %}
     </table>
+    {% include "_pagination.html" %}
     </div>
   </div>
 </div>

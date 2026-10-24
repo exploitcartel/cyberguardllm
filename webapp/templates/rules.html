@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="page-header"><div><h1>{{ t('rules_title') }}</h1><p>{{ rules|length }} {{ t('rules_sub_suffix') }}</p></div><a href="/rules/new" class="btn btn-primary">{{ t('btn_add_custom_rule') }}</a></div>
+<div class="page-header"><div><h1>{{ t('rules_title') }}</h1><p>{{ rules_total }} {{ t('rules_sub_suffix') }}</p></div><a href="/rules/new" class="btn btn-primary">{{ t('btn_add_custom_rule') }}</a></div>
 
 <div id="rulesToolbar" class="card" style="display:none;margin-bottom:14px;flex-direction:row;align-items:center;gap:14px;flex-wrap:wrap;">
   <strong id="rulesSelectedCount" style="color:var(--text);"></strong>
@@ -8,7 +8,8 @@
 </div>
 
 <div class="card">
-  <input type="text" placeholder="{{ t('search_placeholder') }}" oninput="filterTable(this, 'rulesTable')" style="margin-bottom:12px;max-width:320px;">
+  {% include "_list_search.html" %}
+  {% include "_page_summary.html" %}
   <p style="color:var(--text-muted);font-size:13.5px;margin-top:0;">{{ t('rules_bulk_hint') }}</p>
   <table id="rulesTable">
     <tr><th style="width:34px;"><input type="checkbox" id="rulesSelectAll"></th><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_source') }}</th><th>{{ t('col_severity') }}</th><th>{{ t('col_prompt') }}</th><th></th></tr>
@@ -45,6 +46,7 @@
     </tr>
     {% endfor %}
   </table>
+  {% include "_pagination.html" %}
 </div>
 
 <script>

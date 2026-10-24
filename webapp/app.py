@@ -5,7 +5,7 @@ import json, csv, io
 import secrets
 import yaml
 from flask import (Flask, request, render_template, redirect, make_response, send_file, jsonify, Response,
-                    flash, get_flashed_messages)
+                    flash, get_flashed_messages, url_for)
 from storage.db import init_db, get_conn, now, get_setting, set_setting, get_all_settings
 from auth.auth import (seed_admin, verify_password, hash_password, make_session_cookie, read_session_cookie,
                         validate_session_cookie, invalidate_sessions, DUMMY_PASSWORD_HASH,
@@ -156,7 +156,11 @@ def _asset_versions():
         v = int(os.path.getmtime(os.path.join(BASE_DIR, "static", "js", "head-scene.js")))
     except OSError:
         v = 0
-    return {"head_scene_v": v}
+    try:
+        style_v = os.stat(os.path.join(BASE_DIR, "static", "css", "style.css")).st_mtime_ns
+    except OSError:
+        style_v = 0
+    return {"head_scene_v": v, "style_v": style_v}
 
 
 def _row_get_app(row, key, default=None):
@@ -378,14 +382,57 @@ def dashboard():
     ))
 
 
+def _page_state(total, size, page_key="page"):
+    total_pages = max(1, (total + size - 1) // size)
+    page = min(max(1, request.args.get(page_key, 1, type=int) or 1), total_pages)
+    return {"page": page, "total_pages": total_pages, "items_total": total, "page_size": size,
+            "pagination_page_key": page_key}
+
+
+def _pagination_url(endpoint, page, params, page_key="page", anchor=""):
+    values = dict(params)
+    values[page_key] = page
+    if anchor:
+        values["_anchor"] = anchor
+    return url_for(endpoint, **values)
+
+
+app.jinja_env.globals["pagination_url"] = _pagination_url
+
+
+def _list_metadata(total, size, endpoint, query="", extra=None, page_key="page", anchor=""):
+    state = _page_state(total, size, page_key)
+    state.update(results_query=query, pagination_endpoint=endpoint,
+                 pagination_params=dict(extra or {}, **({"q": query} if query else {})),
+                 search_filters=extra or {}, pagination_anchor=anchor)
+    return state
+
+
+def _paged_query(conn, source, columns, order, size, endpoint, fields, query="", filters="", params=(), extra=None, anchor=""):
+    # Identifiers are supplied by routes below; search values remain SQL parameters.
+    clauses = [filters] if filters else []
+    values = list(params)
+    if query:
+        searchable = " || ' ' || ".join("COALESCE(" + field + ",'')" for field in fields)
+        clauses.append("instr(lower(" + searchable + "),lower(?)) > 0")
+        values.append(query)
+    where = " WHERE " + " AND ".join("(" + clause + ")" for clause in clauses) if clauses else ""
+    total = conn.execute("SELECT COUNT(*) FROM " + source + where, values).fetchone()[0]
+    state = _list_metadata(total, size, endpoint, query, extra, anchor=anchor)
+    rows = conn.execute("SELECT " + columns + " FROM " + source + where + " ORDER BY " + order + " LIMIT ? OFFSET ?",
+                        values + [size, (state["page"] - 1) * size]).fetchall()
+    return rows, state
+
+
 @app.route("/targets")
 def targets_page():
     username, err = require_login()
     if err: return err
     conn = get_conn()
-    targets = conn.execute("SELECT * FROM targets").fetchall()
+    targets, paging = _paged_query(conn, "targets", "*", "id DESC", 10, "targets_page",
+        ("name", "url", "auth_scheme", "body_format", "status", "business_context"), request.args.get("q", "").strip())
     conn.close()
-    return render_template("targets.html", **ctx(active="targets", targets=targets))
+    return render_template("targets.html", **ctx(active="targets", targets=targets, **paging))
 
 
 @app.route("/targets/new", methods=["GET"])
@@ -704,7 +751,10 @@ def scan_configs_page():
     counts = counts_by_level["aggressive"]  # full totals, shown by default (Aggressive is pre-selected)
     categories = [(code, OWASP_LABELS.get(code, code), counts.get(code, 0)) for code in OWASP_LABELS]
     conn = get_conn()
-    configs = conn.execute("SELECT * FROM scan_configs").fetchall()
+    configs, paging = _paged_query(conn, "scan_configs", "*", "id DESC", 10, "scan_configs_page",
+        ("name", "categories", "scan_level", "CASE WHEN use_garak THEN 'Garak' ELSE '' END",
+         "CASE WHEN use_pyrit THEN 'PyRIT' ELSE '' END", "CASE WHEN ai_powered THEN 'AI-Powered' ELSE 'Offline' END"),
+        request.args.get("q", "").strip(), anchor="existing-configs")
     conn.close()
     from engine.garak_module import AVAILABLE_PROBES as garak_probes
     from engine.pyrit_module import OBJECTIVES as pyrit_objectives
@@ -718,7 +768,7 @@ def scan_configs_page():
         crescendo_objectives=crescendo_objectives, ai_configured=ai_configured,
         garak_ok=garak_ok, pyrit_ok=pyrit_ok, mutation_labels=MUTATION_LABELS,
         counts_by_level=counts_by_level, ai_intensity_levels=AI_INTENSITY_LEVELS,
-        ai_intensity_order=AI_INTENSITY_ORDER,
+        ai_intensity_order=AI_INTENSITY_ORDER, **paging,
     ))
 
 
@@ -948,7 +998,13 @@ def scan_live(task_id):
 
 @app.route("/api/scan-status/<int:task_id>")
 def api_scan_status(task_id):
-    progress = get_task_progress(task_id)
+    username, err = require_login()
+    if err: return err
+    try:
+        after=max(0,int(request.args.get("after","0")))
+    except ValueError:
+        after=0
+    progress = get_task_progress(task_id, after=after)
     if not progress:
         return {"status": "unknown", "total": 0, "done": 0, "findings": 0, "result_id": None, "control": "run"}
     return progress
@@ -967,6 +1023,9 @@ def _set_task_control(task_id, control, action_label):
     conn.execute("UPDATE tasks SET control=? WHERE id=?", (control, task_id))
     conn.commit()
     conn.close()
+    if control == "stop":
+        # Make both Tasks and Results reflect Stop immediately, including during AI post-processing.
+        force_stop_task(task_id)
     log_activity(username, action_label, f"Task #{task_id}")
     return jsonify({"ok": True, "control": control})
 
@@ -1010,12 +1069,25 @@ def tasks_force_stop(task_id):
 def results_page():
     username, err = require_login()
     if err: return err
+    query = request.args.get("q", "").strip()
     conn = get_conn()
-    results = conn.execute("""SELECT sr.*, t.name as target_name FROM scan_results sr
-                               LEFT JOIN targets t ON sr.target_id=t.id
-                               ORDER BY sr.timestamp DESC""").fetchall()
+    # Search all scans before paging, so older matching scans remain discoverable.
+    where = ""
+    params = []
+    if query:
+        where = "WHERE instr(lower(COALESCE(t.name,'') || ' ' || COALESCE(sr.status,'') || ' ' || sr.id || ' ' || COALESCE(sr.timestamp,'') || ' ' || COALESCE(sr.risk_score,0) || ' ' || COALESCE(sr.total_findings,0)), lower(?)) > 0"
+        params = [query]
+    source = "FROM scan_results sr LEFT JOIN targets t ON sr.target_id=t.id "
+    results_total = conn.execute("SELECT COUNT(*) " + source + where, params).fetchone()[0]
+    total_pages = max(1, (results_total + 4) // 5)
+    page = min(max(1, request.args.get("page", 1, type=int) or 1), total_pages)
+    results = conn.execute("SELECT sr.*, t.name AS target_name " + source + where +
+                           " ORDER BY sr.timestamp DESC, sr.id DESC LIMIT 5 OFFSET ?",
+                           params + [(page - 1) * 5]).fetchall()
     conn.close()
-    return render_template("results.html", **ctx(active="results", results=results))
+    return render_template("results.html", **ctx(active="results", results=results, page=page,
+        total_pages=total_pages, results_total=results_total, results_query=query,
+        pagination_endpoint="results_page", pagination_params={"q": query} if query else {}))
 
 
 @app.route("/results/delete", methods=["POST"])
@@ -1067,16 +1139,13 @@ def critical_findings():
     wanted = CRITICAL_SEVERITY_FILTERS[severity]
     placeholders = ",".join("?" * len(wanted))
     conn = get_conn()
-    rows = conn.execute(f"""SELECT f.id, f.rule_id, f.owasp, f.severity, f.confidence, f.triage_status, f.module,
-                                   sr.id AS scan_id, sr.timestamp, t.name AS target_name
-                            FROM findings f
-                            JOIN scan_results sr ON f.scan_result_id = sr.id
-                            LEFT JOIN targets t ON sr.target_id = t.id
-                            WHERE f.verdict='FAIL' AND f.severity IN ({placeholders})
-                            ORDER BY CASE f.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1
-                                                     WHEN 'medium' THEN 2 ELSE 3 END,
-                                     sr.timestamp DESC, f.id DESC
-                            LIMIT 500""", wanted).fetchall()
+    rows, paging = _paged_query(conn,
+        "findings f JOIN scan_results sr ON f.scan_result_id=sr.id LEFT JOIN targets t ON sr.target_id=t.id",
+        "f.id,f.rule_id,f.owasp,f.severity,f.confidence,f.triage_status,f.module,sr.id AS scan_id,sr.timestamp,t.name AS target_name",
+        "CASE f.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,sr.timestamp DESC,f.id DESC",
+        50, "critical_findings", ("f.rule_id", "f.owasp", "f.module", "t.name", "f.triage_status"),
+        request.args.get("q", "").strip(), "f.verdict='FAIL' AND f.severity IN (" + placeholders + ")",
+        wanted, {"severity": severity})
     counts = {r["severity"]: r["c"] for r in conn.execute(
         "SELECT severity, COUNT(*) AS c FROM findings WHERE verdict='FAIL' GROUP BY severity")}
     conn.close()
@@ -1087,7 +1156,7 @@ def critical_findings():
              ("all", sum(counts.values()))]
     return render_template("critical_findings.html", **ctx(
         active="results", results_tab="critical", findings=rows, severity=severity, chips=chips,
-        owasp_names=_ALL_LABELS))
+        owasp_names=_ALL_LABELS, **paging))
 
 
 @app.route("/results/<int:result_id>")
@@ -1101,12 +1170,34 @@ def result_detail(result_id):
         # A stale or mistyped scan number used to crash with a 500 (TypeError on the missing row).
         conn.close()
         return redirect("/results")
-    findings = conn.execute("SELECT * FROM findings WHERE scan_result_id=?", (result_id,)).fetchall()
+    findings_total = conn.execute("SELECT COUNT(*) FROM findings WHERE scan_result_id=?", (result_id,)).fetchone()[0]
+    total_pages = max(1, (findings_total + 49) // 50)
+    page = min(max(1, request.args.get("page", 1, type=int) or 1), total_pages)
+    # SQL expressions and direction come only from these allowlists, never raw request text.
+    sort_columns = {
+        "sequence": "id",
+        "id": "rule_id COLLATE NOCASE",
+        "owasp": "CAST(SUBSTR(owasp, 4) AS INTEGER)",
+        "severity": "CASE LOWER(severity) WHEN 'low' THEN 1 WHEN 'medium' THEN 2 WHEN 'high' THEN 3 WHEN 'critical' THEN 4 ELSE 0 END",
+        "verdict": "CASE verdict WHEN 'INFO' THEN 0 WHEN 'PASS' THEN 1 WHEN 'ERROR' THEN 2 WHEN 'REVIEW' THEN 3 WHEN 'FAIL' THEN 4 ELSE -1 END",
+        "triage": "CASE WHEN verdict != 'FAIL' THEN 0 WHEN triage_status = 'false_positive' THEN 1 WHEN triage_status = 'accepted_risk' THEN 2 ELSE 3 END",
+    }
+    sort = request.args.get("sort", "sequence")
+    if sort not in sort_columns:
+        sort = "sequence"
+    direction = request.args.get("direction", "asc").lower()
+    if direction not in ("asc", "desc"):
+        direction = "asc"
+    order = sort_columns[sort] + " " + direction.upper()
+    findings = conn.execute("SELECT * FROM findings WHERE scan_result_id=? ORDER BY " + order + ", id ASC LIMIT 50 OFFSET ?",
+                            (result_id, (page - 1) * 50)).fetchall()
     attack_chains = conn.execute("SELECT * FROM attack_chains WHERE scan_result_id=?", (result_id,)).fetchall()
     benchmark = _compute_benchmark(conn, result["target_id"])
     conn.close()
     return render_template("result_detail.html", **ctx(active="results", result=result, findings=findings,
-                                                         attack_chains=attack_chains, benchmark=benchmark))
+                                                         attack_chains=attack_chains, benchmark=benchmark,
+                                                         page=page, total_pages=total_pages, findings_total=findings_total,
+                                                         sort=sort, direction=direction))
 
 
 def _get_ai_cfg_for_report():
@@ -1267,6 +1358,9 @@ def results_compare():
     to_id = request.args.get("to", type=int)
     conn = get_conn()
     targets = conn.execute("SELECT * FROM targets").fetchall()
+    query = request.args.get("q", "").strip()
+    comparison_pagers = {}
+    comparison_counts = {}
     comparison = None
     from_result = to_result = None
     if from_id and to_id:
@@ -1274,6 +1368,9 @@ def results_compare():
                                        LEFT JOIN targets t ON sr.target_id=t.id WHERE sr.id=?""", (from_id,)).fetchone()
         to_result = conn.execute("""SELECT sr.*, t.name as target_name FROM scan_results sr
                                      LEFT JOIN targets t ON sr.target_id=t.id WHERE sr.id=?""", (to_id,)).fetchone()
+        if from_result is None or to_result is None:
+            conn.close()
+            return redirect(url_for("results_compare"))
         from_findings = {f["rule_id"]: f for f in conn.execute(
             "SELECT * FROM findings WHERE scan_result_id=? AND verdict='FAIL'", (from_id,)).fetchall()}
         to_findings = {f["rule_id"]: f for f in conn.execute(
@@ -1282,13 +1379,28 @@ def results_compare():
         new_findings = [f for rid, f in to_findings.items() if rid not in from_findings]
         unchanged = [f for rid, f in to_findings.items() if rid in from_findings]
         comparison = {"fixed": fixed, "new": new_findings, "unchanged": unchanged}
+        for key, records in comparison.items():
+            if query:
+                records = [f for f in records if query.casefold() in " ".join(str(f[k] or "") for k in
+                           ("rule_id", "owasp", "severity", "description")).casefold()]
+            state = _list_metadata(len(records), 25, "results_compare", query,
+                                   {"from": from_id, "to": to_id}, key + "_page", "compare-" + key)
+            comparison_counts[key] = len(records)
+            comparison_pagers[key] = state
+            start = (state["page"] - 1) * 25
+            comparison[key] = records[start:start + 25]
+        for key, state in comparison_pagers.items():
+            state["pagination_params"].update({other + "_page": meta["page"] for other, meta in comparison_pagers.items() if other != key})
     results = conn.execute("""SELECT sr.*, t.name as target_name FROM scan_results sr
                                LEFT JOIN targets t ON sr.target_id=t.id
                                ORDER BY sr.timestamp DESC""").fetchall()
     conn.close()
     return render_template("results_compare.html", **ctx(
         active="results", targets=targets, results=results, comparison=comparison,
-        from_result=from_result, to_result=to_result, from_id=from_id, to_id=to_id))
+        from_result=from_result, to_result=to_result, from_id=from_id, to_id=to_id,
+        comparison_counts=comparison_counts, comparison_pagers=comparison_pagers,
+        results_query=query, pagination_endpoint="results_compare", pagination_anchor="",
+        search_filters={"from": from_id, "to": to_id} if from_id and to_id else {}))
 
 
 @app.route("/findings/<int:finding_id>")
@@ -1325,8 +1437,15 @@ def finding_triage(finding_id):
 def rules_page():
     username, err = require_login()
     if err: return err
+    query = request.args.get("q", "").strip()
     rules = load_all_rules()
-    return render_template("rules.html", **ctx(active="rules", rules=rules))
+    rules_total = len(rules)
+    if query:
+        rules = [r for r in rules if query.casefold() in " ".join(str(r.get(k) or "") for k in
+                 ("id", "owasp", "severity", "source", "module", "prompt", "turns", "poison_prompt", "probe_prompt", "description", "origin")).casefold()]
+    paging = _list_metadata(len(rules), 50, "rules_page", query)
+    start = (paging["page"] - 1) * 50
+    return render_template("rules.html", **ctx(active="rules", rules=rules[start:start + 50], rules_total=rules_total, **paging))
 
 
 @app.route("/rules/new", methods=["GET"])
@@ -1484,10 +1603,14 @@ def activity_page():
     if err: return err
     conn = get_conn()
     tab = "errors" if request.args.get("tab") == "errors" else "activity"
-    logs = conn.execute("SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 100").fetchall()
-    errors = conn.execute("SELECT * FROM error_log ORDER BY id DESC LIMIT 200").fetchall()
+    source = "error_log" if tab == "errors" else "activity_log"
+    fields = ("source", "message", "detail", "task_id", "result_id", "timestamp") if tab == "errors" else ("username", "action", "details", "timestamp")
+    rows, paging = _paged_query(conn, source, "*", "id DESC", 25, "activity_page", fields,
+                                request.args.get("q", "").strip(), extra={"tab": tab})
+    errors_total = conn.execute("SELECT COUNT(*) FROM error_log").fetchone()[0]
     conn.close()
-    return render_template("activity.html", **ctx(active="activity", logs=logs, errors=errors, tab=tab))
+    return render_template("activity.html", **ctx(active="activity", logs=rows if tab == "activity" else [],
+        errors=rows if tab == "errors" else [], errors_total=errors_total, tab=tab, **paging))
 
 
 def _mask_api_key(api_key_encrypted):

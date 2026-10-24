@@ -9,6 +9,15 @@
     <a href="/results/{{ result.id }}/pdf" class="btn btn-primary">{{ t('btn_export_pdf') }}</a>
   </div>
 </div>
+{% if result.status in ('stopped', 'error') %}
+<div class="card" style="margin-bottom:16px;" role="status"><strong>Partial assessment: {{ result.status }}.</strong>
+<p>The score counts confirmed FAIL findings only. Unresolved REVIEW and ERROR records are excluded; a zero score does not establish safety.</p></div>
+{% endif %}
+{% if result.status == 'running' %}
+<div class="card" style="margin-bottom:16px;"><strong>Scan still running — results are provisional.</strong>
+<a class="btn" href="/scan/{{ result.task_id }}/live">Return to live scan</a>
+<p>New evaluated attempts appear as the scan progresses. Refresh this list to see the latest results.</p></div>
+{% endif %}
 {% if benchmark %}
 <div class="card" style="margin-bottom:16px;">
   <h3 style="margin-top:0;">{{ t('benchmark_title') }}</h3>
@@ -41,8 +50,20 @@
 </div>
 {% endif %}
 <div class="card">
+  <p>{{ (page - 1) * 50 + 1 if findings_total else 0 }}&ndash;{{ [page * 50, findings_total]|min }} / {{ findings_total }}</p>
   <table>
-    <tr><th>{{ t('col_id') }}</th><th>{{ t('col_owasp') }}</th><th>{{ t('col_severity') }}</th><th>{{ t('col_verdict') }}</th><th>{{ t('col_triage') }}</th><th></th></tr>
+    <tr>
+      {% for key,label in [('id','col_id'),('owasp','col_owasp'),('severity','col_severity'),('verdict','col_verdict'),('triage','col_triage')] %}
+      {% set selected = sort == key %}
+      {% set next_direction = ('desc' if direction == 'asc' else 'asc') if selected else ('desc' if key in ('severity','verdict') else 'asc') %}
+      <th scope="col" aria-sort="{{ ('ascending' if direction == 'asc' else 'descending') if selected else 'none' }}">
+        <a class="finding-sort {{ 'selected' if selected else '' }}" href="{{ url_for('result_detail',result_id=result.id,sort=key,direction=next_direction,page=1) }}">
+          {{ t(label) }} <span aria-hidden="true">{% if selected %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}</span>
+        </a>
+      </th>
+      {% endfor %}
+      <th scope="col"><span class="sr-only">{{ t('btn_details') }}</span></th>
+    </tr>
     {% for f in findings %}
     <tr>
       <td>{{ f.rule_id }}</td>
@@ -54,6 +75,17 @@
     </tr>
     {% endfor %}
   </table>
+  {% if total_pages > 1 %}
+  <nav aria-label="Finding pages" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:18px;">
+    {% if page > 1 %}<a class="btn" rel="prev" href="{{ url_for('result_detail',result_id=result.id,page=page-1,sort=sort,direction=direction) }}">&laquo; {{ t('btn_prev_page') }}</a>{% endif %}
+    {% for p in range(1, total_pages + 1) %}
+      {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+      <a class="btn {{ 'btn-primary' if p == page else '' }}" href="{{ url_for('result_detail',result_id=result.id,page=p,sort=sort,direction=direction) }}" {% if p == page %}aria-current="page"{% endif %}>{{ p }}</a>
+      {% elif p == page - 3 or p == page + 3 %}<span aria-hidden="true">&hellip;</span>{% endif %}
+    {% endfor %}
+    {% if page < total_pages %}<a class="btn" rel="next" href="{{ url_for('result_detail',result_id=result.id,page=page+1,sort=sort,direction=direction) }}">{{ t('btn_next_page') }} &raquo;</a>{% endif %}
+  </nav>
+  {% endif %}
 </div>
 <script>
 // Back returns to the exact page the operator came from (the Results list with

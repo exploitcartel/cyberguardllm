@@ -16,7 +16,12 @@
 </div>
 
 <div class="card">
-  <input type="text" placeholder="{{ t('search_placeholder') }}" oninput="filterTable(this, 'resultsTable')" style="margin-bottom:12px;max-width:320px;">
+  <form method="get" action="/results" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+    <input type="search" name="q" value="{{ results_query }}" placeholder="{{ t('search_placeholder') }}" aria-label="{{ t('search_placeholder') }}" style="max-width:320px;">
+    <button class="btn" type="submit">{{ t('btn_search') }}</button>
+    {% if results_query %}<a href="/results" class="btn">{{ t('btn_clear_search') }}</a>{% endif %}
+  </form>
+  <p>{{ (page - 1) * 5 + 1 if results_total else 0 }}&ndash;{{ [page * 5, results_total]|min }} / {{ results_total }}</p>
   <table id="resultsTable">
     <tr>
       <th style="width:34px;"><input type="checkbox" id="resultsSelectAll"></th>
@@ -33,9 +38,10 @@
       <td><a href="/results/{{ r.id }}" class="btn" style="padding:5px 10px;">{{ t('btn_view') }}</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">{{ t('no_results_yet') }}</td></tr>
+    <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">{{ t('no_matching_results') if results_query else t('no_results_yet') }}</td></tr>
     {% endfor %}
   </table>
+  {% include "_pagination.html" %}
 </div>
 
 <script>
