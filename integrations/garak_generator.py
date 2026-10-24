@@ -83,5 +83,7 @@ class CyberGuardGenerator(Generator):
             prompt = prompt.get("text") or str(prompt)
         response_text = send_prompt(target_row, str(prompt))
         if str(response_text).startswith("[ERROR"):
+            print("CGLLM-TARGET-ERROR: " + str(response_text)[:300].replace("
+", " "), file=sys.stderr, flush=True)
             return [None]  # transport failure, not a model answer
         return [response_text]
