@@ -27,11 +27,15 @@ or _call_model with "generations_this_call" depending on version.
 """
 import os
 import sys
+import json
+import time
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+from garak import _config
+from garak.attempt import Message
 from garak.generators.base import Generator  # noqa: E402
 
 
@@ -45,8 +49,9 @@ class CyberGuardGenerator(Generator):
 
     generator_family_name = "cyberguard"
     supports_multiple_generations = False
+    parallel_capable = False
 
-    def __init__(self, name="", config_root=None):
+    def __init__(self, name="", config_root=_config):
         self.name = name or ""
         self._target_row = None
         try:
@@ -64,8 +69,11 @@ class CyberGuardGenerator(Generator):
     def _load_target_row(self):
         if self._target_row is not None:
             return self._target_row
-        from storage.db import get_conn
-        conn = get_conn()
+        import storage.db as db
+        # Pass the parent database explicitly, including isolated integration-test databases.
+        if os.environ.get("CGLLM_GARAK_DB"):
+            db.DB_PATH = os.environ["CGLLM_GARAK_DB"]
+        conn = db.get_conn()
         try:
             self._target_row = conn.execute(
                 "SELECT * FROM targets WHERE id=?", (self.target_id,)
@@ -74,17 +82,48 @@ class CyberGuardGenerator(Generator):
             conn.close()
         return self._target_row
 
+    def _event(self, kind, **values):
+        path = os.environ.get("CGLLM_GARAK_EVENTS")
+        if path:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"kind": kind, **values}) + "\n")
+                f.flush()
+
     def _call_model(self, prompt, generations_this_call=1):
-        from core.discovery import send_prompt
+        from core.discovery import send_prompt, is_transport_error
         target_row = self._load_target_row()
         if target_row is None:
-            return [None]  # no answer: garak skips it instead of scoring an error text as a bypass
-        if isinstance(prompt, dict):
-            # Some garak versions pass a structured Turn/Message object; fall
-            # back to its text field when present instead of a plain string.
-            prompt = prompt.get("text") or str(prompt)
-        response_text = send_prompt(target_row, str(prompt))
-        if str(response_text).startswith("[ERROR"):
-            print("CGLLM-TARGET-ERROR: " + str(response_text)[:300].replace(chr(10), " "), file=sys.stderr, flush=True)
-            return [None]  # transport failure, not a model answer
-        return [response_text]
+            raise ValueError(f"CyberGuard target {self.target_id!r} does not exist in the configured database")
+        # garak 0.17 passes Conversation, not a string representation of its dataclasses.
+        if hasattr(prompt, "last_message"):
+            text = prompt.last_message().text
+        elif isinstance(prompt, dict):
+            text = prompt.get("text", "")
+        else:
+            text = prompt if isinstance(prompt, str) else getattr(prompt, "text", None)
+        if not isinstance(text, str):
+            raise TypeError("Garak supplied a prompt without text")
+        task_id = os.environ.get("CGLLM_GARAK_TASK")
+        if task_id:
+            from storage.db import get_conn
+            while True:
+                c = get_conn()
+                try:
+                    row = c.execute("SELECT control FROM tasks WHERE id=?", (task_id,)).fetchone()
+                finally:
+                    c.close()
+                if row and row[0] == "stop":
+                    return [None]
+                if not row or row[0] != "pause":
+                    break
+                time.sleep(0.25)
+        self._event("sent")
+        started = time.monotonic()
+        response = send_prompt(target_row, text, max_retries=0)
+        failed = is_transport_error(response)
+        self._event("received", error=failed, elapsed=round(time.monotonic()-started, 2))
+        if failed:
+            print("CGLLM-TARGET-ERROR: " + str(response)[:300].replace(chr(10), " "), file=sys.stderr, flush=True)
+            return [None]
+        # Generator.generate validates the response type before detectors ever see it.
+        return [Message(text=response)]

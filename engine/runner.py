@@ -1087,8 +1087,17 @@ def _execute(task_id: int):
         def _do_garak():
             from engine.garak_module import run_garak_scan
             probes = [p.strip() for p in (config["garak_probes"] or "").split(",") if p.strip()]
-            run_garak_scan(conn, result_id, target, probes)
+            run_garak_scan(conn, result_id, target, probes, task_id=task_id)
         _run_optional_module(conn, result_id, "garak-module-crash", "The Garak module", "Garak", "garak", _do_garak)
+
+    if config["use_garak"] and _check_control(conn, task_id):
+        rows = conn.execute("SELECT severity,verdict FROM findings WHERE scan_result_id=?", (result_id,)).fetchall()
+        conn.execute("UPDATE scan_results SET status='stopped',finished_at=?,total_findings=?,risk_score=? WHERE id=?",
+                     (now(), sum(r["verdict"] == "FAIL" for r in rows), compute_risk_score_rows(rows), result_id))
+        conn.execute("UPDATE tasks SET status='stopped',last_rule_id='Stopped during Garak' WHERE id=?", (task_id,))
+        conn.commit()
+        conn.close()
+        return
 
     if config["use_pyrit"]:
         conn.execute("UPDATE tasks SET last_rule_id='Running PyRIT module...' WHERE id=?", (task_id,))
