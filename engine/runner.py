@@ -995,8 +995,9 @@ def _execute(task_id: int):
     else:
         ai_categories = [c.strip() for c in ai_categories_raw.split(",") if c.strip()]
 
-    global_mode = get_setting("scan_mode", "offline")
-    ai_powered = bool(config["ai_powered"]) or global_mode == "ai_powered"
+    # The config's own "AI-Powered mode" checkbox decides. The global Settings scan mode used to be OR-ed in here, which
+    # turned AI-Powered on for configs where it was left unticked (a garak-only config ran 80 AI attempts first).
+    ai_powered = bool(config["ai_powered"])
 
     proxy_used = get_setting("proxy_url", "") if get_setting("proxy_enabled", "0") == "1" else None
 
