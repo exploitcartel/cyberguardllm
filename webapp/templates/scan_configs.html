@@ -12,7 +12,7 @@
       <details class="config-section">
         <summary>Static Payload Scan (OWASP Library)</summary>
         <div class="checkbox-row" style="margin-top:6px;">
-          <input type="checkbox" name="enable_static" id="enableStatic" checked> Enable static payload scan
+          <input type="checkbox" name="enable_static" id="enableStatic"> Enable static payload scan
         </div>
         <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">
           Uncheck this if you want this config to run AI-Powered mode and/or garak/PyRIT only, with no static
@@ -30,7 +30,7 @@
 
           <label style="margin-top:14px;display:block;">{{ t('owasp_categories_label') }}</label>
           {% for code, label, count in categories %}
-          <div class="checkbox-row"><input type="checkbox" name="categories" value="{{ code }}" checked> {{ code }} - {{ label }} (<span class="cat-count" data-code="{{ code }}">{{ count }}</span> payloads)</div>
+          <div class="checkbox-row"><input type="checkbox" name="categories" value="{{ code }}"> {{ code }} - {{ label }} (<span class="cat-count" data-code="{{ code }}">{{ count }}</span> payloads)</div>
           {% endfor %}
         </div>
       </details>
@@ -61,7 +61,7 @@
           targets, independently of what static payloads run.
         </p>
         {% for code, label, count in categories %}
-        <div class="checkbox-row"><input type="checkbox" name="ai_categories" value="{{ code }}" checked> {{ code }} - {{ label }}</div>
+        <div class="checkbox-row"><input type="checkbox" name="ai_categories" value="{{ code }}"> {{ code }} - {{ label }}</div>
         {% endfor %}
       </details>
 
