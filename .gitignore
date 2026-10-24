@@ -7,3 +7,5 @@ auth_secret.key
 flask_secret.key
 *.pdf
 venv-garak/
+*.db-shm
+*.db-wal

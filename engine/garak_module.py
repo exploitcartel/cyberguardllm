@@ -210,6 +210,7 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
 
         findings_count = 0
         seen = 0
+        unanswered = 0
         with open(report_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -234,6 +235,9 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
                 detector_results = record.get("detector_results") or {}
 
                 for idx, output in enumerate(outputs):
+                    if output is None or str(output).strip() in ("", "None"):
+                        unanswered += 1  # the target gave no answer to this prompt: nothing to score
+                        continue
                     output_texts = _deep_find_texts(output)
                     response_text = " / ".join(output_texts) if output_texts else str(output)
 
@@ -257,7 +261,9 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
 
                     # AI cross-check, only when an AI API is configured under Settings
                     # (see module docstring). Without it, offline_verdict stands as-is.
-                    if ai_judge_cfg:
+                    # Only a garak hit is cross-checked: a PASS needs no second opinion, and judging every one of
+                    # hundreds of attempts made a run take hours and burn the AI quota.
+                    if ai_judge_cfg and is_hit:
                         api_base, api_key, model = ai_judge_cfg
                         label = OWASP_LABELS_FALLBACK.get(owasp, owasp)
                         try:
@@ -294,5 +300,19 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
                          if verdict == "FAIL" else "",
                          confidence),
                     )
+        if unanswered:
+            target_errors = sorted({l.split(":", 1)[1].strip() for l in (proc.stderr or "").splitlines()
+                                    if l.startswith("CGLLM-TARGET-ERROR:")})[:3]
+            conn.execute(
+                """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
+                   description, module, source, recommendation)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (result_id, "garak-target-no-answer", "LLM01", "low", "ERROR", "", "",
+                 f"The target gave no answer to {unanswered} of garak's prompts"
+                 + (f" (only {seen} were answered)" if seen else "")
+                 + ". Those prompts were not scored, so this is a connection problem, not a security result."
+                 + (" Target said: " + " | ".join(target_errors) if target_errors else ""),
+                 None, "garak",
+                 "Check that the target is running and that its token/cookie is still valid (Targets > Edit), then re-run."))
         conn.commit()
         return findings_count
