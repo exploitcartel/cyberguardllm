@@ -1005,8 +1005,11 @@ def _execute(task_id: int):
         "INSERT INTO scan_results (task_id, target_id, timestamp, status, mode, proxy_used) VALUES (?,?,?,?,?,?)",
         (task["id"], target["id"], now(), "running", "ai_powered" if ai_powered else "offline", proxy_used),
     )
-    conn.commit()
     result_id = cur.lastrowid
+    # Link the task to its result right away: a scan with no static or AI phase (garak only) never set this, so the
+    # live page redirected to /results/null (a 404) when the scan finished.
+    conn.execute("UPDATE tasks SET result_id=? WHERE id=?", (result_id, task["id"]))
+    conn.commit()
 
     unreachable = _preflight_target(target, proxy_used)
     if unreachable:

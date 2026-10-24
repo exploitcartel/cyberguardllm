@@ -47,17 +47,19 @@ class CyberGuardGenerator(Generator):
     supports_multiple_generations = False
 
     def __init__(self, name="", config_root=None):
-        self.name = name or "0"
-        try:
-            self.target_id = int(str(name).strip())
-        except (TypeError, ValueError):
-            self.target_id = None
+        self.name = name or ""
         self._target_row = None
         try:
             super().__init__(self.name, config_root=config_root)
         except TypeError:
             # Older/newer garak releases may not accept config_root.
             super().__init__(self.name)
+        # garak >= 0.17 builds the generator without a name argument and fills self.name from its config
+        # (--model_name / --target_name), so the target id is only known after the base constructor ran.
+        try:
+            self.target_id = int(str(self.name).strip())
+        except (TypeError, ValueError):
+            self.target_id = None
 
     def _load_target_row(self):
         if self._target_row is not None:

@@ -23,3 +23,11 @@ class GarakPluginImportTests(CyberGuardTestCase):
         import py_compile
         for path in ("integrations/garak_generator.py", "integrations/garak_plugins/cyberguard.py", "integrations/garak_run.py"):
             py_compile.compile(path, doraise=True)
+
+
+class GarakGeneratorTargetIdTests(CyberGuardTestCase):
+    def test_target_id_comes_from_the_name_garak_configures(self):
+        # garak >= 0.17 builds the generator with no name argument and fills self.name from its config afterwards.
+        src = open("integrations/garak_generator.py", encoding="utf-8").read()
+        init = src[src.index("def __init__"):src.index("def _load_target_row")]
+        self.assertLess(init.index("super().__init__"), init.index("self.target_id = int("))
