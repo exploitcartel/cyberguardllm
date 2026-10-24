@@ -80,7 +80,9 @@ and query parameters. Browser discovery can retain a custom request template wit
 
 Choose engines independently in **Scan Configs**. Configure the AI provider under **Settings**.
 The app supports OpenAI-compatible endpoints and native Anthropic and Gemini integrations.
-PyRIT's provider setup is handled separately by its adapter.
+PyRIT's provider setup is handled separately by its adapter. PyRIT objectives run in an owned subprocess:
+Stop terminates the worker, retains completed turns, and skips remaining objectives. The response judge reads
+the complete transcript, so a later refusal does not erase an earlier demonstrated leak.
 
 Garak runs in `venv-garak/` when that environment exists. Its live view shows planned, sent, completed,
 and evaluated counts, plus transport errors. Completed results are saved during the scan and retained on Stop.
@@ -120,7 +122,10 @@ cannot establish cross-user isolation. A latency anomaly alone does not prove a 
 The live scan page combines a theme-aware 3D head and network globe with progress, logs, and clickable
 finding tickets. Confirmed FAIL events trigger red pulses. The head supports mouse tracking and drag rotation.
 
-Results include the prompt sent, target response, verdict, and available judge reasoning.
+Results include the prompt sent, target response, verdict, and available judge reasoning. Filter the complete
+scan by verdict, engine, category, or text. Previous/Next finding navigation preserves that filtered order and
+returns to the corresponding list page. Copy buttons retain the original prompt/response text; information
+icons explain severity, verdicts, and the judge's self-reported confidence.
 Finding lists and the rules library show up to 50 records per page. Scan history shows 5 scans; targets and
 configurations show 10 items; activity/error logs and each comparison section show 25. Search and filters
 apply before pagination. FAIL findings support Open, False Positive, and Accepted Risk
@@ -141,12 +146,15 @@ and low **3**. The score is `round(100 * (1 - exp(-weighted_sum / 50)))`, capped
 REVIEW, ERROR, and INFO records do not affect it. **A zero score does not establish safety**, particularly
 when the scan is stopped or has unresolved results.
 
+Missing or invalid AI verdict/confidence fields are evaluation failures, never a default PASS.
+
 Garak detector hits are heuristic evidence and can produce false positives. AI verification, when enabled,
 can leave a candidate in REVIEW if it is incomplete or disagrees with the detector. Read the transcript
 before treating any finding as a demonstrated security issue.
 
 Export results as PDF, JSON, or CSV. Reports include assessment details, category coverage, confirmed
-findings, unresolved items, infrastructure issues, and remediation. PDF reports are written in English.
+findings, unresolved items, infrastructure issues, and remediation. PDF reports are written in English. Incomplete assessments use a deterministic summary of recorded status,
+counts, and available coverage; they do not receive an AI-generated overall-risk conclusion.
 
 ### 7. Access control and request routing
 

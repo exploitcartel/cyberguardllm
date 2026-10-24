@@ -227,7 +227,7 @@ def generate_and_run_personalized(conn, result_id, target, categories, extracted
                 if confidence < min_confidence:
                     verdict = "REVIEW"
             except Exception as e:
-                verdict, severity, reasoning, confidence = "PASS", "low", f"AI judge call failed: {e}", None
+                verdict, severity, reasoning, confidence = "ERROR", "low", f"AI judge call failed: {e}; this response could not be evaluated.", None
 
         if verdict == "FAIL":
             findings_count += 1

@@ -28,6 +28,22 @@ class PyritTargetTests(CyberGuardTestCase):
         from integrations.pyrit_target import CyberGuardTarget
         return CyberGuardTarget(target_id=1)
 
+    def test_wrapped_cancellation_never_starts_a_fallback_attack(self):
+        from engine import pyrit_module
+        from pyrit.executor.attack import CrescendoAttack, PromptSendingAttack
+        stopped = [False]
+        async def wrapped_stop(*args, **kwargs):
+            stopped[0] = True
+            raise RuntimeError("library-wrapped cancellation")
+        def check():
+            if stopped[0]:
+                raise pyrit_module.PyritStopped()
+        with mock.patch.object(CrescendoAttack, "execute_async", side_effect=wrapped_stop), \
+                mock.patch.object(PromptSendingAttack, "execute_async") as fallback:
+            with self.assertRaises(pyrit_module.PyritStopped):
+                asyncio.run(pyrit_module._run_one_objective_async(1, "fixture", "http://127.0.0.1:9/v1", "fixture-key", "fixture", check_control=check))
+        self.assertFalse(fallback.called)
+
     def test_constructor_is_keyword_only_as_pyrit_requires(self):
         from integrations.pyrit_target import CyberGuardTarget
         self.assertEqual(self._target().target_id, 1)

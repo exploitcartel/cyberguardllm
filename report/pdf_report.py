@@ -12,6 +12,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.units import cm
 import os
 from xml.sax.saxutils import escape
+from report.assessment import assessment_context, assessment_notice
 
 
 def _safe_table(data, colWidths=None, has_header=True, **kwargs):
@@ -286,7 +287,10 @@ def _risk_tier(risk_score):
     return "low"
 
 
-def _fallback_exec_summary(target, findings, risk_score, business_context):
+def _fallback_exec_summary(target, findings, risk_score, business_context, assessment=None):
+    if assessment is not None and assessment["incomplete"]:
+        return (f'This report covers the available security assessment results for "{target["name"]}". '
+                + assessment_notice(assessment))
     tier = _risk_tier(risk_score)
     fails = [f for f in findings if _row_get(f, "verdict") == "FAIL"]
     top = sorted(fails, key=lambda f: {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(
@@ -325,7 +329,7 @@ def _fallback_exec_summary(target, findings, risk_score, business_context):
 
 
 def _generate_pdf_report(scan_result, findings, target, output_path, severity_breakdown_data, owasp_breakdown_data,
-                         attack_chains=None, exec_summary_text=None, benchmark=None, scan_config=None, ai_info=None, _asset_dir=None):
+                         attack_chains=None, exec_summary_text=None, benchmark=None, scan_config=None, ai_info=None, _asset_dir=None, assessment=None):
     tmp_dir = _asset_dir or os.path.dirname(output_path) or "."
     pie_path = os.path.join(tmp_dir, f"_pie_{scan_result['id']}.png")
     bar_path = os.path.join(tmp_dir, f"_bar_{scan_result['id']}.png")
@@ -370,17 +374,21 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     elements.append(Paragraph("Assessment framework: OWASP Top 10 for Large Language Model Applications", cover_meta))
     elements.append(PageBreak())
 
+    assessment = assessment_context(scan_result, findings,
+        assessment.get("garak") if assessment else None)
+    if assessment["incomplete"]:
+        exec_summary_text = None
+
     # ---------- Page 2: Plain-language executive summary ----------
     elements.append(Paragraph("Executive Summary", h2))
     elements.append(Spacer(1, 0.3 * cm))
     exec_text = (exec_summary_text or "").strip() or _fallback_exec_summary(
-        target, findings, scan_result["risk_score"], _row_get(target, "business_context"))
-    elements.append(Paragraph(exec_text, body))
+        target, findings, scan_result["risk_score"], _row_get(target, "business_context"), assessment)
+    elements.append(Paragraph(escape(exec_text), body))
     if not (exec_summary_text or "").strip():
         elements.append(Spacer(1, 0.3 * cm))
         elements.append(Paragraph(
-            "(Generated from scan data; configure an AI API under Settings for a narrative written by that model "
-            "instead.)", ParagraphStyle("Note", parent=body, textColor=colors.HexColor("#6b7280"), fontSize=8.5,
+            "(Generated from recorded scan data. Incomplete assessments use a deterministic summary rather than an AI risk narrative.)", ParagraphStyle("Note", parent=body, textColor=colors.HexColor("#6b7280"), fontSize=8.5,
                                          fontName="Helvetica-Oblique")))
     elements.append(PageBreak())
 
@@ -395,7 +403,11 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
         ["Duration", _duration(scan_result["timestamp"], _row_get(scan_result, "finished_at"))],
         ["Scan mode", (scan_result["mode"] or "offline").replace("_", " ").title()],
         ["Scan status", _row_get(scan_result, "status", "unknown")],
+        ["Assessment completeness", "Incomplete" if assessment["incomplete"] else "Recorded scope completed"],
     ]
+    if assessment.get("garak") and assessment["garak"]["planned"] is not None:
+        g = assessment["garak"]
+        summary_data.append(["Garak prompts sent / planned", f"{g['sent']} / {g['planned']}"])
     if scan_config is not None:
         summary_data.append(["Scan configuration", _row_get(scan_config, "name", "-")])
         if (scan_result["mode"] or "") == "ai_powered":
@@ -742,9 +754,9 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
 
 
 def generate_pdf_report(scan_result, findings, target, output_path, severity_breakdown_data, owasp_breakdown_data,
-                         attack_chains=None, exec_summary_text=None, benchmark=None, scan_config=None, ai_info=None):
+                         attack_chains=None, exec_summary_text=None, benchmark=None, scan_config=None, ai_info=None, assessment=None):
     import tempfile
     with tempfile.TemporaryDirectory(prefix='cgllm-report-') as asset_dir:
         return _generate_pdf_report(scan_result, findings, target, output_path, severity_breakdown_data,
                                     owasp_breakdown_data, attack_chains, exec_summary_text, benchmark,
-                                    scan_config, ai_info, _asset_dir=asset_dir)
+                                    scan_config, ai_info, _asset_dir=asset_dir, assessment=assessment)

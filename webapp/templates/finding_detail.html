@@ -1,18 +1,33 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;"><div><h1>{{ finding.rule_id }} - {{ finding.owasp }}</h1><p>{{ t('severity_label') }} <span class="badge badge-{{ finding.severity }}">{{ finding.severity }}</span> {{ t('verdict_label') }} <span class="badge badge-{{ 'fail' if finding.verdict=='FAIL' else ('review' if finding.verdict=='REVIEW' else ('error' if finding.verdict in ('ERROR','INFO') else 'pass')) }}">{{ finding.verdict }}</span>{% if finding.confidence is not none %} <span style="color:var(--text-muted);font-size:14px;">({{ finding.confidence }}% {{ t('confidence_label') }})</span>{% endif %}{% if finding.reproducibility_total %} <span style="color:var(--text-muted);font-size:14px;">({{ finding.reproducibility_hits }}/{{ finding.reproducibility_total }} {{ t('reproducibility_label') }})</span>{% endif %}</p></div>
-  <div><a href="/results/{{ finding.scan_result_id }}" class="btn" id="btn-back">&larr; {{ t('btn_back') }}</a></div></div>
+{% from "_info_tip.html" import info with context %}
+<div class="page-header finding-detail-header">
+  <div><h1>{{ finding.rule_id }} - {{ finding.owasp }}</h1>
+    <div class="finding-metadata">
+      <span>{{ t('severity_label') }} {{ info('severity','-detail') }} <span class="badge badge-{{ finding.severity }}">{{ finding.severity }}</span></span>
+      <span>{{ t('verdict_label') }} {{ info('verdict','-detail') }} <span class="badge badge-{{ 'fail' if finding.verdict=='FAIL' else ('review' if finding.verdict=='REVIEW' else ('error' if finding.verdict in ('ERROR','INFO') else 'pass')) }}">{{ finding.verdict }}</span></span>
+      <span>{{ t('judge_confidence') }} {{ info('confidence','-detail') }}: {{ (finding.confidence|string ~ '%') if finding.confidence is not none else '—' }}</span>
+      {% if finding.reproducibility_total %}<span>{{ finding.reproducibility_hits }}/{{ finding.reproducibility_total }} {{ t('reproducibility_label') }}</span>{% endif %}
+    </div>
+  </div>
+  <a href="{{ back_url }}" class="btn" id="btn-back">&larr; {{ t('btn_back') }}</a>
+</div>
+<nav class="finding-navigation" aria-label="{{ t('col_finding') }}">
+  {% if previous_url %}<a href="{{ previous_url }}" class="btn" rel="prev">&larr; {{ t('finding_previous') }}</a>{% else %}<span class="btn disabled" aria-disabled="true">&larr; {{ t('finding_previous') }}</span>{% endif %}
+  <span>{% if navigation %}{{ navigation.position }} / {{ navigation.total }}{% else %}{{ t('finding_no_match') }}{% endif %}</span>
+  {% if next_url %}<a href="{{ next_url }}" class="btn" rel="next">{{ t('finding_next') }} &rarr;</a>{% else %}<span class="btn disabled" aria-disabled="true">{{ t('finding_next') }} &rarr;</span>{% endif %}
+</nav>
 <div class="card" style="margin-bottom:16px;">
   <h3 style="margin-top:0;">{{ t('description_title') }}</h3>
-  <p>{{ finding.description }}</p>
+  <p>{{ finding.description or '-' }}</p>
 </div>
 <div class="grid grid-2">
   <div class="card">
-    <h3 style="margin-top:0;">{{ t('prompt_sent_title') }}</h3>
+    <div class="evidence-heading"><h3>{{ t('prompt_sent_title') }}</h3><button type="button" class="btn copy-evidence" data-copy-key="prompt" {% if not finding.prompt_sent %}disabled{% endif %}>{{ t('copy_prompt') }}</button></div>
     <pre>{{ finding.prompt_sent }}</pre>
   </div>
   <div class="card">
-    <h3 style="margin-top:0;">{{ t('raw_response_title') }}</h3>
+    <div class="evidence-heading"><h3>{{ t('raw_response_title') }}</h3><button type="button" class="btn copy-evidence" data-copy-key="response" {% if not finding.raw_response %}disabled{% endif %}>{{ t('copy_response') }}</button></div>
     <pre>{{ finding.raw_response }}</pre>
   </div>
 </div>
@@ -40,7 +55,7 @@
     {% if finding.triaged_by %} - {{ t('triaged_by_label') }} {{ finding.triaged_by }} ({{ finding.triaged_at|fmtdate }}){% endif %}
   </p>
   {% if finding.triage_note %}<p><em>{{ finding.triage_note }}</em></p>{% endif %}
-  <form method="post" action="/findings/{{ finding.id }}/triage" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+  <form method="post" action="{{ triage_url }}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
     <div class="field">
       <label>{{ t('field_triage_status') }}</label>
       <select name="triage_status">
@@ -57,22 +72,31 @@
   </form>
 </div>
 {% endif %}
+<div id="copyStatus" class="copy-status" role="status" aria-live="polite"></div>
+<script id="findingEvidence" type="application/json">{{ {'prompt':finding.prompt_sent or '', 'response':finding.raw_response or ''}|tojson }}</script>
 <script>
-// Back returns to the exact page the operator came from (the Results list with
-// its search/scroll, a comparison, a task...) when that was inside this app,
-// and falls back to the Results list when the page was opened directly.
 (function(){
-  var btn = document.getElementById('btn-back');
-  if(!btn) return;
-  btn.addEventListener('click', function(e){
+  const evidence=JSON.parse(document.getElementById('findingEvidence').textContent);
+  const status=document.getElementById('copyStatus');
+  const copied={{ t('copy_done')|tojson }}, failed={{ t('copy_failed')|tojson }};
+  document.querySelectorAll('.copy-evidence').forEach(button => button.addEventListener('click',async () => {
+    const text=evidence[button.dataset.copyKey];
+    const original=button.dataset.idleLabel || button.textContent;button.dataset.idleLabel=original;
+    clearTimeout(button.copyTimer);button.textContent=original;
+    button.disabled=true;
     try {
-      var ref = document.referrer ? new URL(document.referrer) : null;
-      if(ref && ref.origin === location.origin && history.length > 1 && ref.pathname !== location.pathname){
-        e.preventDefault();
-        history.back();
+      if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); }
+      else {
+        const input=document.createElement('textarea');input.value=text;
+        input.style.cssText='position:fixed;top:0;left:-9999px;opacity:0';document.body.appendChild(input);
+        try {input.select();if(!document.execCommand('copy'))throw new Error('clipboard unavailable');}
+        finally {input.remove();button.focus();}
       }
-    } catch(err) {}
-  });
+      button.textContent=copied;status.textContent=copied;
+      button.copyTimer=setTimeout(() => {button.textContent=original;},1600);
+    } catch(error){status.textContent=failed;}
+    finally {button.disabled=false;}
+  }));
 })();
 </script>
 {% endblock %}

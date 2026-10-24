@@ -5,7 +5,7 @@ import json, csv, io
 import secrets
 import yaml
 from flask import (Flask, request, render_template, redirect, make_response, send_file, jsonify, Response,
-                    flash, get_flashed_messages, url_for)
+                    flash, get_flashed_messages, url_for, abort)
 from storage.db import init_db, get_conn, now, get_setting, set_setting, get_all_settings
 from auth.auth import (seed_admin, verify_password, hash_password, make_session_cookie, read_session_cookie,
                         validate_session_cookie, invalidate_sessions, DUMMY_PASSWORD_HASH,
@@ -16,7 +16,9 @@ from engine.loader import load_all_rules, count_by_category, count_by_category_a
 from engine.runner import run_scan_async, get_task_progress, reap_orphaned_tasks, force_stop_task, AI_INTENSITY_LEVELS, AI_INTENSITY_ORDER
 from engine.scorer import severity_breakdown_rows, owasp_breakdown_rows
 from report.pdf_report import generate_pdf_report
+from report.assessment import assessment_context
 from webapp.i18n import translate
+from webapp.finding_view import FindingView, ENGINE_LABELS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"), static_folder=os.path.join(BASE_DIR, "static"))
@@ -1170,34 +1172,24 @@ def result_detail(result_id):
         # A stale or mistyped scan number used to crash with a 500 (TypeError on the missing row).
         conn.close()
         return redirect("/results")
-    findings_total = conn.execute("SELECT COUNT(*) FROM findings WHERE scan_result_id=?", (result_id,)).fetchone()[0]
+    view = FindingView(conn, result_id, request.args)
+    findings_total = view.count(conn)
     total_pages = max(1, (findings_total + 49) // 50)
-    page = min(max(1, request.args.get("page", 1, type=int) or 1), total_pages)
-    # SQL expressions and direction come only from these allowlists, never raw request text.
-    sort_columns = {
-        "sequence": "id",
-        "id": "rule_id COLLATE NOCASE",
-        "owasp": "CAST(SUBSTR(owasp, 4) AS INTEGER)",
-        "severity": "CASE LOWER(severity) WHEN 'low' THEN 1 WHEN 'medium' THEN 2 WHEN 'high' THEN 3 WHEN 'critical' THEN 4 ELSE 0 END",
-        "verdict": "CASE verdict WHEN 'INFO' THEN 0 WHEN 'PASS' THEN 1 WHEN 'ERROR' THEN 2 WHEN 'REVIEW' THEN 3 WHEN 'FAIL' THEN 4 ELSE -1 END",
-        "triage": "CASE WHEN verdict != 'FAIL' THEN 0 WHEN triage_status = 'false_positive' THEN 1 WHEN triage_status = 'accepted_risk' THEN 2 ELSE 3 END",
-    }
-    sort = request.args.get("sort", "sequence")
-    if sort not in sort_columns:
-        sort = "sequence"
-    direction = request.args.get("direction", "asc").lower()
-    if direction not in ("asc", "desc"):
-        direction = "asc"
-    order = sort_columns[sort] + " " + direction.upper()
-    findings = conn.execute("SELECT * FROM findings WHERE scan_result_id=? ORDER BY " + order + ", id ASC LIMIT 50 OFFSET ?",
-                            (result_id, (page - 1) * 50)).fetchall()
+    view.page = min(view.page, total_pages)
+    where, values = view.where()
+    findings = conn.execute("SELECT * FROM findings WHERE " + where + " ORDER BY " + view.order + " LIMIT 50 OFFSET ?",
+                            values + [(view.page - 1) * 50]).fetchall()
+    verdict_counts = view.counts(conn)
     attack_chains = conn.execute("SELECT * FROM attack_chains WHERE scan_result_id=?", (result_id,)).fetchall()
     benchmark = _compute_benchmark(conn, result["target_id"])
     conn.close()
+    def finding_url(endpoint="result_detail", **changes):
+        identity = {"result_id":result_id} if endpoint == "result_detail" else {}
+        return url_for(endpoint, **identity, **view.params(**changes))
     return render_template("result_detail.html", **ctx(active="results", result=result, findings=findings,
-                                                         attack_chains=attack_chains, benchmark=benchmark,
-                                                         page=page, total_pages=total_pages, findings_total=findings_total,
-                                                         sort=sort, direction=direction))
+        attack_chains=attack_chains, benchmark=benchmark, page=view.page, total_pages=total_pages,
+        findings_total=findings_total, sort=view.sort, direction=view.direction, finding_view=view,
+        verdict_counts=verdict_counts, finding_url=finding_url, engine_labels=ENGINE_LABELS))
 
 
 def _get_ai_cfg_for_report():
@@ -1229,7 +1221,12 @@ def _compute_benchmark(conn, target_id):
     return {"target_avg": target_avg, "benchmark_avg": benchmark_avg, "ratio": round(target_avg / benchmark_avg, 2)}
 
 
-def _build_exec_summary(result, target, findings):
+def _build_exec_summary(result, target, findings, assessment=None):
+    assessment = assessment or assessment_context(result, findings)
+    # A model must not turn an incomplete assessment into an optimistic risk conclusion.
+    # The PDF supplies an evidence-based narrative instead, without spending an API call.
+    if assessment["incomplete"]:
+        return None
     ai_cfg = _get_ai_cfg_for_report()
     if not ai_cfg:
         return None
@@ -1241,7 +1238,7 @@ def _build_exec_summary(result, target, findings):
         from engine.ai_agent import generate_executive_summary
         return generate_executive_summary(ai_cfg[0], ai_cfg[1], ai_cfg[2], target["name"],
                                            _row_get_app(target, "business_context"), result["risk_score"],
-                                           findings_summary)
+                                           findings_summary, assessment=assessment)
     except Exception:
         return None
 
@@ -1274,11 +1271,13 @@ def result_pdf(result_id):
             scan_config = conn.execute("SELECT * FROM scan_configs WHERE id=?", (task["scan_config_id"],)).fetchone()
     except Exception:
         scan_config = None
+    progress = conn.execute("SELECT * FROM garak_progress WHERE result_id=?", (result_id,)).fetchone()
+    assessment = assessment_context(result, findings, progress)
     conn.close()
     ai_info = None
     if get_setting("ai_api_key_encrypted", ""):
         ai_info = f"{get_setting('ai_provider', 'openai_compatible')} / {get_setting('ai_model', '')}"
-    exec_summary_text = _build_exec_summary(result, target, findings)
+    exec_summary_text = _build_exec_summary(result, target, findings, assessment=assessment)
     project_root = os.path.dirname(BASE_DIR)
     # On disk the file keeps a unique per-scan name (two scans of one target must not overwrite each other);
     # the name the operator downloads is "<target name> - report.pdf".
@@ -1287,7 +1286,7 @@ def result_pdf(result_id):
     generate_pdf_report(result, findings, target, out_path, severity_breakdown_rows(findings),
                          owasp_breakdown_rows(findings), attack_chains=attack_chains,
                          exec_summary_text=exec_summary_text, benchmark=benchmark,
-                         scan_config=scan_config, ai_info=ai_info)
+                         scan_config=scan_config, ai_info=ai_info, assessment=assessment)
     log_activity(username, "Report Exported", filename)
     return send_file(out_path, as_attachment=True, download_name=filename)
 
@@ -1409,8 +1408,25 @@ def finding_detail(finding_id):
     if err: return err
     conn = get_conn()
     finding = conn.execute("SELECT * FROM findings WHERE id=?", (finding_id,)).fetchone()
+    if finding is None:
+        conn.close()
+        abort(404)
+    view = FindingView(conn, finding["scan_result_id"], request.args)
+    navigation = view.navigation(conn, finding_id)
+    if navigation:
+        view.page = (navigation["position"] - 1) // 50 + 1
+    else:
+        view.page = min(view.page, max(1,(view.count(conn)+49)//50))
     conn.close()
-    return render_template("finding_detail.html", **ctx(active="results", finding=finding))
+    back_url = url_for("result_detail", result_id=finding["scan_result_id"], _anchor="findings", **view.params())
+    previous_url = next_url = None
+    if navigation and navigation["previous_id"] is not None:
+        previous_url = url_for("finding_detail", finding_id=navigation["previous_id"], **view.params(page=(navigation["position"]-2)//50+1))
+    if navigation and navigation["next_id"] is not None:
+        next_url = url_for("finding_detail", finding_id=navigation["next_id"], **view.params(page=navigation["position"]//50+1))
+    triage_url = url_for("finding_triage",finding_id=finding_id,**view.params())
+    return render_template("finding_detail.html", **ctx(active="results", finding=finding,
+        back_url=back_url,previous_url=previous_url,next_url=next_url,navigation=navigation,triage_url=triage_url))
 
 
 @app.route("/findings/<int:finding_id>/triage", methods=["POST"])
@@ -1427,10 +1443,12 @@ def finding_triage(finding_id):
         (triage_status, triage_note, username, now(), finding_id),
     )
     conn.commit()
+    owner = conn.execute("SELECT scan_result_id FROM findings WHERE id=?",(finding_id,)).fetchone()
+    view = FindingView(conn,owner["scan_result_id"],request.args) if owner else None
     conn.close()
     log_activity(username, "Finding Triaged", f"Finding #{finding_id} -> {triage_status}")
     flash_t("flash_finding_triaged")
-    return redirect(f"/findings/{finding_id}")
+    return redirect(url_for("finding_detail",finding_id=finding_id,**(view.params() if view else {})))
 
 
 @app.route("/rules")

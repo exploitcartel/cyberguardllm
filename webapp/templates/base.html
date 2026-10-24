@@ -169,6 +169,33 @@ try {
     setTimeout(() => document.body.classList.remove('language-entering'),320);
   }
 } catch(e) {}
+// Information popovers live in the document layer so scrollable tables cannot clip them.
+(function(){
+  let active=null;
+  function close(){
+    if(!active)return;
+    active.trigger.setAttribute('aria-expanded','false');
+    active.panel.classList.remove('is-visible');
+    active.parent.appendChild(active.panel);active=null;
+  }
+  document.addEventListener('click',event => {
+    const trigger=event.target.closest('[data-info-trigger]');
+    if(trigger){
+      if(active && active.trigger===trigger){close();return;}
+      close();
+      const panel=document.getElementById(trigger.getAttribute('aria-describedby'));
+      active={trigger,panel,parent:panel.parentNode};document.body.appendChild(panel);
+      trigger.setAttribute('aria-expanded','true');panel.classList.add('is-visible');
+      const box=trigger.getBoundingClientRect();
+      panel.style.left=Math.max(12,Math.min(box.left,window.innerWidth-panel.offsetWidth-12))+'px';
+      panel.style.top=(box.bottom+8+panel.offsetHeight>window.innerHeight ? Math.max(12,box.top-panel.offsetHeight-8) : box.bottom+8)+'px';
+    } else if(active && !active.panel.contains(event.target)){close();}
+  });
+  document.addEventListener('keydown',event => {if(event.key==='Escape' && active){const trigger=active.trigger;close();trigger.focus();}});
+  document.addEventListener('focusin',event => {if(active && event.target!==active.trigger && !active.panel.contains(event.target))close();});
+  window.addEventListener('resize',close);
+  document.addEventListener('scroll',close,true);
+})();
 function filterTable(inputEl, tableId){
   // Rows can be grouped with a shared data-group (e.g. a target row plus an
   // extra details row underneath it): if any row in a group matches, the

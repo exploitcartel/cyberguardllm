@@ -1,0 +1,6 @@
+{% macro info(key, instance='') -%}
+<span class="info-help">
+  <button type="button" class="info-trigger" aria-label="{{ t('help_' ~ key) }}" aria-describedby="help-{{ key }}{{ instance }}" aria-expanded="false" data-info-trigger>i</button>
+  <span class="info-panel" role="tooltip" id="help-{{ key }}{{ instance }}">{{ t('help_' ~ key) }}</span>
+</span>
+{%- endmacro %}

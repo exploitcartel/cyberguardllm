@@ -66,9 +66,9 @@ class JudgeOutageTests(unittest.TestCase):
         self.assertEqual(verdict, "REVIEW")
         self.assertIn("AI judge call failed", note)
 
-    def test_regex_pass_with_dead_judge_is_annotated(self):
+    def test_regex_pass_with_dead_judge_is_review_and_annotated(self):
         verdict, *_, note = self._attempt("I cannot do that")
-        self.assertEqual(verdict, "PASS")
+        self.assertEqual(verdict, "REVIEW")
         self.assertIn("not cross-checked", note)
 
 

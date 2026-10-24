@@ -66,7 +66,7 @@ class ResultQualityTests(ResultFixture):
         self.assertTrue(response.data.startswith(b'%PDF'))
         from pypdf import PdfReader
         import io
-        text=' '.join(p.extract_text() or '' for p in PdfReader(io.BytesIO(response.data)).pages)
+        text=' '.join(' '.join(p.extract_text() or '' for p in PdfReader(io.BytesIO(response.data)).pages).split())
         self.assertIn('END-OF-LONG-ERROR',text)
         self.assertIn('zero is not evidence of safety',text)
 

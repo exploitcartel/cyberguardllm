@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+{% from "_info_tip.html" import info with context %}
 <div class="page-header">
   <div><h1>{{ t('scan_hash') }} #{{ result.id }}</h1><p>{{ t('target_label') }} {{ result.target_name or '-' }} | {{ t('risk_score_label') }} {{ result.risk_score }}/100</p></div>
   <div style="display:flex;gap:8px;">
@@ -49,17 +50,30 @@
   {% endfor %}
 </div>
 {% endif %}
-<div class="card">
+<div class="card" id="findings">
+  <div class="chips finding-verdicts" aria-label="{{ t('col_verdict') }}">
+    {% for v in ['all','FAIL','REVIEW','ERROR','PASS','INFO'] %}
+    <a href="{{ finding_url(verdict=v,page=1) }}#findings" class="{{ 'active' if finding_view.verdict == v else '' }}" {% if finding_view.verdict == v %}aria-current="true"{% endif %}>{{ t('filter_all') if v == 'all' else v }} <span>({{ verdict_counts[v] }})</span></a>
+    {% endfor %}
+  </div>
+  <form method="get" action="{{ url_for('result_detail',result_id=result.id,_anchor='findings') }}" class="finding-filters">
+    <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="direction" value="{{ direction }}"><input type="hidden" name="verdict" value="{{ finding_view.verdict }}">
+    <label>{{ t('filter_engine') }}<select name="engine"><option value="all">{{ t('filter_all') }}</option>{% for e in finding_view.engines %}<option value="{{ e }}" {{ 'selected' if finding_view.engine == e else '' }}>{{ engine_labels.get(e,e) }}</option>{% endfor %}</select></label>
+    <label>{{ t('filter_category') }}<select name="category"><option value="all">{{ t('filter_all') }}</option>{% for c in finding_view.categories %}<option value="{{ c }}" {{ 'selected' if finding_view.category == c else '' }}>{{ c }}</option>{% endfor %}</select></label>
+    <label class="finding-search">{{ t('search_placeholder') }}<input type="search" name="q" value="{{ finding_view.query }}" placeholder="{{ t('search_placeholder') }}"></label>
+    <button type="submit" class="btn">{{ t('filter_apply') }}</button>
+    {% if finding_view.verdict != 'all' or finding_view.engine != 'all' or finding_view.category != 'all' or finding_view.query %}<a class="btn" href="{{ finding_url(verdict='all',engine='all',category='all',q='',page=1) }}#findings">{{ t('filter_reset') }}</a>{% endif %}
+  </form>
   <p>{{ (page - 1) * 50 + 1 if findings_total else 0 }}&ndash;{{ [page * 50, findings_total]|min }} / {{ findings_total }}</p>
-  <table>
+  <div class="findings-table-wrap"><table class="findings-table">
     <tr>
-      {% for key,label in [('id','col_id'),('owasp','col_owasp'),('severity','col_severity'),('verdict','col_verdict'),('triage','col_triage')] %}
+      {% for key,label in [('id','col_id'),('owasp','col_owasp'),('severity','col_severity'),('verdict','col_verdict'),('confidence','judge_confidence'),('triage','col_triage')] %}
       {% set selected = sort == key %}
-      {% set next_direction = ('desc' if direction == 'asc' else 'asc') if selected else ('desc' if key in ('severity','verdict') else 'asc') %}
+      {% set next_direction = ('desc' if direction == 'asc' else 'asc') if selected else ('desc' if key in ('severity','verdict','confidence') else 'asc') %}
       <th scope="col" aria-sort="{{ ('ascending' if direction == 'asc' else 'descending') if selected else 'none' }}">
-        <a class="finding-sort {{ 'selected' if selected else '' }}" href="{{ url_for('result_detail',result_id=result.id,sort=key,direction=next_direction,page=1) }}">
+        <a class="finding-sort {{ 'selected' if selected else '' }}" href="{{ finding_url(sort=key,direction=next_direction,page=1) }}">
           {{ t(label) }} <span aria-hidden="true">{% if selected %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}</span>
-        </a>
+        </a> {{ info(key) }}
       </th>
       {% endfor %}
       <th scope="col"><span class="sr-only">{{ t('btn_details') }}</span></th>
@@ -69,21 +83,23 @@
       <td>{{ f.rule_id }}</td>
       <td>{{ f.owasp }}</td>
       <td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td>
-      <td><span class="badge badge-{{ 'fail' if f.verdict=='FAIL' else ('review' if f.verdict=='REVIEW' else ('error' if f.verdict in ('ERROR','INFO') else 'pass')) }}">{{ f.verdict }}</span>{% if f.confidence is not none %} <span style="color:var(--text-muted);font-size:13.5px;">{{ f.confidence }}%</span>{% endif %}{% if f.reproducibility_total %} <span style="color:var(--text-muted);font-size:13.5px;" title="{{ t('reproducibility_hint') }}">{{ f.reproducibility_hits }}/{{ f.reproducibility_total }}</span>{% endif %}</td>
+      <td><span class="badge badge-{{ 'fail' if f.verdict=='FAIL' else ('review' if f.verdict=='REVIEW' else ('error' if f.verdict in ('ERROR','INFO') else 'pass')) }}">{{ f.verdict }}</span>{% if f.reproducibility_total %} <span style="color:var(--text-muted);font-size:13.5px;" title="{{ t('reproducibility_hint') }}">{{ f.reproducibility_hits }}/{{ f.reproducibility_total }}</span>{% endif %}</td>
+      <td>{% if f.confidence is not none %}{{ f.confidence }}%{% else %}&mdash;{% endif %}</td>
       <td>{% if f.verdict=='FAIL' %}<span class="badge badge-triage-{{ f.triage_status or 'open' }}">{{ t('triage_' ~ (f.triage_status or 'open')) }}</span>{% else %}-{% endif %}</td>
-      <td><a href="/findings/{{ f.id }}" class="btn" style="padding:5px 10px;">{{ t('btn_details') }}</a></td>
+      <td><a href="{{ finding_url('finding_detail',finding_id=f.id) }}" class="btn" style="padding:5px 10px;">{{ t('btn_details') }}</a></td>
     </tr>
+    {% else %}<tr><td colspan="7" class="finding-empty">{{ t('finding_empty') }}</td></tr>
     {% endfor %}
-  </table>
+  </table></div>
   {% if total_pages > 1 %}
   <nav aria-label="Finding pages" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:18px;">
-    {% if page > 1 %}<a class="btn" rel="prev" href="{{ url_for('result_detail',result_id=result.id,page=page-1,sort=sort,direction=direction) }}">&laquo; {{ t('btn_prev_page') }}</a>{% endif %}
+    {% if page > 1 %}<a class="btn" rel="prev" href="{{ finding_url(page=page-1) }}">&laquo; {{ t('btn_prev_page') }}</a>{% endif %}
     {% for p in range(1, total_pages + 1) %}
       {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
-      <a class="btn {{ 'btn-primary' if p == page else '' }}" href="{{ url_for('result_detail',result_id=result.id,page=p,sort=sort,direction=direction) }}" {% if p == page %}aria-current="page"{% endif %}>{{ p }}</a>
+      <a class="btn {{ 'btn-primary' if p == page else '' }}" href="{{ finding_url(page=p) }}" {% if p == page %}aria-current="page"{% endif %}>{{ p }}</a>
       {% elif p == page - 3 or p == page + 3 %}<span aria-hidden="true">&hellip;</span>{% endif %}
     {% endfor %}
-    {% if page < total_pages %}<a class="btn" rel="next" href="{{ url_for('result_detail',result_id=result.id,page=page+1,sort=sort,direction=direction) }}">{{ t('btn_next_page') }} &raquo;</a>{% endif %}
+    {% if page < total_pages %}<a class="btn" rel="next" href="{{ finding_url(page=page+1) }}">{{ t('btn_next_page') }} &raquo;</a>{% endif %}
   </nav>
   {% endif %}
 </div>

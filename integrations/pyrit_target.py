@@ -14,6 +14,7 @@ from the older releases this file was first written for:
   * an attack such as Crescendo requires the target to declare multi-turn support and editable history.
 A scan that used the old shape failed every PyRIT objective with "violates the PromptTarget contract".
 """
+import asyncio
 import os
 import sys
 
@@ -88,7 +89,7 @@ class CyberGuardTarget(PromptTarget):
     async def _send_prompt_to_target_async(self, *, normalized_conversation):
         request_piece = normalized_conversation[-1].message_pieces[0]
         prompt_text = getattr(request_piece, "converted_value", None) or str(request_piece)
-        response_text = self._send_text(prompt_text, self._history_from(normalized_conversation))
+        response_text = await asyncio.to_thread(self._send_text, prompt_text, self._history_from(normalized_conversation))
         return [construct_response_from_request(request=request_piece, response_text_pieces=[response_text])]
 
     def _validate_request(self, *, normalized_conversation):

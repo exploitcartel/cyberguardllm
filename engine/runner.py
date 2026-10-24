@@ -178,6 +178,9 @@ def _run_optional_module(conn, result_id, rule_id, step_label, module_label, sou
     visible in the report, not invisible, the same way an AI-Powered call
     failure already is (see "ai-call-error" above).
     """
+    owner = conn.execute("SELECT task_id FROM scan_results WHERE id=?", (result_id,)).fetchone()
+    if owner and owner["task_id"] is not None and _check_control(conn, owner["task_id"]):
+        return
     try:
         fn()
     except Exception as e:
@@ -351,16 +354,13 @@ def _evaluate_attempt(target, rule, ai_judge_cfg, min_confidence):
                                f"{judged_verdict} ({judged_confidence}% confidence): {reasoning} Flagged for "
                                f"manual review rather than resolved automatically.")
         except Exception as e:
-            # An AI judge is configured but could not be reached/parsed, so
-            # this verdict is NOT the dual-judge result the operator asked
-            # for. A regex FAIL that could not be cross-checked is not
-            # trustworthy enough to report as confirmed: send it to REVIEW.
-            # A regex PASS stays PASS but is annotated, so it is clear it is
-            # an unchecked, offline-only verdict.
-            if verdict == "FAIL":
-                verdict = "REVIEW"
-            judge_note += (f" AI judge call failed ({e}); this is an offline-heuristic-only verdict that was "
-                           "not cross-checked.")
+            # Configured AI verification did not complete. Keep the heuristic opinion
+            # in the explanation, but do not label this as a completed PASS or FAIL.
+            verdict = "REVIEW"
+            confidence = 0 if isinstance(e, ai_agent.InvalidJudgeResponse) else None
+            judge_note += (f" AI judge call failed ({e}); offline heuristic said {offline_verdict}, but this "
+                           "response was not cross-checked. Configured verification is incomplete; manual review required.")
+
 
     return verdict, severity, confidence, prompt_sent, raw_response, judge_note
 
@@ -1106,8 +1106,13 @@ def _execute(task_id: int):
         def _do_pyrit():
             from engine.pyrit_module import run_pyrit_scan
             objectives = [o.strip() for o in (config["pyrit_objectives"] or "").split(",") if o.strip()]
-            run_pyrit_scan(conn, result_id, target, objectives)
+            run_pyrit_scan(conn, result_id, target, objectives, task_id=task_id)
         _run_optional_module(conn, result_id, "pyrit-module-crash", "The PyRIT module", "PyRIT", "pyrit", _do_pyrit)
+
+    if _check_control(conn, task_id):
+        _finalize_scan(conn, task_id, result_id, stopped=True)
+        conn.close()
+        return
 
     try:
         use_crescendo = bool(config["use_crescendo"])
@@ -1184,15 +1189,20 @@ def _execute(task_id: int):
     _run_optional_module(conn, result_id, "chaining-module-crash", "Attack chain analysis", "Attack Chain Analysis",
                           "chaining", _do_chaining)
 
-    rows = conn.execute("SELECT severity, verdict FROM findings WHERE scan_result_id=?", (result_id,)).fetchall()
-    total_findings = len([r for r in rows if r["verdict"] == "FAIL"])
-    risk_score = compute_risk_score_rows(rows)
-
-    conn.execute("UPDATE scan_results SET total_findings=?, risk_score=?, status='completed', finished_at=? WHERE id=?",
-                 (total_findings, risk_score, now(), result_id))
-    conn.execute("UPDATE tasks SET status='completed' WHERE id=?", (task_id,))
-    conn.commit()
+    _finalize_scan(conn, task_id, result_id)
     conn.close()
+
+
+def _finalize_scan(conn, task_id, result_id, stopped=False):
+    """Serialize terminal updates with Stop so a late completion cannot undo cancellation."""
+    rows = conn.execute("SELECT severity,verdict FROM findings WHERE scan_result_id=?", (result_id,)).fetchall()
+    # The first UPDATE takes SQLite's writer lock; Stop and completion then observe one consistent order.
+    conn.execute("UPDATE tasks SET status=CASE WHEN ? OR control='stop' OR status='stopped' THEN 'stopped' ELSE 'completed' END WHERE id=?",
+                 (stopped, task_id))
+    status = conn.execute("SELECT status FROM tasks WHERE id=?", (task_id,)).fetchone()["status"]
+    conn.execute("UPDATE scan_results SET total_findings=?,risk_score=?,status=?,finished_at=? WHERE id=?",
+                 (sum(r["verdict"] == "FAIL" for r in rows), compute_risk_score_rows(rows), status, now(), result_id))
+    conn.commit()
 
 
 def run_scan_async(task_id: int):
@@ -1280,10 +1290,10 @@ def force_stop_task(task_id: int):
     if not task:
         conn.close()
         return False
-    conn.execute("UPDATE tasks SET status='stopped', control='stop' WHERE id=?", (task_id,))
-    if task["result_id"] is not None:
-        conn.execute("UPDATE scan_results SET status='stopped' WHERE id=? AND status='running'",
-                     (task["result_id"],))
+    changed = conn.execute("UPDATE tasks SET status='stopped', control='stop' WHERE id=? AND status IN ('running','stopped')", (task_id,)).rowcount
+    if changed and task["result_id"] is not None:
+        conn.execute("UPDATE scan_results SET status='stopped',finished_at=COALESCE(finished_at,?) WHERE id=? AND status='running'",
+                     (now(), task["result_id"]))
     conn.commit()
     conn.close()
     return True

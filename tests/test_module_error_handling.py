@@ -19,6 +19,9 @@ def _memory_findings_conn():
         "source TEXT, recommendation TEXT, confidence INTEGER, reproducibility_hits INTEGER, reproducibility_total INTEGER)"
     )
     conn.execute("CREATE TABLE canary_hits (token TEXT, remote_addr TEXT, hit_at TEXT)")
+    # Optional modules now check their owning scan before starting post-processing.
+    conn.execute("CREATE TABLE scan_results (id INTEGER PRIMARY KEY, task_id INTEGER)")
+    conn.execute("INSERT INTO scan_results(id,task_id) VALUES (1,NULL)")
     conn.commit()
     return conn
 

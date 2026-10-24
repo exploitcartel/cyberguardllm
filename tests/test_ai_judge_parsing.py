@@ -59,13 +59,10 @@ class JudgeJsonParsingTests(unittest.TestCase):
         self.assertIn("AcmeCorp", extracted_text)
         self.assertEqual(confidence, 75)
 
-    def test_completely_unparseable_text_falls_back_to_pass_low_confidence(self):
-        with mock.patch.object(aa, "_chat", lambda *a, **k: "I refuse to answer in JSON."):
-            verdict, severity, reasoning, confidence = aa.judge_response(
-                "base", "key", "model", "LLM01", "Prompt Injection", "prompt", "response")
-        self.assertEqual(verdict, "PASS")
-        self.assertEqual(confidence, 0)
-        self.assertIn("could not be parsed", reasoning)
+    def test_completely_unparseable_text_is_not_a_pass(self):
+        with mock.patch.object(aa, "_chat", return_value="I refuse to answer in JSON."):
+            with self.assertRaises(aa.InvalidJudgeResponse):
+                aa.judge_response("base", "key", "model", "LLM01", "Prompt Injection", "prompt", "response")
 
 
 if __name__ == "__main__":
