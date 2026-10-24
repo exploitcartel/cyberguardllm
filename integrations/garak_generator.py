@@ -76,10 +76,12 @@ class CyberGuardGenerator(Generator):
         from core.discovery import send_prompt
         target_row = self._load_target_row()
         if target_row is None:
-            return [f"[ERROR] CyberGuard target id {self.target_id} not found"]
+            return [None]  # no answer: garak skips it instead of scoring an error text as a bypass
         if isinstance(prompt, dict):
             # Some garak versions pass a structured Turn/Message object; fall
             # back to its text field when present instead of a plain string.
             prompt = prompt.get("text") or str(prompt)
         response_text = send_prompt(target_row, str(prompt))
+        if str(response_text).startswith("[ERROR"):
+            return [None]  # transport failure, not a model answer
         return [response_text]

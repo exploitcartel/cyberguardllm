@@ -171,16 +171,16 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
         env = dict(os.environ)
         env["PYTHONPATH"] = PROJECT_ROOT + os.pathsep + env.get("PYTHONPATH", "")
         cmd = [
-            _garak_python(), "-m", "garak",
-            "--model_type", "integrations.garak_generator.CyberGuardGenerator",
+            _garak_python(), os.path.join(PROJECT_ROOT, "integrations", "garak_run.py"),
+            "--model_type", "cyberguard.CyberGuardGenerator",
             "--model_name", str(target_row["id"]),
             "--probes", ",".join(probes),
             "--generations", "1",
             "--report_prefix", report_prefix,
         ]
         try:
-            subprocess.run(cmd, cwd=PROJECT_ROOT, env=env, timeout=timeout_s,
-                            capture_output=True, text=True)
+            proc = subprocess.run(cmd, cwd=PROJECT_ROOT, env=env, timeout=timeout_s,
+                                  capture_output=True, text=True, errors="replace")
         except Exception as e:
             conn.execute(
                 """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response,
@@ -200,7 +200,9 @@ def run_garak_scan(conn, result_id, target_row, probe_names, extra_probes_csv=""
                    description, module, source, recommendation)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (result_id, "garak-no-report", "LLM01", "low", "ERROR", "", "",
-                 "Garak ran but produced no report.jsonl file; see the task's activity log for details.",
+                 "Garak ran but produced no report file (exit code " + str(proc.returncode) + "). Its last output: "
+                 + " | ".join(l for l in ((proc.stdout or "") + chr(10) + (proc.stderr or "")).splitlines()
+                              if l.strip() and "DEPRECATION" not in l)[-700:],
                  None, "garak", ""),
             )
             conn.commit()
