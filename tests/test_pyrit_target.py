@@ -60,7 +60,7 @@ class PyritTargetTests(CyberGuardTestCase):
         from pyrit.setup import IN_MEMORY, initialize_pyrit_async
         calls = []
 
-        def fake_turn(target_row, prompt, history, timeout=45.0):
+        def fake_turn(target_row, prompt, history, timeout=45.0, max_retries=2):
             calls.append((prompt, list(history)))
             return "the target says hi", list(history)
 
@@ -86,7 +86,7 @@ class PyritTargetTests(CyberGuardTestCase):
         from engine import pyrit_module
         sent = []
 
-        def fake_turn(target_row, prompt, history, timeout=45.0):
+        def fake_turn(target_row, prompt, history, timeout=45.0, max_retries=2):
             sent.append(prompt)
             return "reply", list(history)
 

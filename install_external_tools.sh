@@ -4,7 +4,7 @@
 # (engine/pyrit_module.py). Both are heavy, independently-versioned research
 # projects, and they have a genuine, known dependency conflict:
 #   garak==0.17.0 requires datasets<4.0,>=3.0.0
-#   pyrit==1.1.0  requires datasets>=4.8.0
+#   pyrit[litellm]==1.1.0  requires datasets>=4.8.0
 # Only one version of "datasets" can be installed at a time, so there is no
 # way to get both tools 100% guaranteed-working together in one venv. This
 # script is a best-effort installer: it installs garak first (full, normal
@@ -27,7 +27,7 @@
 set -uo pipefail
 
 GARAK_VERSION="garak==0.17.0"
-PYRIT_VERSION="pyrit==1.1.0"
+PYRIT_VERSION="pyrit[litellm]==1.1.0"
 
 GARAK_OK=0
 PYRIT_OK=0

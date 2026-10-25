@@ -21,7 +21,7 @@
     <button class="btn" type="submit">{{ t('btn_search') }}</button>
     {% if results_query %}<a href="/results" class="btn">{{ t('btn_clear_search') }}</a>{% endif %}
   </form>
-  <p>{{ (page - 1) * 5 + 1 if results_total else 0 }}&ndash;{{ [page * 5, results_total]|min }} / {{ results_total }}</p>
+  <p>{{ (page - 1) * 5 + 1 if results_total else 0 }}-{{ [page * 5, results_total]|min }} / {{ results_total }}</p>
   <table id="resultsTable">
     <tr>
       <th style="width:34px;"><input type="checkbox" id="resultsSelectAll"></th>

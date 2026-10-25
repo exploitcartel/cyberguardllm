@@ -170,6 +170,13 @@ CREATE TABLE IF NOT EXISTS garak_progress (
     planned INTEGER, sent INTEGER DEFAULT 0, completed INTEGER DEFAULT 0,
     errors INTEGER DEFAULT 0, evaluated INTEGER DEFAULT 0, phase TEXT DEFAULT 'loading'
 );
+CREATE TABLE IF NOT EXISTS pyrit_progress (
+    result_id INTEGER PRIMARY KEY REFERENCES scan_results(id) ON DELETE CASCADE,
+    sent INTEGER DEFAULT 0, finished INTEGER DEFAULT 0, responses INTEGER DEFAULT 0,
+    errors INTEGER DEFAULT 0, objectives_total INTEGER DEFAULT 0, objectives_done INTEGER DEFAULT 0,
+    stage TEXT DEFAULT 'initializing', phase TEXT DEFAULT 'running', objective TEXT,
+    stage_started REAL
+);
 CREATE TABLE IF NOT EXISTS scan_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     result_id INTEGER REFERENCES scan_results(id) ON DELETE CASCADE,

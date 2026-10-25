@@ -123,8 +123,9 @@
   .log-line .v.fail{color:var(--s-red);} .log-line .v.pass{color:var(--s-green);}
   .log-line .v.review{color:var(--s-amber);} .log-line .v.error{color:#94a3b8;}
   .log-note{color:var(--s-accent);padding:4px 0;}
-  .credit{padding:8px 26px;border-top:1px solid var(--s-line);font:11.5px var(--font);color:var(--s-dim);}
-  .credit a{color:var(--s-sub);}
+  .bar span.indeterminate{width:30%!important;animation:scanWaiting 1.8s ease-in-out infinite alternate;}
+  @keyframes scanWaiting{from{transform:translateX(0);}to{transform:translateX(230%);}}
+  @media(prefers-reduced-motion:reduce){.bar span.indeterminate{animation:none;}}
 
   @media (max-width:1000px){
     .stage{height:auto;}
@@ -170,18 +171,15 @@
     <aside class="stage-side">
       <div class="stats">
         <div class="stat"><div class="stat-label">Confirmed findings</div><div class="stat-value red" id="findingsCount">0</div></div>
-        <div class="stat"><div class="stat-label">Tested</div><div class="stat-value" id="testedCount">0</div></div>
-        <div class="stat"><div class="stat-label">Total</div><div class="stat-value" id="totalCount">0</div></div>
+        <div class="stat"><div class="stat-label" id="testedLabel">Tested</div><div class="stat-value" id="testedCount">0</div></div>
+        <div class="stat"><div class="stat-label" id="totalLabel">Total</div><div class="stat-value" id="totalCount">0</div></div>
       </div>
       <div class="log-head">Live log</div>
       <div class="log" id="liveLog"></div>
     </aside>
   </div>
 
-  <div class="credit">
-    Head model &ldquo;Infinite&rdquo; by Lee Perry-Smith (Infinite Realities), licensed
-    <a href="/static/models/head-license.txt" target="_blank" rel="noopener">CC BY 3.0</a>.
-  </div>
+
 </section>
 
 <script type="importmap">
@@ -434,27 +432,34 @@ let finished = false;
 function poll(){
   fetch('/api/scan-status/' + taskId + '?after=' + lastEvent).then(r => r.json()).then(data => {
     const terminal=['completed','stopped','error'].includes(data.status);
-    const unknownPlan=data.garak && data.garak.planned == null;
-    const pct = data.total > 0 ? Math.min(terminal ? 100 : 99, Math.floor((data.done / data.total) * 100)) : 0;
-    $('progressPct').textContent = unknownPlan ? '…' : pct + '%';
+    const pyritActive=data.pyrit && ['running','paused'].includes(data.pyrit.phase);
+    const usePyrit=data.pyrit && (pyritActive || data.total === 0);
+    const unknownPlan=usePyrit ? pyritActive && !terminal : data.garak && data.garak.planned == null;
+    const total=usePyrit ? data.pyrit.objectives_total : data.total;
+    const done=usePyrit ? data.pyrit.objectives_done : data.done;
+    const pct = total > 0 ? Math.min(terminal ? 100 : 99, Math.floor((done / total) * 100)) : 0;
+    $('progressPct').textContent = usePyrit && data.pyrit.phase === 'error' ? 'ERROR' : unknownPlan ? '…' : pct + '%';
     $('progressBar').style.width = pct + '%';
-    $('progressCount').textContent = unknownPlan ? 'Preparing the probe plan...' : data.done + ' / ' + data.total + ' payloads';
+    $('progressBar').classList.toggle('indeterminate', !!(pyritActive && !terminal));
+    $('progressCount').textContent = usePyrit ? data.pyrit.finished+' attempts finished · '+data.pyrit.responses+' replies · '+data.pyrit.errors+' transport errors' : unknownPlan ? 'Preparing the probe plan...' : data.done + ' / ' + data.total + ' payloads';
     const waitingEvaluation=data.garak && !data.garak.evaluated && !terminal;
-    $('findingsCount').textContent = waitingEvaluation ? '—' : data.findings;
+    $('findingsCount').textContent = waitingEvaluation ? '-' : data.findings;
     $('findingsCount').title = waitingEvaluation ? 'Waiting for the first detector evaluation' : 'Confirmed FAIL results';
     let stats=$('garakStats');
     if(data.garak){
       if(!stats){ stats=document.createElement('div'); stats.id='garakStats'; stats.style.cssText='font:12px var(--mono);color:var(--s-muted);padding:8px 24px;display:flex;gap:14px;flex-wrap:wrap'; $('phaseLabel').parentNode.appendChild(stats); }
       stats.textContent='Planned: '+(data.garak.planned ?? 'preparing')+' · Sent: '+data.garak.sent+' · Finished: '+data.garak.completed+' · Evaluated: '+data.garak.evaluated+' · Transport errors: '+data.garak.errors;
     }
-    $('testedCount').textContent = data.done;
-    $('totalCount').textContent = unknownPlan ? '…' : data.total;
+    $('testedLabel').textContent = usePyrit ? 'Replies' : 'Tested';
+    $('totalLabel').textContent = usePyrit ? 'Objectives finished' : 'Total';
+    $('testedCount').textContent = usePyrit ? data.pyrit.responses : data.done;
+    $('totalCount').textContent = usePyrit ? data.pyrit.objectives_done+' / '+data.pyrit.objectives_total : unknownPlan ? '…' : data.total;
 
     // last_rule_id is a bare rule id while the static/AI engine is testing payloads, or a sentence
     // (e.g. "Running PyRIT module...") once an external module has taken over.
     const isPhaseMessage = data.last_rule_id && /\s/.test(data.last_rule_id);
     if(isPhaseMessage && data.last_rule_id !== lastPhaseText){
-      $('phaseLabel').textContent = data.last_rule_id;
+      $('phaseLabel').textContent = data.last_rule_id + (pyritActive ? ' ('+data.pyrit.stage+', '+data.pyrit.stage_elapsed_seconds+'s)' : '');
       if(!data.events) addLog('&rsaquo; ' + esc(data.last_rule_id), 'log-note');
       lastPhaseText = data.last_rule_id;
     } else if(!isPhaseMessage && lastPhaseText){

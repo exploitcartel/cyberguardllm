@@ -43,8 +43,9 @@ class CyberGuardTarget(PromptTarget):
     others it is the server's own session state that carries the context.
     """
 
-    # Crescendo needs multi-turn and editable history. The history itself lives in PyRIT's memory and is handed
-    # to us on every send, so declaring this is accurate even for a target that is stateless on the wire.
+    # The adapter accepts PyRIT's histories. This does not establish that a
+    # single-field network target actually replays them; transcripts record
+    # history_replayed separately and reports disclose that limitation.
     _DEFAULT_CONFIGURATION = TargetConfiguration(
         capabilities=TargetCapabilities(supports_multi_turn=True, supports_editable_history=True))
 
@@ -52,6 +53,11 @@ class CyberGuardTarget(PromptTarget):
         super().__init__()
         self.target_id = target_id
         self._target_row = None
+        self._requests_sent = 0
+
+    @property
+    def next_timeout(self):
+        return min(180.0, 90.0 + 15.0 * self._requests_sent)
 
     def _load_target_row(self):
         if self._target_row is not None:
@@ -71,7 +77,10 @@ class CyberGuardTarget(PromptTarget):
         target_row = self._load_target_row()
         if target_row is None:
             return f"[ERROR] CyberGuard target id {self.target_id} not found"
-        reply, _ = send_conversation_turn(target_row, prompt_text, list(history or []))
+        timeout = self.next_timeout
+        self._requests_sent += 1
+        reply, _ = send_conversation_turn(target_row, prompt_text, list(history or []),
+                                           timeout=timeout, max_retries=0)
         return reply
 
     @staticmethod

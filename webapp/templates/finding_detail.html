@@ -6,7 +6,7 @@
     <div class="finding-metadata">
       <span>{{ t('severity_label') }} {{ info('severity','-detail') }} <span class="badge badge-{{ finding.severity }}">{{ finding.severity }}</span></span>
       <span>{{ t('verdict_label') }} {{ info('verdict','-detail') }} <span class="badge badge-{{ 'fail' if finding.verdict=='FAIL' else ('review' if finding.verdict=='REVIEW' else ('error' if finding.verdict in ('ERROR','INFO') else 'pass')) }}">{{ finding.verdict }}</span></span>
-      <span>{{ t('judge_confidence') }} {{ info('confidence','-detail') }}: {{ (finding.confidence|string ~ '%') if finding.confidence is not none else '—' }}</span>
+      <span>{{ t('judge_confidence') }} {{ info('confidence','-detail') }}: {{ (finding.confidence|string ~ '%') if finding.confidence is not none else '-' }}</span>
       {% if finding.reproducibility_total %}<span>{{ finding.reproducibility_hits }}/{{ finding.reproducibility_total }} {{ t('reproducibility_label') }}</span>{% endif %}
     </div>
   </div>

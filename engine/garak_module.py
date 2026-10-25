@@ -66,17 +66,39 @@ PROBE_OWASP_MAP = {
 DEFAULT_SEVERITY = "medium"
 HIGH_SEVERITY_PROBES = {"dan", "promptinject", "malwaregen"}
 
+# Stable UI/config names may outlive Garak's module names. Expand only the
+# intended XSS probes, rather than the whole web_injection module (which also
+# contains unrelated data-exfiltration tests).
+PROBE_ALIASES = {
+    "xss": ("web_injection.TaskXSS", "web_injection.MarkdownXSS"),
+    "glitch": ("glitch.Glitch",),
+    "donotanswer": ("donotanswer.DiscriminationExclusionToxicityHatefulOffensive",
+                    "donotanswer.HumanChatbox", "donotanswer.InformationHazard",
+                    "donotanswer.MaliciousUses", "donotanswer.MisinformationHarms"),
+    "goodside": ("goodside.WhoIsRiley", "goodside.ThreatenJSON", "goodside.Tag"),
+}
+
+
+def resolve_probe_names(probe_names, extra_probes_csv=""):
+    resolved = []
+    for name in list(probe_names) + extra_probes_csv.split(","):
+        name = name.strip()
+        for probe in PROBE_ALIASES.get(name, (name,)):
+            if probe and probe not in resolved:
+                resolved.append(probe)
+    return resolved
+
 
 def _short_probe_name(probe_classname: str) -> str:
     # e.g. "garak.probes.promptinject.HijackHateHumansMini" -> "promptinject"
     parts = (probe_classname or "").split(".")
-    if len(parts) >= 3 and parts[0] == "garak" and parts[1] == "probes":
-        return parts[2]
-    if parts and parts[0] == "probes":
-        return parts[1] if len(parts) > 1 else "unknown"
-    if len(parts) >= 2:
-        return parts[0]
-    return probe_classname or "unknown"
+    if parts[:2] == ["garak", "probes"]:
+        parts = parts[2:]
+    elif parts[:1] == ["probes"]:
+        parts = parts[1:]
+    if ".".join(parts) in PROBE_ALIASES["xss"]:
+        return "xss"
+    return parts[0] if parts and parts[0] else "unknown"
 
 
 def _deep_find_texts(obj, limit=5):
@@ -175,6 +197,7 @@ class GarakImporter:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='garak-judge')
         self.findings_count = 0
         self.seen = set()
+        self.configuration_errors = False
 
     def stopped(self):
         if self.task_id is None:
@@ -193,6 +216,18 @@ class GarakImporter:
         self.conn.commit()
 
     def consume(self, record):
+        if record.get('entry_type') == 'configuration_error':
+            import hashlib
+            self.configuration_errors = True
+            name = str(record.get('probe', 'unknown'))
+            rule = 'garak-invalid-selection-' + hashlib.sha256(name.encode()).hexdigest()[:12]
+            if not self.conn.execute('SELECT 1 FROM findings WHERE scan_result_id=? AND source=? AND rule_id=?',
+                                     (self.result_id, 'garak', rule)).fetchone():
+                self.conn.execute('INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict,description,source) '
+                                  'VALUES (?,?,?,?,?,?,?)', (self.result_id, rule, 'LLM01', 'low', 'ERROR',
+                                  str(record.get('message', 'Invalid Garak probe selection')), 'garak'))
+                self.update_totals()
+            return
         if record.get('entry_type')!='attempt':
             return
         outputs=record.get('outputs') or []
@@ -225,6 +260,8 @@ class GarakImporter:
             hit=best is not None and best>=.5
             severity='high' if short in HIGH_SEVERITY_PROBES else DEFAULT_SEVERITY
             description=f"External garak probe '{probe}'."
+            if short == 'xss':
+                description+=' Tests whether dangerous HTML/JavaScript is reflected in model output; browser execution and downstream rendering are not verified.'
             verdict='FAIL' if hit else 'PASS'
             if not response:
                 verdict='ERROR';severity='low'
@@ -332,7 +369,7 @@ def _run_process(cmd,env,timeout_s,conn,task_id,events_path,output_path,on_attem
                         if kind=='plan': planned=event['total']
                         sent+=kind=='sent';completed+=kind=='received'
                         failures+=kind=='received' and bool(event.get('error'))
-                        if kind=='attempt' and on_attempt:
+                        if kind in ('attempt', 'configuration_error') and on_attempt:
                             on_attempt(event['record'])
                 row=conn.execute('SELECT status,control FROM tasks WHERE id=?',(task_id,)).fetchone() if task_id else None
                 stopped=row and (row['control']=='stop' or row['status']=='stopped')
@@ -374,7 +411,7 @@ def _run_process(cmd,env,timeout_s,conn,task_id,events_path,output_path,on_attem
                 if kind=='plan': planned=event['total']
                 sent+=kind=='sent';completed+=kind=='received'
                 failures+=kind=='received' and bool(event.get('error'))
-                if kind=='attempt' and on_attempt: on_attempt(event['record'])
+                if kind in ('attempt', 'configuration_error') and on_attempt: on_attempt(event['record'])
         if task_id:
             conn.execute('UPDATE tasks SET progress_total=?,progress_done=? WHERE id=?',
                          (base_done+(planned or 0),base_done+completed,task_id))
@@ -391,7 +428,7 @@ def run_garak_scan(conn,result_id,target_row,probe_names,extra_probes_csv='',tim
     from engine.runner import _get_ai_judge_config
     from storage.db import get_setting
     import storage.db as db
-    probes=list(dict.fromkeys(p.strip() for p in list(probe_names)+extra_probes_csv.split(',') if p.strip()))
+    probes=resolve_probe_names(probe_names, extra_probes_csv)
     if not probes: return 0
     def error(rule,message):
         conn.execute('INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict,description,source) '
@@ -434,7 +471,15 @@ def run_garak_scan(conn,result_id,target_row,probe_names,extra_probes_csv='',tim
             for key,r in {**unscored,**scored}.items():
                 if any(o is not None for o in r.get('outputs',[])) or r.get('status')==2:
                     importer.consume(r)
-        if interruption or proc.returncode:
+        if 'Unknown run.spec' in proc.stdout:
+            failed=True
+            error('garak-invalid-probe',
+                  'Garak rejected an unavailable probe before sending payloads. '
+                  'Check the selected names against the installed Garak probe list; '
+                  'no security conclusion is available. '+proc.stdout[-2000:])
+        elif importer.configuration_errors and not importer.seen and not interruption:
+            failed=True
+        elif interruption or proc.returncode:
             failed=True
             error('garak-incomplete',f'Garak interrupted: {interruption or proc.returncode}. Available results retained. '+proc.stdout[-1500:])
         elif not importer.seen:
@@ -444,6 +489,7 @@ def run_garak_scan(conn,result_id,target_row,probe_names,extra_probes_csv='',tim
         failed=True
         error('garak-run-error',f'Garak failed: {type(e).__name__}: {e}')
     finally:
+        failed = failed or importer.configuration_errors
         importer.finish(allow_checks=interruption is None)
         phase='stopped' if importer.stopped() else ('error' if failed else 'completed')
         evaluated=conn.execute("SELECT COUNT(*) FROM findings WHERE scan_result_id=? AND source='garak' AND verdict IN ('PASS','FAIL','REVIEW')",(result_id,)).fetchone()[0]

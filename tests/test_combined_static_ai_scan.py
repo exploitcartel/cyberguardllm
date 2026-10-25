@@ -15,6 +15,32 @@ from tests.base import CyberGuardTestCase
 
 
 class CombinedStaticAndAiPoweredScanTests(CyberGuardTestCase):
+    def test_recon_runs_before_attacks_and_is_passed_to_campaign(self):
+        task_id = self._make_task(enable_static=1, ai_powered=1)
+        conn = self.get_conn()
+        conn.execute("UPDATE scan_configs SET enable_recon=1")
+        conn.commit()
+        conn.close()
+        import engine.runner as runner
+        trace = []
+        def recon(*args):
+            trace.append('recon')
+            return 'untrusted fixture observation'
+        def static(*args, **kwargs):
+            trace.append('static')
+            return False
+        def campaign(*args, **kwargs):
+            trace.append('campaign')
+            self.assertEqual(kwargs['recon_context'], 'untrusted fixture observation')
+            return False
+        with mock.patch('engine.recon_module.run_recon', side_effect=recon), \
+             mock.patch('engine.recon_module.generate_and_run_personalized') as separate_personalization, \
+             mock.patch.object(runner, '_run_static', side_effect=static), \
+             mock.patch.object(runner, '_run_ai_powered', side_effect=campaign):
+            runner._execute(task_id)
+        self.assertEqual(trace, ['recon', 'static', 'campaign'])
+        separate_personalization.assert_not_called()
+
     def _make_task(self, enable_static=1, ai_powered=1):
         conn = self.get_conn()
         conn.execute(

@@ -60,7 +60,7 @@ class GrowingTimeoutTests(unittest.TestCase):
              mock.patch("engine.runner.get_setting", side_effect=_fake_get_setting), \
              mock.patch("core.crypto.decrypt_token", return_value="fake-key"), \
              mock.patch.object(runner, "send_prompt", side_effect=fake_send_prompt), \
-             mock.patch.object(ai_agent, "generate_adversarial_prompt", return_value="attack prompt"), \
+             mock.patch.object(ai_agent, "generate_adversarial_prompt", side_effect=(f"attack prompt {i}" for i in range(1000))), \
              mock.patch.object(ai_agent, "judge_response", return_value=("PASS", "low", "resisted", 90)):
             runner._run_ai_powered(conn, task_id=1, result_id=1, target={},
                                     categories=["LLM01", "LLM02"], intensity="test")
@@ -94,7 +94,7 @@ class GrowingTimeoutTests(unittest.TestCase):
              mock.patch("engine.runner.get_setting", side_effect=_fake_get_setting), \
              mock.patch("core.crypto.decrypt_token", return_value="fake-key"), \
              mock.patch.object(runner, "send_prompt", side_effect=fake_send_prompt), \
-             mock.patch.object(ai_agent, "generate_adversarial_prompt", return_value="attack prompt"), \
+             mock.patch.object(ai_agent, "generate_adversarial_prompt", side_effect=(f"attack prompt {i}" for i in range(1000))), \
              mock.patch.object(ai_agent, "judge_response", return_value=("PASS", "low", "resisted", 90)):
             runner._run_ai_powered(conn, task_id=1, result_id=1, target={},
                                     categories=["LLM01"], intensity="aggressive")

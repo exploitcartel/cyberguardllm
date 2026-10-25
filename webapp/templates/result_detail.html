@@ -15,9 +15,24 @@
 <p>The score counts confirmed FAIL findings only. Unresolved REVIEW and ERROR records are excluded; a zero score does not establish safety.</p></div>
 {% endif %}
 {% if result.status == 'running' %}
-<div class="card" style="margin-bottom:16px;"><strong>Scan still running — results are provisional.</strong>
+<div class="card" style="margin-bottom:16px;"><strong>Scan still running. Results are provisional.</strong>
 <a class="btn" href="/scan/{{ result.task_id }}/live">Return to live scan</a>
 <p>New evaluated attempts appear as the scan progresses. Refresh this list to see the latest results.</p></div>
+{% endif %}
+{% if ai_campaign %}
+<details class="card" style="margin-bottom:16px;">
+  <summary style="cursor:pointer;font-weight:700;">{{ t('ai_campaign_execution') }}</summary>
+  <p>{{ t('ai_campaign_generation') }}: <strong>{{ ai_campaign.generation_calls }} / {{ ai_campaign.generation_budget }}</strong>
+    &nbsp;·&nbsp; {{ t('ai_campaign_target_calls') }}: <strong>{{ ai_campaign.primary_target_requests }}</strong>
+    &nbsp;·&nbsp; {{ t('ai_campaign_replays') }}: <strong>{{ ai_campaign.retest_target_requests }}</strong>
+    &nbsp;·&nbsp; {{ t('ai_campaign_judge_calls') }}: <strong>{{ ai_campaign.judge_calls }}</strong></p>
+  <p style="color:var(--text-muted);">{{ t('ai_campaign_count_note') }} {{ t('ai_campaign_warmup') }}: {{ ai_campaign.warmup_requests }}.</p>
+  <ul>{% for objective in ai_campaign.objectives %}
+    <li>{{ objective.category }} - {{ objective.goal }}
+      <small>({{ objective.requests }} {{ t('ai_campaign_target_calls') | lower }}; {{ t('ai_campaign_progress') }} {{ objective.progress }}/3)</small>
+    </li>
+  {% endfor %}</ul>
+</details>
 {% endif %}
 {% if benchmark %}
 <div class="card" style="margin-bottom:16px;">
@@ -64,7 +79,7 @@
     <button type="submit" class="btn">{{ t('filter_apply') }}</button>
     {% if finding_view.verdict != 'all' or finding_view.engine != 'all' or finding_view.category != 'all' or finding_view.query %}<a class="btn" href="{{ finding_url(verdict='all',engine='all',category='all',q='',page=1) }}#findings">{{ t('filter_reset') }}</a>{% endif %}
   </form>
-  <p>{{ (page - 1) * 50 + 1 if findings_total else 0 }}&ndash;{{ [page * 50, findings_total]|min }} / {{ findings_total }}</p>
+  <p>{{ (page - 1) * 50 + 1 if findings_total else 0 }}-{{ [page * 50, findings_total]|min }} / {{ findings_total }}</p>
   <div class="findings-table-wrap"><table class="findings-table">
     <tr>
       {% for key,label in [('id','col_id'),('owasp','col_owasp'),('severity','col_severity'),('verdict','col_verdict'),('confidence','judge_confidence'),('triage','col_triage')] %}
@@ -84,7 +99,7 @@
       <td>{{ f.owasp }}</td>
       <td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td>
       <td><span class="badge badge-{{ 'fail' if f.verdict=='FAIL' else ('review' if f.verdict=='REVIEW' else ('error' if f.verdict in ('ERROR','INFO') else 'pass')) }}">{{ f.verdict }}</span>{% if f.reproducibility_total %} <span style="color:var(--text-muted);font-size:13.5px;" title="{{ t('reproducibility_hint') }}">{{ f.reproducibility_hits }}/{{ f.reproducibility_total }}</span>{% endif %}</td>
-      <td>{% if f.confidence is not none %}{{ f.confidence }}%{% else %}&mdash;{% endif %}</td>
+      <td>{% if f.confidence is not none %}{{ f.confidence }}%{% else %}-{% endif %}</td>
       <td>{% if f.verdict=='FAIL' %}<span class="badge badge-triage-{{ f.triage_status or 'open' }}">{{ t('triage_' ~ (f.triage_status or 'open')) }}</span>{% else %}-{% endif %}</td>
       <td><a href="{{ finding_url('finding_detail',finding_id=f.id) }}" class="btn" style="padding:5px 10px;">{{ t('btn_details') }}</a></td>
     </tr>

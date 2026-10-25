@@ -27,8 +27,10 @@ class LiveScanPageTests(CyberGuardTestCase):
         page = self.client.get("/scan/1/live").get_data(as_text=True)
         for needle in ('id="stage"', 'id="headCanvas"', 'id="tickets"', 'id="links"', 'id="liveLog"', 'id="progressBar"',
                        'id="btnPauseResume"', 'id="btnStop"', "Target: Bot", "Config: Full Audit",
-                       "createHeadScene", "CC BY 3.0", "Lee Perry-Smith"):
+                       "createHeadScene"):
             self.assertIn(needle, page)
+        self.assertNotIn("Head model", page)
+        self.assertNotIn("Lee Perry-Smith", page)
         self.assertNotIn("brainWrap", page)
         self.assertNotIn("liveBrainCanvas", page)
 
@@ -76,7 +78,7 @@ class LoginPageHeadTests(CyberGuardTestCase):
     def test_login_shows_the_3d_head_instead_of_the_generated_brain(self):
         self.client.post("/logout")
         page = self.client.get("/login").get_data(as_text=True)
-        for needle in ('id="headStage"', 'id="headCanvas"', "createHeadScene", "CC BY 3.0", "Lee Perry-Smith"):
+        for needle in ('id="headStage"', 'id="headCanvas"', "createHeadScene"):
             self.assertIn(needle, page)
         for gone in ("brainCanvas", "canvasWrap", "three.min.js", "brainShape"):
             self.assertNotIn(gone, page)

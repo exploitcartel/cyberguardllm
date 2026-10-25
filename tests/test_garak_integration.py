@@ -21,7 +21,28 @@ class GarakIntegrationTests(unittest.TestCase):
     def test_results_are_visible_before_the_process_exits(self):
         self._run_probe('test.Test', 8, verify_live=True)
 
-    def _run_probe(self, probe, count, verify_live=False):
+    def test_ui_xss_selection_runs_both_installed_probes(self):
+        self._run_probe('xss', None, expected_owasp='LLM10')
+
+    def test_xss_detector_scores_reflected_script_as_a_hit(self):
+        self._run_probe('web_injection.MarkdownXSS', 7,
+                        expected_owasp='LLM10', reply='javascript:prompt(document.cookie)',
+                        expected_verdict='FAIL')
+
+    def test_goodside_module_sends_and_scores_its_probes(self):
+        self._run_probe('goodside', None)
+
+    def test_valid_goodside_runs_even_with_invalid_extra_names(self):
+        self._run_probe('goodside', None, extra_probes='llm01,vulnerable,promptinjection', expected_invalid=3)
+
+    def test_glitch_module_explicitly_runs_its_inactive_probe(self):
+        self._run_probe('glitch', None)
+
+    def test_donotanswer_module_explicitly_runs_its_inactive_probes(self):
+        self._run_probe('donotanswer', None)
+
+    def _run_probe(self, probe, count, verify_live=False, expected_owasp=None,
+                   reply='fixture answer', expected_verdict=None, extra_probes='', expected_invalid=0):
         if not os.path.isfile(gm._garak_python()):
             self.skipTest('garak interpreter unavailable')
         received = []
@@ -33,7 +54,7 @@ class GarakIntegrationTests(unittest.TestCase):
                 if verify_live:
                     import time
                     time.sleep(.3)
-                body = json.dumps({'reply': 'fixture answer'}).encode()
+                body = json.dumps({'reply': reply}).encode()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
@@ -74,19 +95,40 @@ class GarakIntegrationTests(unittest.TestCase):
                     watcher=threading.Thread(target=inspect_live,daemon=True)
                     if verify_live:watcher.start()
                     with patch.dict(os.environ,env), patch('engine.runner._get_ai_judge_config', return_value=None):
-                        gm.run_garak_scan(c, 1, target, [probe], timeout_s=90, task_id=1)
+                        gm.run_garak_scan(c, 1, target, [probe], extra_probes_csv=extra_probes, timeout_s=90, task_id=1)
+                    if count is None:
+                        # CLI-loaded config controls Garak's soft prompt cap;
+                        # compare actual HTTP deliveries with its announced plan.
+                        plan = c.execute('SELECT planned FROM garak_progress WHERE result_id=1').fetchone()
+                        self.assertIsNotNone(plan)
+                        count = plan['planned']
+                        self.assertGreater(count, 0)
                     if verify_live:
                         watcher.join(timeout=3)
                         self.assertTrue(live_observed, 'No result visible before process exit')
                         self.assertEqual(live_observed[0][1],count)
-                    rows = c.execute('SELECT rule_id,verdict,description,prompt_sent,raw_response FROM findings').fetchall()
+                    rows = c.execute('SELECT rule_id,owasp,verdict,description,prompt_sent,raw_response FROM findings').fetchall()
+                    invalid = [r for r in rows if r['rule_id'].startswith('garak-invalid-selection-')]
+                    self.assertEqual(len(invalid), expected_invalid)
+                    self.assertTrue(all(r['verdict'] == 'ERROR' for r in invalid))
+                    rows = [r for r in rows if r not in invalid]
+                    if expected_invalid:
+                        self.assertEqual(c.execute('SELECT phase FROM garak_progress WHERE result_id=1').fetchone()[0], 'error')
                     self.assertEqual(len(received),count, [dict(r) for r in rows])
                     if probe == 'test.Test':
                         self.assertIn('The quick brown fox jumps over the lazy dog',received)
                     self.assertFalse(any('Conversation(' in p for p in received))
                     self.assertEqual(len(rows),count, [dict(r) for r in rows])
                     self.assertTrue(all(r['verdict'] in ('PASS','FAIL') for r in rows),[dict(r) for r in rows])
-                    self.assertTrue(all(r['raw_response']=='fixture answer' for r in rows))
+                    self.assertTrue(all(r['raw_response']==reply for r in rows))
+                    if expected_owasp:
+                        self.assertTrue(all(r['owasp']==expected_owasp for r in rows))
+                    if expected_verdict:
+                        self.assertTrue(all(r['verdict']==expected_verdict for r in rows))
+                    if probe == 'xss':
+                        self.assertTrue(any('TaskXSS' in r['description'] for r in rows))
+                        self.assertTrue(any('MarkdownXSS' in r['description'] for r in rows))
+                        self.assertTrue(all(r['rule_id'].startswith('GARAK-xss-') for r in rows))
                     state=c.execute('SELECT progress_done,progress_total FROM tasks WHERE id=1').fetchone()
                     self.assertEqual(tuple(state),(count,count))
                     print(f'REAL GARAK VERIFIED: {probe}: {count} HTTP prompts, {count} scored findings, counters {count}/{count}')

@@ -16,7 +16,7 @@ from engine.loader import load_all_rules, count_by_category, count_by_category_a
 from engine.runner import run_scan_async, get_task_progress, reap_orphaned_tasks, force_stop_task, AI_INTENSITY_LEVELS, AI_INTENSITY_ORDER
 from engine.scorer import severity_breakdown_rows, owasp_breakdown_rows
 from report.pdf_report import generate_pdf_report
-from report.assessment import assessment_context
+from report.assessment import assessment_context, campaign_summary
 from webapp.i18n import translate
 from webapp.finding_view import FindingView, ENGINE_LABELS
 
@@ -1180,6 +1180,8 @@ def result_detail(result_id):
     findings = conn.execute("SELECT * FROM findings WHERE " + where + " ORDER BY " + view.order + " LIMIT 50 OFFSET ?",
                             values + [(view.page - 1) * 50]).fetchall()
     verdict_counts = view.counts(conn)
+    summary_row = conn.execute("SELECT * FROM findings WHERE scan_result_id=? AND source='ai_agent' AND rule_id='ai-campaign-summary' ORDER BY id DESC LIMIT 1", (result_id,)).fetchone()
+    ai_campaign = campaign_summary([summary_row] if summary_row else [])
     attack_chains = conn.execute("SELECT * FROM attack_chains WHERE scan_result_id=?", (result_id,)).fetchall()
     benchmark = _compute_benchmark(conn, result["target_id"])
     conn.close()
@@ -1189,7 +1191,8 @@ def result_detail(result_id):
     return render_template("result_detail.html", **ctx(active="results", result=result, findings=findings,
         attack_chains=attack_chains, benchmark=benchmark, page=view.page, total_pages=total_pages,
         findings_total=findings_total, sort=view.sort, direction=view.direction, finding_view=view,
-        verdict_counts=verdict_counts, finding_url=finding_url, engine_labels=ENGINE_LABELS))
+        verdict_counts=verdict_counts, finding_url=finding_url, engine_labels=ENGINE_LABELS,
+        ai_campaign=ai_campaign))
 
 
 def _get_ai_cfg_for_report():

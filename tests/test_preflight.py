@@ -103,12 +103,12 @@ class AiPoweredAbortTests(CyberGuardTestCase):
         with mock.patch.object(runner, "get_setting", lambda k, d=None: settings.get(k, d)), \
                 mock.patch("core.crypto.decrypt_token", lambda x: "key"), \
                 mock.patch.object(runner, "send_prompt", fake_send), \
-                mock.patch.object(runner.ai_agent, "generate_adversarial_prompt", lambda *a, **k: "attack"):
+                mock.patch.object(runner.ai_agent, "generate_adversarial_prompt", side_effect=(f"attack {i}" for i in range(1000))):
             runner._run_ai_powered(conn, 1, 1, target, ["LLM01", "LLM02"], intensity="low")
 
-        attack_sends = [p for p in sent if p == "attack"]
+        attack_sends = [p for p in sent if p.startswith("attack")]
         self.assertEqual(len(attack_sends), runner.AI_MAX_CONSECUTIVE_TRANSPORT_ERRORS)
-        ids = [r["rule_id"] for r in conn.execute("SELECT rule_id FROM findings ORDER BY id")]
+        ids = [r["rule_id"] for r in conn.execute("SELECT rule_id FROM findings WHERE verdict != 'INFO' ORDER BY id")]
         self.assertEqual(ids[-1], "scan-aborted-target-unresponsive")
         self.assertEqual(len(ids), runner.AI_MAX_CONSECUTIVE_TRANSPORT_ERRORS + 1)
 
@@ -152,7 +152,7 @@ class EmptyAttackPromptTests(CyberGuardTestCase):
         sent = self._run(conn, target, [None, "real attack"] + ["x"] * 20)
         self.assertNotIn("", sent)
         self.assertEqual(sent[0] if sent[0] != "Hello" else sent[1], "real attack")
-        rows = conn.execute("SELECT rule_id, verdict, prompt_sent, description FROM findings ORDER BY id").fetchall()
+        rows = conn.execute("SELECT rule_id, verdict, prompt_sent, description FROM findings WHERE verdict != 'INFO' ORDER BY id").fetchall()
         first = rows[0]
         self.assertEqual((first["rule_id"], first["verdict"]), ("ai-LLM01-1", "ERROR"))
         self.assertIn("Nothing was sent to the target", first["description"])
@@ -163,7 +163,7 @@ class EmptyAttackPromptTests(CyberGuardTestCase):
         conn, target = self._setup()
         sent = self._run(conn, target, [None] * 10)
         self.assertEqual([p for p in sent if p != "Hello"], [])
-        ids = [r["rule_id"] for r in conn.execute("SELECT rule_id FROM findings ORDER BY id")]
+        ids = [r["rule_id"] for r in conn.execute("SELECT rule_id FROM findings WHERE verdict != 'INFO' ORDER BY id")]
         self.assertEqual(ids[-1], "ai-attacker-declined")
         self.assertEqual(len(ids), runner.AI_MAX_CONSECUTIVE_EMPTY_PROMPTS + 1)
 

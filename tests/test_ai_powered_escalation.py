@@ -58,7 +58,7 @@ class EscalationContextTests(unittest.TestCase):
         calls = []
 
         def fake_generate(api_base, api_key, model, owasp_code, label, prev_prompt, prev_response,
-                           previous_reasoning=None, technique_hint=None, attempt_number=1, attempts_budget=None):
+                           previous_reasoning=None, technique_hint=None, attempt_number=1, attempts_budget=None, campaign_context=None):
             calls.append({
                 "attempt_number": attempt_number, "attempts_budget": attempts_budget,
                 "previous_reasoning": previous_reasoning, "technique_hint": technique_hint,
@@ -79,24 +79,24 @@ class EscalationContextTests(unittest.TestCase):
              mock.patch("engine.runner.send_prompt", return_value="the target's reply"), \
              mock.patch.object(ai_agent, "generate_adversarial_prompt", side_effect=fake_generate), \
              mock.patch.object(ai_agent, "judge_response", side_effect=fake_judge):
-            runner._run_ai_powered(conn, task_id=1, result_id=1, target={}, categories=["LLM01"], max_attempts=2)
+            runner._run_ai_powered(conn, task_id=1, result_id=1, target={"business_context": "Fixture policy"}, categories=["LLM01"], max_attempts=3)
 
-        self.assertEqual(len(calls), 2, "expected exactly 2 attempts (the configured budget) since both PASSed")
+        self.assertEqual(len(calls), 3)
         self.assertIsNone(calls[0]["previous_reasoning"], "first attempt has no previous attempt yet")
-        self.assertEqual(calls[1]["previous_reasoning"], "the target politely declined and did not reveal anything",
+        self.assertEqual(calls[2]["previous_reasoning"], "the target politely declined and did not reveal anything",
                           "second attempt must be told WHY the first one was judged to have resisted")
         self.assertNotEqual(calls[0]["technique_hint"], calls[1]["technique_hint"],
                              "consecutive attempts must rotate to a different technique, not repeat the same one")
         self.assertEqual(calls[1]["attempt_number"], 2)
-        self.assertEqual(calls[1]["attempts_budget"], 2)
+        self.assertEqual(calls[1]["attempts_budget"], 3)
 
-    def test_stops_immediately_on_fail_without_burning_remaining_budget(self):
+    def test_continues_to_second_objective_after_first_fail(self):
         conn = _conn()
         calls = []
 
         def fake_generate(*a, **k):
             calls.append(1)
-            return "attack prompt"
+            return f"attack prompt {len(calls)}"
 
         with mock.patch("storage.db.get_setting", side_effect=_fake_get_setting), \
              mock.patch("engine.runner.get_setting", side_effect=_fake_get_setting), \
@@ -104,9 +104,9 @@ class EscalationContextTests(unittest.TestCase):
              mock.patch("engine.runner.send_prompt", return_value="the target's reply"), \
              mock.patch.object(ai_agent, "generate_adversarial_prompt", side_effect=fake_generate), \
              mock.patch.object(ai_agent, "judge_response", return_value=("FAIL", "high", "leaked the system prompt", 95)):
-            runner._run_ai_powered(conn, task_id=1, result_id=1, target={}, categories=["LLM01"], max_attempts=10)
+            runner._run_ai_powered(conn, task_id=1, result_id=1, target={"business_context": "Fixture policy"}, categories=["LLM01"], max_attempts=10)
 
-        self.assertEqual(len(calls), 1, "a confirmed FAIL on attempt 1 must stop that category immediately")
+        self.assertEqual(len(calls), 2, "each distinct objective should be verified before the category stops")
         row = conn.execute("SELECT * FROM findings WHERE verdict='FAIL'").fetchone()
         self.assertIsNotNone(row)
 
@@ -120,7 +120,7 @@ class HardStopTests(unittest.TestCase):
 
         def fake_generate(*a, **k):
             calls.append(1)
-            return "attack prompt"
+            return f"attack prompt {len(calls)}"
 
         with mock.patch("storage.db.get_setting", side_effect=_fake_get_setting), \
              mock.patch("engine.runner.get_setting", side_effect=_fake_get_setting), \
@@ -133,7 +133,7 @@ class HardStopTests(unittest.TestCase):
             # at the "aggressive" intensity level's own ceiling (legacy path:
             # no intensity given, so the old numeric max_attempts is used,
             # clamped against the same ceiling the named levels use).
-            runner._run_ai_powered(conn, task_id=1, result_id=1, target={}, categories=["LLM01"], max_attempts=9999)
+            runner._run_ai_powered(conn, task_id=1, result_id=1, target={"business_context": "Fixture policy"}, categories=["LLM01"], max_attempts=9999)
 
         self.assertEqual(len(calls), 30, "attempts_budget must be clamped to the aggressive ceiling (30)")
 
@@ -143,7 +143,7 @@ class HardStopTests(unittest.TestCase):
 
         def fake_generate(*a, **k):
             calls.append(1)
-            return "attack prompt"
+            return f"attack prompt {len(calls)}"
 
         with mock.patch("storage.db.get_setting", side_effect=_fake_get_setting), \
              mock.patch("engine.runner.get_setting", side_effect=_fake_get_setting), \
@@ -155,7 +155,7 @@ class HardStopTests(unittest.TestCase):
             # 4 categories x a budget of 10 each = 40 possible attempts, far
             # more than the (patched-down) global cap of 5 - the run must
             # stop at the cap, not after exhausting every category's budget.
-            runner._run_ai_powered(conn, task_id=1, result_id=1, target={},
+            runner._run_ai_powered(conn, task_id=1, result_id=1, target={"business_context": "Fixture policy"},
                                     categories=["LLM01", "LLM02", "LLM10", "LLM03"], max_attempts=10)
 
         self.assertLessEqual(len(calls), 5, "must never exceed the global attempt cap, however many categories are selected")
@@ -174,7 +174,7 @@ class HardStopTests(unittest.TestCase):
             # 2 categories x a budget of 3 (the default) = 6 attempts, well
             # under the real AI_POWERED_GLOBAL_ATTEMPT_CAP (120) - the cap
             # must stay invisible for an ordinary scan.
-            runner._run_ai_powered(conn, task_id=1, result_id=1, target={}, categories=["LLM01", "LLM02"])
+            runner._run_ai_powered(conn, task_id=1, result_id=1, target={"business_context": "Fixture policy"}, categories=["LLM01", "LLM02"])
 
         cap_finding = conn.execute("SELECT * FROM findings WHERE rule_id='ai-global-cap-reached'").fetchone()
         self.assertIsNone(cap_finding, "the global cap must not trip during a normal, small AI-Powered scan")

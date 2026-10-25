@@ -1,23 +1,4 @@
-"""
-Regression tests for the AI-Powered Intensity levels feature, requested
-directly by Edison after the raw "max attempts per category" number input
-felt disconnected from anything meaningful ("numri i thate... pa lidhje").
-
-Covers:
-  - _run_ai_powered() picks its per-category budget from AI_INTENSITY_LEVELS
-    when given a known `intensity` string, ignoring the legacy numeric
-    `max_attempts` entirely in that case.
-  - An unknown/missing intensity falls back to the old numeric
-    max_attempts path (DB rows saved before the ai_intensity column
-    existed), clamped against the new, higher ceiling.
-  - The "test" level never gets the breakthrough extension described next.
-  - Breakthrough extension: if a category is still PASSing right at its
-    budget ceiling but the judge's own confidence is close to the
-    REVIEW/FAIL threshold (within AI_BREAKTHROUGH_CONFIDENCE_MARGIN), the
-    budget is extended once by AI_BREAKTHROUGH_EXTENSION_ATTEMPTS - but
-    never a second time for the same category, and never when the
-    intensity is "test".
-"""
+"""AI generation ceilings remain fixed regardless of judge confidence."""
 import sqlite3
 import unittest
 from unittest import mock
@@ -87,7 +68,7 @@ class IntensityBudgetTests(unittest.TestCase):
         self.assertEqual(len(calls), runner.AI_INTENSITY_LEVELS["aggressive"])
 
 
-class BreakthroughExtensionTests(unittest.TestCase):
+class FixedBudgetTests(unittest.TestCase):
     def _run_with_confidence_sequence(self, intensity, confidences, categories=("LLM01",)):
         conn = _conn()
         calls = []
@@ -112,7 +93,7 @@ class BreakthroughExtensionTests(unittest.TestCase):
                                     intensity=intensity)
         return conn, calls
 
-    def test_budget_extends_once_when_last_attempt_is_a_close_call(self):
+    def test_uncertain_test_budget_is_not_extended(self):
         # intensity="test" has an 8-attempt budget; confidence stays high
         # (90) for 7 attempts then drops to 65 (min_confidence 60 + margin
         # 15 = 75, so 65 qualifies as "close") right on the 8th/last one -
@@ -121,24 +102,10 @@ class BreakthroughExtensionTests(unittest.TestCase):
         self.assertEqual(len(calls), 8, "'test' intensity must never extend past its fixed 8-attempt budget")
         self.assertIsNone(conn.execute("SELECT * FROM findings WHERE rule_id LIKE '%-extension'").fetchone())
 
-    def test_low_intensity_extends_once_on_a_close_call_at_the_ceiling(self):
-        # intensity="low" has a 10-attempt budget; same pattern as above but
-        # a real security-testing level, which DOES get one extension.
-        confidences = [90] * 9 + [65] + [90] * runner.AI_BREAKTHROUGH_EXTENSION_ATTEMPTS
-        conn, calls = self._run_with_confidence_sequence("low", confidences)
-        self.assertEqual(len(calls), 10 + runner.AI_BREAKTHROUGH_EXTENSION_ATTEMPTS,
-                          "a close call right at the ceiling must grant exactly one extension")
-        ext = conn.execute("SELECT * FROM findings WHERE rule_id LIKE '%-extension'").fetchone()
-        self.assertIsNotNone(ext, "an extension must be logged as its own finding, visible in the report")
-
-    def test_extension_never_triggers_a_second_time_for_the_same_category(self):
-        # Keep handing back a "close call" confidence on every single
-        # attempt, including every extended one - must still only extend
-        # once, not loop forever.
-        confidences = [65] * 30
-        conn, calls = self._run_with_confidence_sequence("low", confidences)
-        self.assertEqual(len(calls), 10 + runner.AI_BREAKTHROUGH_EXTENSION_ATTEMPTS,
-                          "extension must apply at most once per category even if every attempt looks close")
+    def test_low_confidence_never_extends_low_budget(self):
+        conn, calls = self._run_with_confidence_sequence("low", [65] * 30)
+        self.assertEqual(len(calls), 10)
+        self.assertIsNone(conn.execute("SELECT * FROM findings WHERE rule_id LIKE '%-extension'").fetchone())
 
     def test_no_extension_when_the_target_resists_cleanly(self):
         conn, calls = self._run_with_confidence_sequence("low", [90] * 10)

@@ -131,6 +131,15 @@ configurations show 10 items; activity/error logs and each comparison section sh
 apply before pagination. FAIL findings support Open, False Positive, and Accepted Risk
 triage. Compare scans by rule ID and use the dashboard to navigate to targets, scans, and critical findings.
 
+AI-Powered uses two specific objectives per selected category within the chosen generation ceiling.
+It remembers recent attempts, follows evidence-backed progress, skips duplicate prompts, and stops
+only the confirmed objective. Optional AI recon runs before attack planning. Configure the target's
+Business Context with its actual permitted actions and policy limits so a policy violation can be assessed.
+Explicit `messages` targets receive separate objective histories; other profiles cannot guarantee session
+reset. Suspected secret leaks or backend actions need independent verification and are marked REVIEW
+when that evidence is unavailable. Optional retests replay the same prompt/history; the execution summary
+records generation, target and judge call counts. Confidence alone never extends the budget.
+
 ### 6. Verdicts, scoring, and reports
 
 | Verdict | Meaning |
@@ -224,7 +233,12 @@ The Garak adapter automatically selects `venv-garak/Scripts/python.exe` on Windo
 
 Install `garak==0.17.0` in that separate environment, together with the dependencies needed by the
 shared target transport (`requests`, `cryptography`, and `beautifulsoup4`; include transport-specific
-packages if using WebSocket or Socket.io). Install `pyrit==1.1.0` through the app's venv Python.
+packages if using WebSocket or Socket.io). Install `pyrit[litellm]==1.1.0` through the app's venv Python.
+PyRIT target requests wait 90-180 seconds with no automatic resend; each objective has a 15-minute
+execution ceiling. Transport failures preserve the transcript and stop the module. The live view shows
+attempts, usable replies, errors and the current phase. Full conversational/backtracking coverage requires
+verified target-side history; a chat UI displaying old messages does not establish that the model receives them.
+
 Verify imports in each environment before starting a scan.
 
 `install_external_tools.sh` is a best-effort alternative that attempts both packages in the active venv.

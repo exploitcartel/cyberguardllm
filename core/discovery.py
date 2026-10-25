@@ -665,7 +665,7 @@ def send_prompt(target_row, prompt: str, timeout: float = 45.0, max_retries: int
     return last_error
 
 
-def send_conversation_turn(target_row, prompt: str, history: list, timeout: float = 20.0):
+def send_conversation_turn(target_row, prompt: str, history: list, timeout: float = 20.0, max_retries: int = 2):
     """
     Sends one turn of a multi-turn conversation and returns (response_text, new_history).
 
@@ -696,7 +696,6 @@ def send_conversation_turn(target_row, prompt: str, history: list, timeout: floa
         messages = list(history) + [{"role": "user", "content": prompt}]
         body = {"messages": messages}
 
-        max_retries = 2
         delay = 2.0
         response_text = None
         for attempt in range(max_retries + 1):
@@ -765,7 +764,7 @@ def send_conversation_turn(target_row, prompt: str, history: list, timeout: floa
         new_history = messages + [{"role": "assistant", "content": response_text}]
         return response_text, new_history
 
-    response_text = send_prompt(target_row, prompt, timeout=timeout)
+    response_text = send_prompt(target_row, prompt, timeout=timeout, max_retries=max_retries)
     new_history = list(history) + [
         {"role": "user", "content": prompt},
         {"role": "assistant", "content": response_text},

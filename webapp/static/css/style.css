@@ -215,6 +215,10 @@ input[type="checkbox"], input[type="radio"]{
 }
 .checkbox-row{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14.5px;}
 .checkbox-row input{width:19px;}
+.config-options{border:0;margin:0;padding:0;min-width:0;transition:opacity .18s ease;}
+.config-options:disabled{opacity:.4;}
+.config-options:disabled input,.config-options:disabled select,.config-options:disabled textarea{cursor:not-allowed;}
+@media (prefers-reduced-motion:reduce){.config-options{transition:none;}}
 
 .warn-box{display:flex;gap:10px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:10px;padding:13px 16px;margin-bottom:16px;font-size:14.5px;}
 .status-banner{cursor:pointer;transition:box-shadow .15s ease, transform .15s ease;}

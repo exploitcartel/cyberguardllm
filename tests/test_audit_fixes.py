@@ -128,6 +128,10 @@ class CombinedProgressTests(CyberGuardTestCase):
                      (task_id, tid, "2026-01-01", "running"))
         result_id = conn.execute("SELECT id FROM scan_results").fetchone()["id"]
         conn.commit()
+        for n in range(2):
+            conn.execute("INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict) VALUES (?,?,?,?,?)",
+                         (result_id, f"prior-static-{n}", "LLM01", "medium", "FAIL"))
+        conn.commit()
         target = conn.execute("SELECT * FROM targets WHERE id=?", (tid,)).fetchone()
 
         settings = {"ai_api_base": "http://ai", "ai_api_key_encrypted": "x", "ai_model": "m",
@@ -135,7 +139,7 @@ class CombinedProgressTests(CyberGuardTestCase):
         with mock.patch.object(runner, "get_setting", lambda k, d=None: settings.get(k, d)), \
                 mock.patch("core.crypto.decrypt_token", lambda x: "key"), \
                 mock.patch.object(runner, "send_prompt", lambda *a, **k: "I refuse"), \
-                mock.patch.object(runner.ai_agent, "generate_adversarial_prompt", lambda *a, **k: "attack"), \
+                mock.patch.object(runner.ai_agent, "generate_adversarial_prompt", side_effect=(f"attack {i}" for i in range(100))), \
                 mock.patch.object(runner.ai_agent, "judge_response", lambda *a, **k: ("PASS", "low", "ok", 95)):
             runner._run_ai_powered(conn, task_id, result_id, target, ["LLM01"], intensity="test")
 
@@ -187,7 +191,7 @@ class DetailPageBackTests(CyberGuardTestCase):
         fid = conn.execute("SELECT id FROM findings").fetchone()["id"]
         conn.commit()
         finding_page = self.client.get(f"/findings/{fid}").get_data(as_text=True)
-        self.assertIn(f'href="/results/{rid}"', finding_page)
+        self.assertRegex(finding_page, rf'href="/results/{rid}(?:\?|\")')
         self.assertIn('id="btn-back"', finding_page)
         self.assertIn('id="btn-back"', self.client.get(f"/results/{rid}").get_data(as_text=True))
 

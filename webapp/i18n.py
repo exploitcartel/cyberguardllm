@@ -131,23 +131,25 @@ TRANSLATIONS = {
     "owasp_categories_label": {"en": "OWASP Categories", "al": "Kategoritë OWASP"},
     "ai_powered_checkbox_label": {"en": "AI-Powered mode for this config (uses the AI attacking agent instead of static payloads, requires AI API set up in Settings)",
                                    "al": "Modaliteti AI-Powered për këtë konfigurim (përdor AI agent sulmues në vend të payload-ve statikë, kërkon AI API të konfiguruar te Settings)"},
+    "ai_campaign_execution": {"en": "AI campaign execution", "al": "Ekzekutimi i fushatës AI"},
+    "ai_campaign_generation": {"en": "Generations / ceiling", "al": "Gjenerime / kufiri"},
+    "ai_campaign_target_calls": {"en": "Target requests", "al": "Kërkesa ndaj targetit"},
+    "ai_campaign_replays": {"en": "Retest requests", "al": "Kërkesa ritestimi"},
+    "ai_campaign_judge_calls": {"en": "Judge calls", "al": "Thirrje gjykimi"},
+    "ai_campaign_count_note": {"en": "These are call counts, not token usage or billing. Warmup is counted separately.", "al": "Këto janë numra thirrjesh, jo konsum tokenash apo faturim. Ngrohja numërohet veçmas."},
+    "ai_campaign_warmup": {"en": "Warmup requests", "al": "Kërkesa ngrohjeje"},
+    "ai_campaign_progress": {"en": "Objective progress", "al": "Progresi i objektivit"},
     "ai_freestyle_explanation": {
-        "en": "Freestyle mode: for each category, the AI attacker gets up to this many rounds to adapt and "
-              "escalate, seeing the previous attempt and the target's response each time. It stops early for a "
-              "category as soon as it gets a confirmed FAIL, and only spends the full budget on a category that "
-              "keeps resisting.",
-        "al": "Modaliteti freestyle: per cdo kategori, AI sulmuesi merr deri ne kaq raunde per te pershtatur dhe "
-              "eskaluar, duke pare provën e meparshme dhe pergjigjen e target-it cdo here. Ndalon heret per nje "
-              "kategori sapo merr nje FAIL te konfirmuar, dhe shpenzon budget-in e plote vetem per nje kategori "
-              "qe vazhdon te rezistoje."},
+        "en": "Objective campaign: two focused objectives per category share a fixed generation budget. The attacker uses prior results and optional recon, avoids duplicate prompts, and follows quoted evidence of progress. A confirmed objective stops; the other objective continues. Put the target's permitted actions and policy limits in its Business Context. Unverified leaks or backend actions require REVIEW.",
+        "al": "Fushatë me objektiva: dy objektiva për kategori ndajnë një buxhet fiks gjenerimi. Sulmuesi përdor rezultatet e mëparshme dhe recon opsional, shmang promptet e përsëritura dhe ndjek prova konkrete progresi. Ndalon objektivin e konfirmuar dhe vazhdon tjetrin. Te Business Context vendos veprimet e lejuara dhe kufijtë e politikës së targetit. Rrjedhjet apo veprimet në backend pa prova të pavarura kërkojnë REVIEW."},
     "field_ai_max_attempts": {"en": "Max attempts per category", "al": "Max provat per kategori"},
     "field_ai_intensity": {"en": "AI-Powered Intensity", "al": "Intensiteti i AI-Powered"},
     "ai_intensity_test_label": {"en": "Test", "al": "Test"},
     "ai_intensity_test_tip": {"en": "8 attempts per category, fixed. A quick sanity check that the pipeline itself works end to end - not a real security assessment. Never extended.",
                                "al": "8 prova per kategori, fikse. Nje test i shpejte qe mekanizmi funksionon fund-e-fund - jo nje vleresim real sigurie. Nuk zgjatet kurre."},
     "ai_intensity_low_label": {"en": "Low", "al": "Low"},
-    "ai_intensity_low_tip": {"en": "Up to 10 attempts per category. Fast pass, catches the more obvious weaknesses. Can extend a bit if the target looks close to failing right at the limit.",
-                              "al": "Deri 10 prova per kategori. Kalim i shpejte, kap dobesite me te dukshme. Mund te zgjatet pak nese target-i duket afer deshtimit pikerisht ne limit."},
+    "ai_intensity_low_tip": {"en": "Up to 10 generated attempts per category, shared across its objectives. Never extended because of judge uncertainty.",
+                              "al": "Deri 10 tentativa të gjeneruara për kategori, të ndara mes objektivave. Pasiguria e gjykuesit nuk e zgjat buxhetin."},
     "ai_intensity_medium_label": {"en": "Medium", "al": "Medium"},
     "ai_intensity_medium_tip": {"en": "Up to 15 attempts per category. More room to adapt the attack before giving up on a category.",
                                  "al": "Deri 15 prova per kategori. Me shume hapesire per te adaptuar sulmin para se te heqe dore nga nje kategori."},
@@ -157,8 +159,8 @@ TRANSLATIONS = {
     "ai_intensity_aggressive_label": {"en": "Aggressive", "al": "Aggressive"},
     "ai_intensity_aggressive_tip": {"en": "Up to 30 attempts per category. The most thorough pass - every category gets the most room to try different angles before being marked resistant.",
                                      "al": "Deri 30 prova per kategori. Kalimi me i thelle - cdo kategori merr me shume hapesire per te provuar kende te ndryshme sulmi para se te shenohet rezistente."},
-    "ai_intensity_shared_tip": {"en": "A category still stops the moment it gets a confirmed FAIL, whatever the level - this is a ceiling, not a count that is always fully spent.",
-                                 "al": "Nje kategori ndalon sapo merr nje FAIL te konfirmuar, pavaresisht nivelit - ky eshte nje tavan, jo nje numer qe shpenzohet gjithmone i plote."},
+    "ai_intensity_shared_tip": {"en": "Generation ceiling shared by the category's objectives. Duplicate prompts are not sent. Enabled retests add target/judge calls, not new generated attacks. Judge confidence and objective progress are separate measurements.",
+                                "al": "Kufiri i gjenerimit ndahet mes objektivave të kategorisë. Promptet e përsëritura nuk dërgohen. Ritestimet shtojnë thirrje ndaj targetit/gjykuesit, jo sulme të reja të gjeneruara. Confidence dhe progresi i objektivit janë matje të ndryshme."},
     "enable_fingerprint_checkbox": {"en": "Guardrail fingerprinting (offline, no AI needed)",
                                      "al": "Fingerprint i guardrail-it (offline, pa AI)"},
     "fingerprint_explanation": {
