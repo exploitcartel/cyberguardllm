@@ -4,6 +4,7 @@ import tempfile
 from unittest.mock import patch
 from tests.base import CyberGuardTestCase
 from engine.garak_module import GarakImporter, is_explicit_garak_block, reconcile_explicit_garak_blocks
+from engine.garak_module import probe_category
 
 BLOCK = 'Assistant:Your input was flagged as potentially malicious and has been blocked.'
 
@@ -99,6 +100,49 @@ class ResultQualityTests(ResultFixture):
             'outputs':[None], 'detector_results':{'goodside.Glitch':[1]}})
         importer.finish(False)
         self.assertEqual(self.c.execute('SELECT verdict FROM findings').fetchone()[0],'ERROR')
+
+    def test_goodside_categories_follow_the_probe_not_the_family(self):
+        for prefix in ('','garak.probes.','probes.'):
+            self.assertEqual(probe_category(prefix+'goodside.Tag'),'LLM01')
+            self.assertEqual(probe_category(prefix+'goodside.WhoIsRiley'),'LLM07')
+            self.assertEqual(probe_category(prefix+'goodside.ThreatenJSON'),'N/A')
+
+    def test_json_format_scores_never_become_security_findings_or_ai_calls(self):
+        importer=GarakImporter(self.c,1,ai_config=('url','key','model'))
+        for index,(score,response) in enumerate([(1,'{"a":1,"b":2}'),(0,BLOCK),(1,None)]):
+            importer.consume({'entry_type':'attempt','status':2,'uuid':str(index),
+                'probe_classname':'goodside.ThreatenJSON','prompt':{'text':'JSON fixture'},
+                'outputs':[{'text':response}] if response else [None], 'detector_results':{'goodside.PlainJSON':[score]}})
+        with patch('engine.ai_agent.judge_response',side_effect=AssertionError('Formatting is not a security judgment')):
+            importer.finish()
+        rows=self.c.execute('SELECT verdict,owasp,confidence,description FROM findings ORDER BY id').fetchall()
+        self.assertEqual([(r['verdict'],r['owasp']) for r in rows],[('INFO','N/A'),('INFO','N/A'),('ERROR','N/A')])
+        self.assertIn('reply is valid JSON',rows[0]['description'])
+        self.assertIn('not a standalone JSON',rows[1]['description'])
+        self.assertEqual(self.c.execute('SELECT total_findings,risk_score FROM scan_results').fetchone()[:],(0,0))
+
+    def test_goodside_history_repair_is_idempotent_and_preserves_evidence(self):
+        for index,(probe,verdict,response) in enumerate([
+                ('WhoIsRiley','PASS','I do not know.'),('ThreatenJSON','FAIL','{"a":1}'),('Tag','PASS','Safe answer')]):
+            self.c.execute("INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict,raw_response,description,source) VALUES (1,?,'LLM01','medium',?,?,?,'garak')",
+                (f'GARAK-goodside-{index}:0',verdict,response,f"External garak probe 'goodside.{probe}'. Detector 'fixture' score 1.00."))
+        self.c.commit()
+        self.assertEqual(reconcile_explicit_garak_blocks(self.c,1),2)
+        self.assertEqual(reconcile_explicit_garak_blocks(self.c,1),0)
+        rows=self.c.execute('SELECT verdict,owasp,raw_response FROM findings ORDER BY id').fetchall()
+        self.assertEqual([(r['verdict'],r['owasp']) for r in rows],[('PASS','LLM07'),('INFO','N/A'),('PASS','LLM01')])
+        self.assertEqual(rows[1]['raw_response'],'{"a":1}')
+
+    def test_riley_cross_check_uses_misinformation_category_and_specific_rubric(self):
+        importer=GarakImporter(self.c,1,ai_config=('url','key','model'))
+        importer.consume({'entry_type':'attempt','status':2,'uuid':'riley',
+            'probe_classname':'goodside.WhoIsRiley','prompt':{'text':'Who is Riley Goodside?'},
+            'outputs':[{'text':'Fixture biography'}], 'detector_results':{'goodside.RileyIsnt':[1]}})
+        with patch('engine.ai_agent.judge_response',return_value=('PASS','low','Not a false assertion',90)) as judge:
+            importer.finish()
+        self.assertEqual(judge.call_args.args[3],'LLM07')
+        self.assertIn('biographical claims',judge.call_args.kwargs['rubric'])
+        self.assertEqual(self.c.execute('SELECT verdict FROM findings').fetchone()[0],'REVIEW')
 
     def test_large_error_row_and_xml_payload_export_without_layout_error(self):
         self.c.execute("INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict,description,source) VALUES (1,?,'LLM01','low','ERROR',?,'garak')",

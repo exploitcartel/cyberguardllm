@@ -447,7 +447,7 @@ function poll(){
     $('findingsCount').title = waitingEvaluation ? 'Waiting for the first detector evaluation' : 'Confirmed FAIL results';
     let stats=$('garakStats');
     if(data.garak){
-      if(!stats){ stats=document.createElement('div'); stats.id='garakStats'; stats.style.cssText='font:12px var(--mono);color:var(--s-muted);padding:8px 24px;display:flex;gap:14px;flex-wrap:wrap'; $('phaseLabel').parentNode.appendChild(stats); }
+      if(!stats){ stats=document.createElement('div'); stats.id='garakStats'; stats.className='module-stats'; $('phaseLabel').parentNode.appendChild(stats); }
       stats.textContent='Planned: '+(data.garak.planned ?? 'preparing')+' · Sent: '+data.garak.sent+' · Finished: '+data.garak.completed+' · Evaluated: '+data.garak.evaluated+' · Transport errors: '+data.garak.errors;
     }
     $('testedLabel').textContent = usePyrit ? 'Replies' : 'Tested';

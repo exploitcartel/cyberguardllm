@@ -308,6 +308,17 @@ a.btn:active,button.btn:active:not(:disabled),button.s-btn:active:not(:disabled)
 a.btn:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
 button.btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none;}
 .muted{color:var(--text-muted);}
+/* Shared scan footer: module diagnostics occupy their own row, never the percentage column.
+   Specific selectors also cover live pages rendered before a server restart. */
+.stage .stage-foot{grid-template-columns:92px minmax(0,1fr) minmax(0,200px);}
+.stage-foot .count{min-width:0;white-space:normal;overflow-wrap:anywhere;text-align:right;}
+.module-stats,#garakStats{grid-column:1 / -1;min-width:0;overflow-wrap:anywhere;font:12px var(--mono);color:var(--s-muted);padding-top:8px;}
+@media(max-width:600px){
+  .stage .stage-foot{grid-template-columns:92px minmax(0,1fr);}
+  .stage-foot .pct{grid-column:1;grid-row:1;}
+  .stage-foot .count{grid-column:2;grid-row:1;}
+  .stage-foot .bar{grid-column:1 / -1;grid-row:2;}
+}
 @media(prefers-reduced-motion:reduce){a.btn,button.btn,button.s-btn,button.login-btn{transition:none;transform:none!important;}}
 
 

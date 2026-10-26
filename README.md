@@ -95,6 +95,9 @@ a refusal followed by additional content is never automatically passed. DoNotAns
 criteria rather than an excessive-agency rubric. General content-safety tests without a specific OWASP
 mapping display `N/A`. Garak `glitch` tests echo/token robustness: failed echoes are informational
 observations, not confirmed prompt-injection findings. These unmapped tests do not count as OWASP coverage.
+Goodside is classified per probe: `Tag` tests prompt injection (LLM01), `WhoIsRiley` tests
+misinformation (LLM07), and `ThreatenJSON` records JSON-format observations as INFO / N/A.
+Valid JSON from `ThreatenJSON` is not interpreted as a successful security attack.
 Existing finished scans can be corrected without replaying prompts using
 `python scripts/repair_garak_verdicts.py --apply`; the script first backs up SQLite and preserves raw evidence.
 
