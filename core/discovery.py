@@ -3,6 +3,7 @@ import random
 import re
 import time
 import json
+from core.transport_policy import response_timeout, http_timeout
 
 # "none" = send no credentials at all, for chat endpoints that need no token. It is
 # tried last when a token was supplied, and is the only scheme tried when it was not.
@@ -528,41 +529,20 @@ def is_transport_error(response_text) -> bool:
 
 
 def send_prompt(target_row, prompt: str, timeout: float = 45.0, max_retries: int = 2):
-    """
-    Sends one prompt to the target and returns its text response.
+    """Send one prompt using the saved target's response budget.
 
-    timeout default raised from 20s to 45s, for the same reason
-    discover_target()'s own default went from 10s to 25s: a self-hosted
-    target running inference on CPU (Ollama, llama.cpp, etc, like OWASP
-    PromptMe) can easily take 10-20+ seconds for a single reply - and a
-    target that runs a guardrail/safety model check BEFORE the main reply
-    (two sequential model calls per message, as OWASP PromptMe's LLM01
-    challenge does) can need double that. Found live: a real scan logged
-    several "Read timed out (read timeout=20.0)" errors against exactly
-    this kind of target, each one recorded as a scan/infrastructure issue
-    rather than a real pass/fail - not because the target resisted the
-    attack, but because the old timeout gave up before the (correctly
-    slow) answer ever arrived.
-
-    Retries up to `max_retries` additional times (exponential backoff: 2s,
-    4s, ...) when the attempt looks like a transport/infra failure rather
-    than a genuine model answer: a request exception (timeout, connection
-    reset), a 429/5xx HTTP status, an unparseable body, or a 200-OK body
-    shaped like a provider error (e.g. {"error": "rate_limited"}) instead
-    of real content. Without this, a target that is briefly rate-limiting
-    or timing out silently produces a scan with "0 findings" that looks
-    like a clean bill of health but actually never tested anything - the
-    AI judge was asked to evaluate an error message, not the target's real
-    behavior. After retries are exhausted, the failure is returned as a
-    "[ERROR] ..." - prefixed string so callers (engine/runner.py,
-    engine/recon_module.py) can recognize it and record it explicitly as
-    an infrastructure issue excluded from pass/fail scoring, instead of
-    feeding it to the judge as if it were the target's answer.
+    The timeout argument is a fallback for legacy profiles without a saved
+    request_timeout. HTTP connection establishment is capped separately.
+    Read timeouts are not replayed: the server may still be processing the
+    original request. Eligible transient failures can use max_retries.
+    Exhausted transport failures return an [ERROR] string and must never
+    be evaluated as a model reply.
     """
     # Dispatch to the WebSocket / Socket.io client when this target was
     # discovered/saved as that transport; everything below this point stays
     # the plain-HTTP path unchanged. See core/ws_discovery.py and
     # core/socketio_discovery.py for why these need separate clients.
+    timeout = response_timeout(target_row, timeout)
     transport = None
     try:
         transport = target_row["transport"]
@@ -599,7 +579,7 @@ def send_prompt(target_row, prompt: str, timeout: float = 45.0, max_retries: int
     last_error = "[ERROR] unknown failure"
     for attempt in range(max_retries + 1):
         try:
-            resp = _post_body(target_row["url"], body, headers, params, timeout, encoding=body_encoding)
+            resp = _post_body(target_row["url"], body, headers, params, http_timeout(target_row, timeout), encoding=body_encoding)
         except Exception as e:
             last_error = f"[ERROR] {e}"
             if attempt < max_retries and _worth_retrying(e):
@@ -683,7 +663,7 @@ def send_conversation_turn(target_row, prompt: str, history: list, timeout: floa
     """
     body_format = target_row["body_format"]
 
-    if body_format == "messages":
+    if body_format == "messages" and (dict(target_row).get('transport') or 'http') == 'http':
         from core.crypto import decrypt_token, TokenDecryptionError
         try:
             token = decrypt_token(target_row["token_encrypted"])
@@ -710,7 +690,7 @@ def send_conversation_turn(target_row, prompt: str, history: list, timeout: floa
                 # nested one simply won't round-trip through a real form
                 # endpoint and so will never be the one that succeeds).
                 resp = requests.post(target_row["url"], json=body, headers=headers, params=params,
-                                      timeout=timeout, proxies=get_proxies())
+                                      timeout=http_timeout(target_row, timeout), proxies=get_proxies())
             except Exception as e:
                 response_text = f"[ERROR] {e}"
                 if attempt < max_retries and _worth_retrying(e):

@@ -64,6 +64,9 @@ For Windows, manual installation, and optional engines, see [📦 Setup](#-setup
 Discover HTTP chat endpoints from a URL, or use Playwright to capture a chat request from a web page.
 Supported transports include JSON APIs, server-rendered HTML chat pages, SSE, raw WebSocket, and Socket.io.
 Review the detected URL, authentication, request body, and response before saving the target.
+Each target has a response timeout in Add/Edit Target (5-600 seconds, default 180), shared by all scan engines.
+HTTP connection setup is separately limited to 10 seconds; read timeouts never automatically replay a prompt.
+PyRIT's finite worker budget accounts for the configured response budget, and its owned worker remains stoppable.
 
 Tokens are optional. Supported authentication includes Bearer tokens, cookies, custom token headers,
 and query parameters. Browser discovery can retain a custom request template with required extra fields.

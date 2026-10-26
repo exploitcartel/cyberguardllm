@@ -5,6 +5,7 @@ import json, csv, io
 import secrets
 from functools import wraps
 from core import updates
+from core.transport_policy import parse_timeout, DEFAULT_RESPONSE_TIMEOUT
 import yaml
 from flask import (Flask, request, render_template, redirect, make_response, send_file, jsonify, Response,
                     flash, get_flashed_messages, url_for, abort)
@@ -473,9 +474,13 @@ def target_discover():
     name = request.form.get("name")
     url = request.form.get("url")
     token = request.form.get("token")
-    discovery = discover_target(url, token)
+    try:
+        request_timeout = parse_timeout(request.form.get('request_timeout', DEFAULT_RESPONSE_TIMEOUT))
+    except ValueError as exc:
+        return Response(str(exc),status=400)
+    discovery = discover_target(url, token, timeout=request_timeout)
     return render_template("target_new.html", **ctx(
-        active="targets", discovery=discovery, form_name=name, form_url=url, form_token=token,
+        active="targets", discovery=discovery, form_name=name, form_url=url, form_token=token, request_timeout=request_timeout,
     ))
 
 
@@ -562,6 +567,10 @@ def target_discover_socketio():
 def target_save():
     username, err = require_role("administrator")
     if err: return err
+    try:
+        request_timeout = parse_timeout(request.form.get('request_timeout', DEFAULT_RESPONSE_TIMEOUT))
+    except ValueError as exc:
+        return Response(str(exc),status=400)
     name = request.form.get("name")
     url = request.form.get("url")
     token = (request.form.get("token") or "").strip()  # may be empty: some targets need no credentials
@@ -574,13 +583,14 @@ def target_save():
     ws_auth_mode = request.form.get("ws_auth_mode") or None
     ws_event_name = request.form.get("ws_event_name") or None
     conn = get_conn()
-    conn.execute(
+    cur = conn.execute(
         """INSERT INTO targets (name, url, token_encrypted, auth_scheme, body_format, response_field, status,
            created_at, body_template_json, transport, ws_auth_mode, ws_event_name, body_encoding)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (name, url, encrypt_token(token), auth_scheme, body_format, response_field, "active", now(),
          body_template_json, transport, ws_auth_mode, ws_event_name, body_encoding),
     )
+    conn.execute('UPDATE targets SET request_timeout=? WHERE id=?',(request_timeout,cur.lastrowid))
     conn.commit()
     conn.close()
     log_activity(username, "Target Created", name)
@@ -628,6 +638,11 @@ def target_edit_save(target_id):
         conn.close()
         return forbidden("Target not found.")
 
+    try:
+        request_timeout = parse_timeout(request.form.get('request_timeout', target['request_timeout'] or DEFAULT_RESPONSE_TIMEOUT))
+    except ValueError as exc:
+        conn.close()
+        return Response(str(exc),status=400)
     name = request.form.get("name", "").strip()
     url = request.form.get("url", "").strip()
     auth_scheme = request.form.get("auth_scheme", "").strip()
@@ -645,9 +660,10 @@ def target_edit_save(target_id):
         conn.execute("UPDATE targets SET token_encrypted=? WHERE id=?", (encrypt_token(new_token.strip()), target_id))
 
     conn.execute(
-        """UPDATE targets SET name=?, url=?, auth_scheme=?, body_format=?, body_encoding=?, response_field=?
+        """UPDATE targets SET name=?, url=?, auth_scheme=?, body_format=?, body_encoding=?, response_field=?,request_timeout=?,assessment_policy=?
            WHERE id=?""",
-        (name, url, auth_scheme, body_format, body_encoding, response_field, target_id),
+        (name, url, auth_scheme, body_format, body_encoding, response_field, request_timeout,
+         request.form.get('assessment_policy', target['assessment_policy'] or '').strip(), target_id),
     )
     conn.commit()
     conn.close()

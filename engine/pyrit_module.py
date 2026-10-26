@@ -447,6 +447,10 @@ def _run_pyrit_process(conn, payload, timeout_s, on_event, command=None):
 
 
 def run_pyrit_scan(conn, result_id, target_row, objective_keys, timeout_s=900, task_id=None):
+    from core.transport_policy import response_timeout
+    # Crescendo can use 5 turns + 2 backtracks + one direct fallback.
+    # The parent still enforces a finite cap and Stop terminates the owned worker.
+    timeout_s = min(7200, max(timeout_s, int(response_timeout(target_row, 90)) * 8 + 300))
     from storage.db import get_setting
     from core.crypto import decrypt_token
     from engine.scorer import compute_risk_score_rows

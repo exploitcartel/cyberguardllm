@@ -11,6 +11,8 @@ activity log details) is never translated, since it is real content, not UI.
 """
 
 TRANSLATIONS = {
+    'target_response_timeout': {'en':'Target response timeout (seconds)', 'al':'Koha e pritjes për target-in (sekonda)'},
+    'target_timeout_help': {'en':'5-600 seconds per response; default 180. Shared by all scan engines and overrides their per-request defaults. HTTP connection setup is limited to 10 seconds. Read timeouts are not automatically replayed. Overall module budgets remain finite; Pause/Stop behavior is unchanged.', 'al':'5-600 sekonda për përgjigje; parazgjedhja 180. Përdoret nga të gjithë motorët mbi parazgjedhjet e tyre. Lidhja HTTP kufizohet në 10 sekonda. Kërkesat me read timeout nuk ridërgohen automatikisht. Buxhetet e moduleve mbeten të kufizuara.'},
     'pentest_rationale_note': {'en':'The rationale is AI-generated interpretation, not verified capability or policy evidence. The category definitions below come from the application.', 'al':'Arsyetimi është interpretim i gjeneruar nga AI, jo provë për aftësitë apo politikat. Përkufizimet e kategorive më poshtë vijnë nga aplikacioni.'},
     'coverage_limited': {'en':'Limited coverage', 'al':'Mbulim i kufizuar'},
     'coverage_limit_title': {'en':'Coverage limitation', 'al':'Kufizimi i mbulimit'},

@@ -358,6 +358,14 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     toc_entry = ParagraphStyle("TocEntry", parent=styles["Normal"], fontSize=12, leading=22)
 
     elements = []
+    mode_label = (scan_result['mode'] or 'offline').replace('_', ' ').title()
+    if scan_config is not None:
+        engines = [label for key, label in (
+            ('enable_static', 'Static'), ('ai_powered', 'AI-Powered'), ('use_ai_pentest', 'AI-PENTEST'),
+            ('use_garak', 'Garak'), ('use_pyrit', 'PyRIT'), ('use_crescendo', 'Crescendo'))
+            if _row_get(scan_config, key, 0)]
+        if engines:
+            mode_label = ' + '.join(engines)
 
     # ---------- Page 1: Cover ----------
     elements.append(Spacer(1, 2 * cm))
@@ -371,7 +379,7 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     elements.append(Spacer(1, 0.6 * cm))
     elements.append(Paragraph(f"Target: {target['name']} ({target['url']})", cover_meta))
     elements.append(Paragraph(f"Report generated: {_row_get(scan_result, 'finished_at') or scan_result['timestamp']}", cover_meta))
-    elements.append(Paragraph(f"Scan mode: {(scan_result['mode'] or 'offline').replace('_',' ').title()}", cover_meta))
+    elements.append(Paragraph(f"Scan mode: {mode_label}", cover_meta))
     elements.append(Paragraph("Assessment framework: OWASP Top 10 for Large Language Model Applications", cover_meta))
     elements.append(PageBreak())
 
@@ -408,7 +416,8 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
         ["Scan started", scan_result["timestamp"] or "-"],
         ["Scan finished", _row_get(scan_result, "finished_at") or "-"],
         ["Duration", _duration(scan_result["timestamp"], _row_get(scan_result, "finished_at"))],
-        ["Scan mode", (scan_result["mode"] or "offline").replace("_", " ").title()],
+        ["Scan mode", mode_label],
+        ['Scanner version', _row_get(scan_result, 'scanner_version') or 'Not recorded (older scan)'],
         ["Scan status", _row_get(scan_result, "status", "unknown")],
         ["Assessment completeness", "Incomplete" if assessment["incomplete"] else "Recorded scope completed"],
     ]

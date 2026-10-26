@@ -10,6 +10,7 @@
     <a href="/results/{{ result.id }}/pdf" class="btn btn-primary">{{ t('btn_export_pdf') }}</a>
   </div>
 </div>
+<p class="muted">Scanner version: {{ result.scanner_version or 'Not recorded (older scan)' }}</p>
 {% if result.status in ('stopped', 'error') %}
 <div class="card" style="margin-bottom:16px;" role="status"><strong>Partial assessment: {{ result.status }}.</strong>
 <p>The score counts confirmed FAIL findings only. Unresolved REVIEW and ERROR records are excluded; a zero score does not establish safety.</p></div>

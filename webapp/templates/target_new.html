@@ -8,6 +8,7 @@
       <div class="field"><label>{{ t('field_target_name') }}</label><input type="text" name="name" id="detect-name" placeholder="ChatGPT Clone" value="{{ form_name or '' }}" required></div>
       <div class="field"><label>{{ t('field_target_url') }}</label><input type="text" name="url" id="detect-url" placeholder="https://chat.example.com/api/chat" value="{{ form_url or '' }}" required></div>
       <div class="field"><label>{{ t('field_session_token') }}</label><input type="password" name="token" id="detect-token" placeholder="eyJhbGc... ({{ t('optional') }})" value="{{ form_token or '' }}"></div>
+      {% include '_target_timeout.html' %}
       <button class="btn btn-primary" type="submit">{{ t('btn_detect') }}</button>
       <button class="btn" type="button" onclick="document.getElementById('detect-name').value='';document.getElementById('detect-url').value='';document.getElementById('detect-token').value='';document.getElementById('detect-name').focus();">Clear</button>
       <a href="/targets" class="btn">{{ t('btn_cancel') }}</a>
@@ -31,7 +32,8 @@
         <input type="hidden" name="body_format" value="{{ discovery.body_format }}">
         <input type="hidden" name="body_encoding" value="{{ discovery.body_encoding }}">
         <input type="hidden" name="response_field" value="{{ discovery.response_field }}">
-        <button class="btn btn-primary" type="submit">{{ t('btn_save_target') }}</button>
+        {% include '_target_timeout.html' %}
+      <button class="btn btn-primary" type="submit">{{ t('btn_save_target') }}</button>
       </form>
     {% else %}
       <p style="color:var(--danger);">{{ t('discovery_failed') }}</p>
@@ -75,6 +77,7 @@
       <input type="hidden" name="response_field" value="{{ browser_discovery.response_field }}">
       <input type="hidden" name="body_template_json" value='{{ browser_discovery.body_template_json }}'>
       <p style="color:var(--text-muted);font-size:14px;">{{ t('review_token_hint') }}</p>
+      {% include '_target_timeout.html' %}
       <button class="btn btn-primary" type="submit">{{ t('btn_save_target') }}</button>
     </form>
   </div>
@@ -107,7 +110,8 @@
         <input type="hidden" name="transport" value="ws">
         <input type="hidden" name="ws_auth_mode" value="{{ ws_discovery.ws_auth_mode }}">
         <input type="hidden" name="body_format" value="{{ ws_discovery.body_format }}">
-        <button class="btn btn-primary" type="submit">{{ t('btn_save_target') }}</button>
+        {% include '_target_timeout.html' %}
+      <button class="btn btn-primary" type="submit">{{ t('btn_save_target') }}</button>
       </form>
     {% else %}
       <p style="color:var(--danger);">{{ t('discovery_failed') }}</p>
@@ -143,7 +147,8 @@
         <input type="hidden" name="transport" value="socketio">
         <input type="hidden" name="ws_event_name" value="{{ sio_discovery.ws_event_name }}">
         <input type="hidden" name="body_format" value="{{ sio_discovery.body_format }}">
-        <button class="btn btn-primary" type="submit">{{ t('btn_save_target') }}</button>
+        {% include '_target_timeout.html' %}
+      <button class="btn btn-primary" type="submit">{{ t('btn_save_target') }}</button>
       </form>
     {% else %}
       <p style="color:var(--danger);">{{ t('discovery_failed') }}</p>

@@ -283,6 +283,8 @@ def _create_indexes(conn):
 # that an existing cyberguardllm.db (with real scan history) picks them up
 # via ALTER TABLE instead of needing the database to be deleted and recreated.
 _MIGRATIONS = [
+    ('scan_results', 'scanner_version', 'TEXT'),
+    ('targets', 'assessment_policy', 'TEXT'),
     ("findings", "confidence", "INTEGER"),
     ("findings", "triage_status", "TEXT DEFAULT 'open'"),
     ("findings", "triage_note", "TEXT"),
@@ -291,6 +293,7 @@ _MIGRATIONS = [
     ("findings", "coverage_note", "TEXT"),
     ("findings", "judge_verdict", "TEXT"),
     ("targets", "body_template_json", "TEXT"),
+    ("targets", "request_timeout", "INTEGER DEFAULT 180"),
     ("scan_configs", "use_garak", "INTEGER DEFAULT 0"),
     ("scan_configs", "garak_probes", "TEXT"),
     ("scan_configs", "use_pyrit", "INTEGER DEFAULT 0"),

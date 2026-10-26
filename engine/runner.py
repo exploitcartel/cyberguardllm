@@ -1004,6 +1004,8 @@ def _execute(task_id: int):
         (task["id"], target["id"], now(), "running", "ai_pentest" if ai_pentest else ("ai_powered" if ai_powered else "offline"), proxy_used),
     )
     result_id = cur.lastrowid
+    from core.provenance import scanner_version
+    conn.execute('UPDATE scan_results SET scanner_version=? WHERE id=?', (scanner_version(), result_id))
     # Link the task to its result right away: a scan with no static or AI phase (garak only) never set this, so the
     # live page redirected to /results/null (a 404) when the scan finished.
     conn.execute("UPDATE tasks SET result_id=? WHERE id=?", (result_id, task["id"]))
@@ -1198,9 +1200,10 @@ def _execute(task_id: int):
 def _finalize_scan(conn, task_id, result_id, stopped=False):
     """Serialize terminal updates with Stop so a late completion cannot undo cancellation."""
     rows = conn.execute("SELECT severity,verdict FROM findings WHERE scan_result_id=?", (result_id,)).fetchall()
+    failed = any(r['verdict'] == 'ERROR' for r in rows) and not any(r['verdict'] in ('PASS', 'FAIL', 'REVIEW') for r in rows)
     # The first UPDATE takes SQLite's writer lock; Stop and completion then observe one consistent order.
-    conn.execute("UPDATE tasks SET status=CASE WHEN ? OR control='stop' OR status='stopped' THEN 'stopped' ELSE 'completed' END WHERE id=?",
-                 (stopped, task_id))
+    conn.execute("UPDATE tasks SET status=CASE WHEN ? OR control='stop' OR status='stopped' THEN 'stopped' WHEN ? THEN 'error' ELSE 'completed' END WHERE id=?",
+                 (stopped, failed, task_id))
     status = conn.execute("SELECT status FROM tasks WHERE id=?", (task_id,)).fetchone()["status"]
     conn.execute("UPDATE scan_results SET total_findings=?,risk_score=?,status=?,finished_at=? WHERE id=?",
                  (sum(r["verdict"] == "FAIL" for r in rows), compute_risk_score_rows(rows), status, now(), result_id))

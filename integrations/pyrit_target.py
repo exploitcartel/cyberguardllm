@@ -57,7 +57,8 @@ class CyberGuardTarget(PromptTarget):
 
     @property
     def next_timeout(self):
-        return min(180.0, 90.0 + 15.0 * self._requests_sent)
+        from core.transport_policy import response_timeout
+        return response_timeout(self._load_target_row(), min(180.0, 90.0 + 15.0 * self._requests_sent))
 
     def _load_target_row(self):
         if self._target_row is not None:

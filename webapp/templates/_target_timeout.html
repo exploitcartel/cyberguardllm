@@ -1,0 +1,5 @@
+<div class="field">
+  <label>{{ t('target_response_timeout') }}</label>
+  <input type="number" name="request_timeout" min="5" max="600" step="1" value="{{ request_timeout or 180 }}" required>
+  <p class="muted">{{ t('target_timeout_help') }}</p>
+</div>

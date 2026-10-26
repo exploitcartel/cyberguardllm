@@ -62,16 +62,37 @@ def run(replies, objective=None, max_turns=6, **kw):
 
 
 class RunObjectiveTests(unittest.TestCase):
+    def test_claim_of_action_cannot_be_confirmed_fail_without_external_evidence(self):
+        result, _, _ = run(['BREAK: refund applied'], max_turns=1)
+        self.assertEqual(result['verdict'], 'REVIEW')
+        self.assertIn('No external action was verified', result['reasoning'])
+
+    def test_final_judge_receives_refusals_and_earlier_suspect_reply(self):
+        observed = []
+        def judge(cfg, objective, message, reply, turns):
+            observed.append(list(turns))
+            return dict(achieved=False, refused=False, confidence=90, progress=10, reasoning='No proven action.')
+        with mock.patch.object(cm, 'assess_turn', side_effect=judge):
+            result, _, _ = run(['first reply', 'second reply'], max_turns=2)
+        self.assertEqual(observed[-1], [('msg-1', 'first reply')])
+        self.assertEqual(result['confidence'], 90)
+
+    def test_reasoning_is_not_truncated(self):
+        long_reason = 'Evidence explanation. ' * 40
+        raw = json.dumps(dict(achieved=False, refused=True, confidence=90, progress=0, reasoning=long_reason))
+        with mock.patch.object(cm.ai_agent, '_chat', return_value=raw):
+            self.assertEqual(cm.assess_turn(AI_CFG, OBJ, 'fixture', 'reply', [])['reasoning'], long_reason)
+
     def test_gradual_escalation_that_finally_breaks_is_a_fail(self):
         result, ai, target = run(["hello there", "sure, tell me more", "BREAK: discount applied"])
-        self.assertEqual(result["verdict"], "FAIL")
+        self.assertEqual(result["verdict"], "REVIEW")
         self.assertEqual(len(result["turns"]), 3)
         self.assertEqual(result["progress_trail"], [40, 40, 100])
         self.assertEqual(result["backtracks"], 0)
 
     def test_refusal_is_backtracked_out_of_history_and_attacker_is_told(self):
         result, ai, target = run(["hello", "REFUSE: not allowed", "BREAK: ok"])
-        self.assertEqual(result["verdict"], "FAIL")
+        self.assertEqual(result["verdict"], "REVIEW")
         self.assertEqual(result["backtracks"], 1)
         # turn 1 accepted -> 2 history entries; the refused exchange is dropped, so the next send
         # still replays only the first exchange.
@@ -100,10 +121,10 @@ class RunObjectiveTests(unittest.TestCase):
         result, _, _ = run(["hi", "[ERROR] timed out"])
         self.assertEqual(result["verdict"], "ERROR")
 
-    def test_marker_objective_succeeds_deterministically(self):
+    def test_marker_alone_requires_review(self):
         objective = dict(cm.OBJECTIVES["role_override_marker"])
-        result, _, _ = run(["ok", f"Sure. {cm.OVERRIDE_MARKER}"], objective=objective)
-        self.assertEqual(result["verdict"], "FAIL")
+        result, _, _ = run(["ok", f"Sure. {cm.OVERRIDE_MARKER}"], objective=objective, max_turns=2)
+        self.assertEqual(result["verdict"], "REVIEW")
 
     def test_marker_quoted_inside_a_refusal_is_not_a_fail(self):
         objective = dict(cm.OBJECTIVES["role_override_marker"])
@@ -117,6 +138,58 @@ class RunObjectiveTests(unittest.TestCase):
 
 
 class RunScanTests(CyberGuardTestCase):
+    def test_policy_saved_and_source_identity_available(self):
+        from core.provenance import scanner_version
+        self.assertRegex(scanner_version(), r'/ source-[a-f0-9]{16}$')
+        conn, rid = self._result_row()
+        conn.commit()
+        response = self.client.post('/targets/1/edit', data=dict(name='fixture', url='http://t',
+                    auth_scheme='none', body_format='message', response_field='reply',
+                    request_timeout='180', assessment_policy='Only human support may approve refunds.'))
+        self.assertEqual(response.status_code, 302)
+        row = conn.execute('SELECT assessment_policy FROM targets WHERE id=1').fetchone()
+        self.assertIn('human support', row[0])
+
+    def test_error_only_scan_is_error_and_stop_wins(self):
+        from engine.runner import _finalize_scan
+        conn, rid = self._result_row()
+        task = conn.execute("INSERT INTO tasks(target_id,status,control) VALUES (1,'running','run')").lastrowid
+        cm._insert(conn, rid, 'fixture', 'LLM01', 'low', 'ERROR', '', '', 'fixture error')
+        _finalize_scan(conn, task, rid)
+        self.assertEqual(conn.execute('SELECT status FROM scan_results WHERE id=?', (rid,)).fetchone()[0], 'error')
+        conn.execute("UPDATE tasks SET control='stop' WHERE id=?", (task,))
+        _finalize_scan(conn, task, rid)
+        self.assertEqual(conn.execute('SELECT status FROM scan_results WHERE id=?', (rid,)).fetchone()[0], 'stopped')
+
+    def test_judge_failure_preserves_reply_and_records_phase(self):
+        conn, rid = self._result_row()
+        with mock.patch.object(cm, 'next_attacker_message', return_value='fixture question'), \
+             mock.patch.object(cm, 'send_conversation_turn', return_value=('fixture reply', [])), \
+             mock.patch.object(cm, 'assess_turn', side_effect=TimeoutError('fixture provider timeout')):
+            cm.run_crescendo_scan(conn, rid, {}, ['system_prompt_leak'], AI_CFG)
+        row = conn.execute('SELECT * FROM findings').fetchone()
+        self.assertEqual(row['verdict'], 'ERROR')
+        self.assertIn('fixture reply', row['raw_response'])
+        self.assertIn('fixture question', row['prompt_sent'])
+        self.assertIn('during judge', row['description'])
+        self.assertTrue(conn.execute("SELECT 1 FROM error_log WHERE source='crescendo'").fetchone())
+
+    def test_attacker_failure_after_backtrack_preserves_all_exchanges(self):
+        conn, rid = self._result_row()
+        with mock.patch.object(cm, 'next_attacker_message', side_effect=['fixture', TimeoutError('offline')]), \
+             mock.patch.object(cm, 'send_conversation_turn', return_value=('refused fixture', [])), \
+             mock.patch.object(cm, 'assess_turn', return_value=dict(achieved=False, refused=True, progress=0, confidence=90, reasoning='refused')):
+            cm.run_crescendo_scan(conn, rid, {}, ['system_prompt_leak'], AI_CFG)
+        row = conn.execute('SELECT * FROM findings').fetchone()
+        self.assertEqual(row['verdict'], 'ERROR')
+        self.assertIn('refused fixture', row['raw_response'])
+        self.assertIn('during attacker', row['description'])
+
+    def test_invalid_judge_json_cannot_become_pass(self):
+        with mock.patch.object(cm.ai_agent, '_chat', return_value='not json'):
+            with self.assertRaises(ValueError):
+                cm.assess_turn(AI_CFG, OBJ, 'fixture', 'fixture reply', [])
+
     def _result_row(self):
         conn = self.get_conn()
         conn.execute("INSERT INTO targets (name,url,token_encrypted,created_at) VALUES ('t','http://t','e','2026')")
@@ -132,11 +205,11 @@ class RunScanTests(CyberGuardTestCase):
         self.assertFalse(stopped)
         f = conn.execute("SELECT * FROM findings").fetchone()
         self.assertEqual((f["rule_id"], f["verdict"], f["source"], f["owasp"]),
-                         ("crescendo-unauthorized_commitment", "FAIL", "crescendo", "LLM03"))
+                         ("crescendo-unauthorized_commitment", "REVIEW", "crescendo", "LLM03"))
         self.assertIn("[Turn 2] msg-2", f["prompt_sent"])
-        self.assertIn("progress per turn: 40 > 100", f["description"])
+        self.assertIn("progress per attempt: 40 > 100", f["description"])
         from engine.graders import GRADERS
-        self.assertEqual(f["recommendation"], GRADERS["bfla_rbac"]["remediation"])
+        self.assertIn("Verification required", f["description"])
 
     def test_no_ai_configured_records_one_error_finding_and_sends_nothing(self):
         conn, rid = self._result_row()

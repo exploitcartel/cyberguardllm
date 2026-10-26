@@ -46,7 +46,7 @@ class PyritProgressTests(CyberGuardTestCase):
 
     def test_progress_is_visible_during_execution_and_survives_reload(self):
         def process(conn, payload, timeout, event):
-            self.assertEqual(timeout, 900)
+            self.assertGreaterEqual(timeout, 180 * 8)
             event(dict(kind='phase', stage='target', message='Waiting for target response...'))
             first = self.client.get('/api/scan-status/1').get_json()['pyrit']
             self.assertEqual((first['sent'], first['finished'], first['responses']), (1, 0, 0))
