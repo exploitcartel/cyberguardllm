@@ -13,16 +13,25 @@ def row_value(row, key, default=None):
 
 def campaign_summary(findings):
     import json
+    summaries = []
     for finding in findings:
-        if row_value(finding, "source") == "ai_agent" and row_value(finding, "rule_id") == "ai-campaign-summary":
+        if (row_value(finding, "source"), row_value(finding, "rule_id")) in (
+                ('ai_agent','ai-campaign-summary'), ('ai_pentest','ai-pentest-campaign-summary')):
             try:
                 parsed = json.loads(row_value(finding, "description", ""))
                 if (isinstance(parsed, dict) and isinstance(parsed.get("objectives"), list)
                         and all(isinstance(o, dict) for o in parsed["objectives"])):
-                    return parsed
+                    summaries.append(parsed)
             except (ValueError, TypeError):
                 pass
-    return None
+    if not summaries: return None
+    if len(summaries) == 1: return summaries[0]
+    combined = {key: sum(int(s.get(key,0)) for s in summaries) for key in (
+        'generation_calls','generation_budget','primary_target_requests','retest_target_requests',
+        'judge_calls','warmup_requests','duplicate_prompts','planning_calls','profiling_requests')}
+    combined['objectives'] = [o for s in summaries for o in s['objectives']]
+    combined['explicit_history'] = all(s.get('explicit_history',False) for s in summaries)
+    return combined
 
 
 def assessment_context(scan_result, findings, garak_progress=None):
@@ -44,7 +53,9 @@ def assessment_context(scan_result, findings, garak_progress=None):
     if degraded:
         reasons.append("PyRIT adaptive Crescendo did not run for " + ", ".join(degraded) +
                        "; only the recorded single-turn fallback was evaluated.")
-    if any(row_value(f, 'source') == 'pyrit' and 'Target-side conversation continuity and rollback are unverified' in row_value(f, 'description', '') for f in findings):
+    coverage_notes = list(dict.fromkeys(row_value(f,'coverage_note') for f in findings if row_value(f,'coverage_note')))
+    reasons.extend('Coverage limitation: '+note for note in coverage_notes)
+    if not coverage_notes and any(row_value(f, 'source') == 'pyrit' and 'Target-side conversation continuity and rollback are unverified' in row_value(f, 'description', '') for f in findings):
         reasons.append('PyRIT conversation continuity and rollback were not verified for this target profile.')
     campaign = campaign_summary(findings)
     if campaign:

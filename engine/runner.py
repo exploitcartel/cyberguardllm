@@ -586,10 +586,12 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
     return False  # ran to completion (or aborted on an unresponsive target), not stopped by the operator
 
 
-def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=None, intensity=None, config=None, recon_context=None):
+def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=None, intensity=None, config=None, recon_context=None, source_tag="ai_agent"):
     """Run a bounded objective campaign with accumulated evidence and explicit session limits."""
     from engine import ai_agent
     from core.crypto import decrypt_token
+    rule_prefix = "ai-pentest" if source_tag == "ai_pentest" else "ai"
+    module_label = "AI-PENTEST Agent" if source_tag == "ai_pentest" else "AI-Powered Adversarial Agent"
     from engine.ai_objectives import CampaignMemory, OBJECTIVES, evidence_verdict
     memory = CampaignMemory()
     usage = dict(generation_calls=0, primary_target_requests=0, retest_target_requests=0, judge_calls=0, duplicate_prompts=0)
@@ -664,7 +666,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
             (result_id, "ai-config-error", "LLM01", "low", "ERROR", "", "",
              "AI-Powered scan mode is enabled but no AI API base/key is configured in Settings. No AI attack attempts were run.",
-             None, "ai_agent", "Configure an AI API base URL and key under Settings to use AI-Powered scanning."),
+             None, source_tag, "Configure an AI API base URL and key under Settings to use AI-Powered scanning."),
         )
         conn.execute("UPDATE tasks SET progress_done=?, progress_findings=?, last_rule_id=? WHERE id=?",
                      (total, 0, "ai-config-error", task_id))
@@ -700,7 +702,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
         conn.execute("INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict,description,module,source) VALUES(?,?,?,?,?,?,?,?)",
             (result_id, "ai-session-scope", cats[0], "low", "INFO",
              "AI campaign uses independent request bodies. This target's profile does not accept explicit message history; server-side memory may persist. Session isolation and reset are not verified.",
-             "AI campaign scope", "ai_agent"))
+             "AI campaign scope", source_tag))
         conn.commit()
     hit_global_cap = False
     consecutive_transport_errors = 0
@@ -736,7 +738,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                      f"AI-Powered scan reached its safety cap of {AI_POWERED_GLOBAL_ATTEMPT_CAP} total attempts "
                      "across all categories and stopped here, so this scan has a guaranteed end regardless of "
                      "configuration. Remaining categories were skipped; everything completed so far is saved.",
-                     None, "ai_agent", ""),
+                     None, source_tag, ""),
                 )
                 conn.execute("UPDATE tasks SET progress_done=?, progress_findings=?, last_rule_id=? WHERE id=?",
                              (total, findings_count, "ai-global-cap-reached", task_id))
@@ -745,7 +747,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 break
 
             step += 1
-            rule_id = f"ai-{owasp_code}-{attempt}"
+            rule_id = f"{rule_prefix}-{owasp_code}-{attempt}"
             technique_hint = memory.technique(objective)
             previous = next((r for r in reversed(memory.records) if r["objective_id"] == objective.id and r["verdict"] != "INFO"), None)
             prev_prompt, prev_response, prev_reasoning = ((previous["prompt"], previous["response"], previous["reasoning"]) if previous else (None, None, None))
@@ -769,7 +771,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                      f"AI-generated adversarial attempt #{attempt} for {owasp_code} ({label}) could not run: {e}. "
                      "Nothing was sent to the target. This is not a security result; the attacking model most "
                      "likely declined to write this attack prompt.",
-                     "AI-Powered Adversarial Agent", "ai_agent",
+                     module_label, source_tag,
                      "Try a different attacking model under Settings if this keeps happening."))
                 if consecutive_empty_prompts >= AI_MAX_CONSECUTIVE_EMPTY_PROMPTS:
                     conn.execute(
@@ -781,7 +783,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                          f"{consecutive_empty_prompts} times in a row ({e}). It appears to be declining to write "
                          "adversarial prompts, so the remaining attempts were not made. This is a scan/model "
                          "issue, not a security result.",
-                         "AI-Powered Adversarial Agent", "ai_agent",
+                         module_label, source_tag,
                          "Use a different attacking model (Settings > AI API) and re-run."))
                     conn.execute("UPDATE tasks SET progress_done=?, last_rule_id=? WHERE id=?",
                                  (total, "ai-attacker-declined", task_id))
@@ -812,7 +814,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                     (result_id, "ai-call-error", owasp_code, "low", "ERROR", "", "",
                      f"AI-Powered scan stopped: the attacking AI agent call failed ({err_detail}). "
                      "Check the AI provider, model name and API key under Settings, then re-run this scan.",
-                     "ai_agent", "ai_agent",
+                     source_tag, source_tag,
                      "Fix the AI API configuration under Settings and re-run this scan."),
                 )
                 conn.execute("UPDATE tasks SET progress_done=?, progress_findings=?, last_rule_id=? WHERE id=?",
@@ -831,7 +833,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 conn.execute("INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict,description,module,source) VALUES(?,?,?,?,?,?,?,?)",
                     (result_id, rule_id + "-duplicate", owasp_code, "low", "INFO",
                      f"Objective {objective.id}: duplicate generated prompt was not sent or evaluated; generation budget slot consumed.",
-                     "AI campaign planner", "ai_agent"))
+                     "AI campaign planner", source_tag))
                 memory.remember(objective, technique_hint, prompt, "", "INFO", "Duplicate: choose a different prompt.", sent=False)
                 conn.execute("UPDATE tasks SET progress_total=?,progress_done=?,last_rule_id=? WHERE id=?", (total, step, rule_id + "-duplicate", task_id))
                 conn.commit()
@@ -924,7 +926,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response, description, module, source, recommendation, confidence, reproducibility_hits, reproducibility_total)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (result_id, rule_id, owasp_code, severity, verdict, judging_prompt, response_text, description,
-                 "AI-Powered Adversarial Agent", "ai_agent",
+                 module_label, source_tag,
                  objective.remediation if verdict in ("FAIL", "REVIEW") else "",
                  confidence, repro_hits, repro_total),
             )
@@ -965,7 +967,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                                     confirmed=o.id in memory.confirmed,
                                     progress=memory.progress.get(o.id, 0)) for code in cats for o in OBJECTIVES[code]])
     conn.execute("INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict,description,module,source) VALUES(?,?,?,?,?,?,?,?)",
-                 (result_id, "ai-campaign-summary", cats[0], "low", "INFO", json.dumps(summary), "AI campaign execution summary", "ai_agent"))
+                 (result_id, f"{rule_prefix}-campaign-summary", cats[0], "low", "INFO", json.dumps(summary), "AI campaign execution summary", source_tag))
     conn.commit()
     return False  # ran to completion, not stopped early
 
@@ -993,12 +995,13 @@ def _execute(task_id: int):
     # The config's own "AI-Powered mode" checkbox decides. The global Settings scan mode used to be OR-ed in here, which
     # turned AI-Powered on for configs where it was left unticked (a garak-only config ran 80 AI attempts first).
     ai_powered = bool(config["ai_powered"])
+    ai_pentest = bool(config['use_ai_pentest']) if 'use_ai_pentest' in config.keys() else False
 
     proxy_used = get_setting("proxy_url", "") if get_setting("proxy_enabled", "0") == "1" else None
 
     cur = conn.execute(
         "INSERT INTO scan_results (task_id, target_id, timestamp, status, mode, proxy_used) VALUES (?,?,?,?,?,?)",
-        (task["id"], target["id"], now(), "running", "ai_powered" if ai_powered else "offline", proxy_used),
+        (task["id"], target["id"], now(), "running", "ai_pentest" if ai_pentest else ("ai_powered" if ai_powered else "offline"), proxy_used),
     )
     result_id = cur.lastrowid
     # Link the task to its result right away: a scan with no static or AI phase (garak only) never set this, so the
@@ -1060,6 +1063,9 @@ def _execute(task_id: int):
             stopped = _run_ai_powered(conn, task_id, result_id, target, ai_categories,
                                        max_attempts=config["ai_max_attempts"], intensity=ai_intensity, config=config,
                                        recon_context=recon_context)
+        if not stopped and ai_pentest:
+            from engine.pentest_module import run_ai_pentest
+            stopped = run_ai_pentest(conn, task_id, result_id, target, config)
     except Exception as e:
         log_error("scanner", "scan-crashed", f"The scan stopped on an unexpected error: {e!r}",
                   task_id=task_id, result_id=result_id)

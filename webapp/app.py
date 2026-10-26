@@ -665,14 +665,9 @@ def target_trend(target_id):
     if not target:
         conn.close()
         return forbidden("Target not found.")
-    scans = conn.execute(
-        """SELECT id, timestamp, risk_score, total_findings, status FROM scan_results
-           WHERE target_id=? AND status='completed' ORDER BY timestamp ASC""",
-        (target_id,)
-    ).fetchall()
-
-    all_scores = [r["risk_score"] for r in conn.execute(
-        "SELECT risk_score FROM scan_results WHERE status='completed'").fetchall()]
+    eligible = _benchmark_rows(conn)
+    scans = sorted([s for s in eligible if s['target_id'] == target_id], key=lambda s:s['timestamp'] or '')
+    all_scores = [s['risk_score'] for s in eligible]
     benchmark_avg = round(sum(all_scores) / len(all_scores), 1) if all_scores else None
     target_scores = [s["risk_score"] for s in scans]
     target_avg = round(sum(target_scores) / len(target_scores), 1) if target_scores else None
@@ -777,7 +772,8 @@ def scan_configs_page():
     conn = get_conn()
     configs, paging = _paged_query(conn, "scan_configs", "*", "id DESC", 10, "scan_configs_page",
         ("name", "categories", "scan_level", "CASE WHEN use_garak THEN 'Garak' ELSE '' END",
-         "CASE WHEN use_pyrit THEN 'PyRIT' ELSE '' END", "CASE WHEN ai_powered THEN 'AI-Powered' ELSE 'Offline' END"),
+         "CASE WHEN use_pyrit THEN 'PyRIT' ELSE '' END", "CASE WHEN ai_powered THEN 'AI-Powered' ELSE 'Offline' END",
+         "CASE WHEN use_ai_pentest THEN 'AI-PENTEST' ELSE '' END"),
         request.args.get("q", "").strip(), anchor="existing-configs")
     conn.close()
     from engine.garak_module import AVAILABLE_PROBES as garak_probes
@@ -804,6 +800,16 @@ def scan_config_create():
     categories = request.form.getlist("categories")
     ai_categories = request.form.getlist("ai_categories")
     ai_powered = 1 if request.form.get("ai_powered") == "on" else 0
+    from engine.ai_objectives import OBJECTIVES as pentest_objectives
+    use_ai_pentest = int(request.form.get('use_ai_pentest') == 'on')
+    pentest_categories = list(dict.fromkeys(c for c in request.form.getlist('pentest_categories') if c in pentest_objectives))
+    try:
+        pentest_budget = max(8, min(40, int(request.form.get('pentest_budget', '16'))))
+    except (ValueError, TypeError):
+        pentest_budget = 16
+    if use_ai_pentest and not pentest_categories:
+        flash_t('pentest_select_categories')
+        return redirect('/scan-configs')
     scan_level = request.form.get("scan_level", "low")
     if scan_level not in ("low", "medium", "aggressive"):
         scan_level = "low"
@@ -847,7 +853,7 @@ def scan_config_create():
     ai_max_attempts = AI_INTENSITY_LEVELS[ai_intensity]
 
     conn = get_conn()
-    conn.execute(
+    cur = conn.execute(
         """INSERT INTO scan_configs (name, categories, ai_powered, use_garak, garak_probes, use_pyrit,
            pyrit_objectives, mutation_techniques, enable_retest, retest_count, enable_canary, enable_recon,
            ai_max_attempts, ai_intensity, enable_fingerprint, enable_session_isolation, scan_level, enable_static,
@@ -859,6 +865,8 @@ def scan_config_create():
          enable_static, ",".join(ai_categories), use_crescendo, ",".join(crescendo_objectives),
          crescendo_max_turns, now()),
     )
+    conn.execute('UPDATE scan_configs SET use_ai_pentest=?,pentest_categories=?,pentest_budget=? WHERE id=?',
+                 (use_ai_pentest, ','.join(pentest_categories), pentest_budget, cur.lastrowid))
     conn.commit()
     conn.close()
     log_activity(username, "Config Created", name)
@@ -1203,10 +1211,15 @@ def result_detail(result_id):
     findings = conn.execute("SELECT * FROM findings WHERE " + where + " ORDER BY " + view.order + " LIMIT 50 OFFSET ?",
                             values + [(view.page - 1) * 50]).fetchall()
     verdict_counts = view.counts(conn)
-    summary_row = conn.execute("SELECT * FROM findings WHERE scan_result_id=? AND source='ai_agent' AND rule_id='ai-campaign-summary' ORDER BY id DESC LIMIT 1", (result_id,)).fetchone()
-    ai_campaign = campaign_summary([summary_row] if summary_row else [])
+    summary_rows = conn.execute("SELECT * FROM findings WHERE scan_result_id=? AND ((source='ai_agent' AND rule_id='ai-campaign-summary') OR (source='ai_pentest' AND rule_id='ai-pentest-campaign-summary')) ORDER BY id", (result_id,)).fetchall()
+    ai_campaign = campaign_summary(summary_rows)
+    plan_row = conn.execute("SELECT id,description FROM findings WHERE scan_result_id=? AND source='ai_pentest' AND rule_id='ai-pentest-plan' ORDER BY id DESC LIMIT 1",(result_id,)).fetchone()
+    try:
+        pentest_plan = json.loads(plan_row['description']) if plan_row else None
+    except (ValueError, TypeError):
+        pentest_plan = None
     attack_chains = conn.execute("SELECT * FROM attack_chains WHERE scan_result_id=?", (result_id,)).fetchall()
-    benchmark = _compute_benchmark(conn, result["target_id"])
+    benchmark = _compute_benchmark(conn, result["target_id"], result_id=result_id)
     conn.close()
     def finding_url(endpoint="result_detail", **changes):
         identity = {"result_id":result_id} if endpoint == "result_detail" else {}
@@ -1215,7 +1228,7 @@ def result_detail(result_id):
         attack_chains=attack_chains, benchmark=benchmark, page=view.page, total_pages=total_pages,
         findings_total=findings_total, sort=view.sort, direction=view.direction, finding_view=view,
         verdict_counts=verdict_counts, finding_url=finding_url, engine_labels=ENGINE_LABELS,
-        ai_campaign=ai_campaign))
+        ai_campaign=ai_campaign, pentest_plan=pentest_plan, pentest_plan_id=plan_row['id'] if plan_row else None))
 
 
 def _get_ai_cfg_for_report():
@@ -1233,11 +1246,26 @@ def _get_ai_cfg_for_report():
     return api_base, api_key, model
 
 
-def _compute_benchmark(conn, target_id):
-    all_scores = [r["risk_score"] for r in conn.execute(
-        "SELECT risk_score FROM scan_results WHERE status='completed'").fetchall()]
-    target_scores = [r["risk_score"] for r in conn.execute(
-        "SELECT risk_score FROM scan_results WHERE status='completed' AND target_id=?", (target_id,)).fetchall()]
+def _benchmark_rows(conn):
+    """Only completed, evaluated assessments without unresolved scope/errors enter comparisons."""
+    candidates = conn.execute("SELECT s.* FROM scan_results s WHERE s.status='completed' "
+        "AND EXISTS(SELECT 1 FROM findings f WHERE f.scan_result_id=s.id AND f.verdict IN ('PASS','FAIL')) "
+        "AND NOT EXISTS(SELECT 1 FROM findings f WHERE f.scan_result_id=s.id AND f.verdict IN ('ERROR','REVIEW'))").fetchall()
+    eligible = []
+    for row in candidates:
+        findings = conn.execute('SELECT * FROM findings WHERE scan_result_id=?',(row['id'],)).fetchall()
+        progress = conn.execute('SELECT * FROM garak_progress WHERE result_id=?',(row['id'],)).fetchone()
+        if not assessment_context(row, findings, progress)['incomplete']:
+            eligible.append(row)
+    return eligible
+
+
+def _compute_benchmark(conn, target_id, result_id=None):
+    rows = _benchmark_rows(conn)
+    if result_id is not None and not any(r['id'] == result_id for r in rows):
+        return None
+    all_scores = [r['risk_score'] for r in rows]
+    target_scores = [r['risk_score'] for r in rows if r['target_id'] == target_id]
     if not all_scores or not target_scores:
         return None
     benchmark_avg = round(sum(all_scores) / len(all_scores), 1)
@@ -1289,7 +1317,7 @@ def result_pdf(result_id):
     target = conn.execute("SELECT * FROM targets WHERE id=?", (result["target_id"],)).fetchone()
     findings = conn.execute("SELECT * FROM findings WHERE scan_result_id=?", (result_id,)).fetchall()
     attack_chains = conn.execute("SELECT * FROM attack_chains WHERE scan_result_id=?", (result_id,)).fetchall()
-    benchmark = _compute_benchmark(conn, result["target_id"])
+    benchmark = _compute_benchmark(conn, result["target_id"], result_id=result_id)
     scan_config = None
     try:
         task = conn.execute("SELECT * FROM tasks WHERE id=?", (result["task_id"],)).fetchone()

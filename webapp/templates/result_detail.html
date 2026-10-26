@@ -19,6 +19,18 @@
 <a class="btn" href="/scan/{{ result.task_id }}/live">Return to live scan</a>
 <p>New evaluated attempts appear as the scan progresses. Refresh this list to see the latest results.</p></div>
 {% endif %}
+{% if pentest_plan %}
+<details class="card" open style="margin-bottom:16px;">
+  <summary style="cursor:pointer;font-weight:700;">AI-PENTEST</summary>
+  <p class="muted">{{ t('pentest_rationale_note') }}</p>
+  <p>{{ pentest_plan.rationale }}</p>
+  {% if pentest_plan.category_labels %}<ul>{% for code in pentest_plan.categories %}<li>{{ code }} - {{ pentest_plan.category_labels[code] }}</li>{% endfor %}</ul>{% endif %}
+  <p>{{ t('pentest_plan') }}: <strong>{{ pentest_plan.categories|join(' > ') }}</strong></p>
+  <p>{{ t('pentest_budget') }}: {{ pentest_plan.scheduled_generation_attempts }} / {{ pentest_plan.generation_budget }}</p>
+  <p class="muted">{{ t('pentest_limits') }}</p>
+  <a class="btn btn-sm" href="/findings/{{ pentest_plan_id }}">{{ t('pentest_plan_details') }}</a>
+</details>
+{% endif %}
 {% if ai_campaign %}
 <details class="card" style="margin-bottom:16px;">
   <summary style="cursor:pointer;font-weight:700;">{{ t('ai_campaign_execution') }}</summary>
@@ -27,6 +39,7 @@
     &nbsp;·&nbsp; {{ t('ai_campaign_replays') }}: <strong>{{ ai_campaign.retest_target_requests }}</strong>
     &nbsp;·&nbsp; {{ t('ai_campaign_judge_calls') }}: <strong>{{ ai_campaign.judge_calls }}</strong></p>
   <p style="color:var(--text-muted);">{{ t('ai_campaign_count_note') }} {{ t('ai_campaign_warmup') }}: {{ ai_campaign.warmup_requests }}.</p>
+  {% if ai_campaign.planning_calls %}<p>{{ t('pentest_overhead') }}: {{ ai_campaign.profiling_requests }} / {{ ai_campaign.planning_calls }}</p>{% endif %}
   <ul>{% for objective in ai_campaign.objectives %}
     <li>{{ objective.category }} - {{ objective.goal }}
       <small>({{ objective.requests }} {{ t('ai_campaign_target_calls') | lower }}; {{ t('ai_campaign_progress') }} {{ objective.progress }}/3)</small>
@@ -49,6 +62,8 @@
     {% endif %}
   </p>
 </div>
+{% else %}
+<div class="card" style="margin-bottom:16px;"><p class="muted">{{ t('benchmark_unavailable') }}</p></div>
 {% endif %}
 {% if attack_chains %}
 <div class="card" style="margin-bottom:16px;">
@@ -98,7 +113,7 @@
       <td>{{ f.rule_id }}</td>
       <td>{{ f.owasp }}</td>
       <td><span class="badge badge-{{ f.severity }}">{{ f.severity }}</span></td>
-      <td><span class="badge badge-{{ 'fail' if f.verdict=='FAIL' else ('review' if f.verdict=='REVIEW' else ('error' if f.verdict in ('ERROR','INFO') else 'pass')) }}">{{ f.verdict }}</span>{% if f.reproducibility_total %} <span style="color:var(--text-muted);font-size:13.5px;" title="{{ t('reproducibility_hint') }}">{{ f.reproducibility_hits }}/{{ f.reproducibility_total }}</span>{% endif %}</td>
+      <td><span class="badge badge-{{ 'fail' if f.verdict=='FAIL' else ('review' if f.verdict=='REVIEW' else ('error' if f.verdict in ('ERROR','INFO') else 'pass')) }}">{{ f.verdict }}</span>{% if f.coverage_note %} <span class="badge badge-review" title="{{ f.coverage_note }}">{{ t("coverage_limited") }}</span>{% endif %}{% if f.reproducibility_total %} <span style="color:var(--text-muted);font-size:13.5px;" title="{{ t('reproducibility_hint') }}">{{ f.reproducibility_hits }}/{{ f.reproducibility_total }}</span>{% endif %}</td>
       <td>{% if f.confidence is not none %}{{ f.confidence }}%{% else %}-{% endif %}</td>
       <td>{% if f.verdict=='FAIL' %}<span class="badge badge-triage-{{ f.triage_status or 'open' }}">{{ t('triage_' ~ (f.triage_status or 'open')) }}</span>{% else %}-{% endif %}</td>
       <td><a href="{{ finding_url('finding_detail',finding_id=f.id) }}" class="btn" style="padding:5px 10px;">{{ t('btn_details') }}</a></td>

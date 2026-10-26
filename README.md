@@ -74,11 +74,20 @@ and query parameters. Browser discovery can retain a custom request template wit
 |---|---|---|
 | Static payloads | YAML rules with category-specific checks | No; AI cross-checking is optional |
 | AI-Powered | Generated attacks that adapt to the target's replies | Yes |
+| AI-PENTEST | Public-behavior profile, scoped AI-prioritized plan, adaptive campaigns and candidate replays | Yes |
 | Built-in Crescendo | Multi-turn escalation with backtracking | Yes |
 | Garak | External probe library through the saved target profile | No; AI cross-checking is optional |
 | PyRIT | External adaptive attacks against the saved target | Yes for the integrated adaptive attack |
 
 Choose engines independently in **Scan Configs**. Configure the AI provider under **Settings**.
+**AI-PENTEST** is a separate section below AI-Powered. Choose authorized categories and a generation budget
+of 8-40; the validated planner prioritizes only those categories. The per-category allocation stays within
+that maximum and may leave unused slots. Profiling and warm-up add two target requests, and each confirmed
+candidate can add two exact-prompt replays. The profile and plan are saved as INFO records and the plan is
+shown on Results. Findings have their own AI-PENTEST engine filter and share live tickets and Pause/Stop.
+The model cannot launch arbitrary tools or expand the target scope. Target self-descriptions are untrusted;
+business boundaries come from the operator's Target context. Replays measure repeatability, not a verified
+clean-session reset. Hidden-data leakage and backend actions remain REVIEW without independent evidence.
 The app supports OpenAI-compatible endpoints and native Anthropic and Gemini integrations.
 Settings includes endpoint presets for OpenAI, OpenRouter, Groq, and DeepSeek, plus a custom base URL.
 Use a model ID available in your provider account and its API key. Changing the endpoint host requires
@@ -86,6 +95,12 @@ entering the corresponding key, so a saved key is not silently forwarded to anot
 PyRIT's provider setup is handled separately by its adapter. PyRIT objectives run in an owned subprocess:
 Stop terminates the worker, retains completed turns, and skips remaining objectives. The response judge reads
 the complete transcript, so a later refusal does not erase an earlier demonstrated leak.
+Observed-response verdicts are separate from coverage limitations: a confident refusal can be PASS while
+multi-turn continuity remains unverified and the overall assessment stays incomplete. Obvious closing or
+repeated scope-only attacker proposals are discarded before transmission and recorded as INFO. A fallback
+after attacker drift is explicitly labeled; discarded proposals do not count as target requests.
+After upgrading, `python scripts/repair_pyrit_coverage.py --apply` backs up SQLite and repairs only the exact
+old coverage-only PASS-to-REVIEW override, preserving evidence and excluding other unresolved reviews.
 
 Garak runs in `venv-garak/` when that environment exists. Its live view shows planned, sent, completed,
 and evaluated counts, plus transport errors. Completed results are saved during the scan and retained on Stop.
@@ -169,6 +184,9 @@ REVIEW, ERROR, and INFO records do not affect it. **A zero score does not establ
 when the scan is stopped or has unresolved results.
 
 Missing or invalid AI verdict/confidence fields are evaluation failures, never a default PASS.
+PyRIT retries an invalid structured judgment at most once using the saved transcript, with no new target
+requests. Retry diagnostics appear in the application logs; a second invalid judgment remains ERROR.
+Benchmarks and trend comparisons exclude incomplete, unevaluated, ERROR-only and unresolved assessments.
 
 Garak detector hits are heuristic evidence and can produce false positives. AI verification, when enabled,
 can leave a candidate in REVIEW if it is incomplete or disagrees with the detector. Read the transcript

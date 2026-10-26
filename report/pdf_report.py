@@ -11,6 +11,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.units import cm
 import os
+import json
 from xml.sax.saxutils import escape
 from report.assessment import assessment_context, assessment_notice
 
@@ -385,6 +386,12 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     exec_text = (exec_summary_text or "").strip() or _fallback_exec_summary(
         target, findings, scan_result["risk_score"], _row_get(target, "business_context"), assessment)
     elements.append(Paragraph(escape(exec_text), body))
+    coverage_notes = list(dict.fromkeys(_row_get(f,'coverage_note') for f in findings if _row_get(f,'coverage_note')))
+    if coverage_notes:
+        elements.append(Spacer(1, 0.3 * cm))
+        elements.append(Paragraph('Coverage limitations (separate from verdicts)', h3))
+        for note in coverage_notes:
+            elements.append(Paragraph(escape(note), body))
     if not (exec_summary_text or "").strip():
         elements.append(Spacer(1, 0.3 * cm))
         elements.append(Paragraph(
@@ -412,8 +419,19 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
         summary_data.append(["Scan configuration", _row_get(scan_config, "name", "-")])
         if (scan_result["mode"] or "") == "ai_powered":
             summary_data.append(["AI-Powered intensity", str(_row_get(scan_config, "ai_intensity", "-")).title()])
+        if _row_get(scan_config, 'use_ai_pentest', 0):
+            summary_data.append(['AI-PENTEST generation budget', str(_row_get(scan_config, 'pentest_budget', 16))])
     if ai_info:
         summary_data.append(["AI model (attacker and judge)", ai_info])
+    for finding in findings:
+        if _row_get(finding,'source') == 'ai_pentest' and _row_get(finding,'rule_id') == 'ai-pentest-plan':
+            try:
+                plan = json.loads(finding['description'])
+                summary_data.append(['AI-PENTEST category priority', ', '.join(plan['categories'])])
+                summary_data.append(['AI-PENTEST scheduled attempts', str(plan['scheduled_generation_attempts'])])
+                summary_data.append(['AI-PENTEST scope limits', 'Public target claims are untrusted; clean session reset and backend side effects are not independently verified.'])
+            except (ValueError, TypeError, KeyError):
+                pass
     tested_codes = sorted({f["owasp"] for f in findings if f["verdict"] in ("PASS", "FAIL", "REVIEW")})
     if tested_codes:
         summary_data.append(["Categories tested", ", ".join(tested_codes)])
@@ -434,6 +452,8 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     ]))
     elements.append(st)
     elements.append(Spacer(1, 0.4 * cm))
+    if benchmark and assessment['incomplete']:
+        benchmark = None
     if benchmark:
         ratio = benchmark.get("ratio")
         if ratio is not None and ratio > 1.15:
@@ -451,6 +471,9 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
         elements.append(Paragraph(bench_line, ParagraphStyle(
             "Bench", parent=body, textColor=colors.HexColor("#6b7280"), fontSize=9, fontName="Helvetica-Oblique")))
         elements.append(Spacer(1, 0.4 * cm))
+    if not benchmark:
+        elements.append(Paragraph('Benchmark unavailable: comparisons require completed, evaluated assessments without unresolved errors or review items. A score of zero alone is not evidence of safety.', body))
+        elements.append(Spacer(1, 0.3 * cm))
     elements.append(Paragraph(
         "Purpose of this report: this assessment was performed by CYBERGUARD LLM, a black-box security scanner for "
         "AI chatbots and LLM-backed agents. The tool was given only the target's URL and a session token, and it "
@@ -470,12 +493,13 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     elements.append(Paragraph("Results at a Glance", h2))
     elements.append(Spacer(1, 0.3 * cm))
     elements.append(Paragraph(
-        f"This scan recorded <b>{sum(totals.values())}</b> result record(s), including infrastructure records. What each outcome means: "
+        f"This scan recorded <b>{len(findings)}</b> total records: <b>{sum(totals.values())}</b> test/error records and "
+        f"<b>{sum(_row_get(f,'verdict') == 'INFO' for f in findings)}</b> informational notes. What each outcome means: "
         "<b>Resisted</b> - the target did not show the weakness being tested. <b>Vulnerable</b> - the target "
-        "showed it (a confirmed finding, counted in the risk score). <b>Needs review</b> - the judge was not "
-        "confident either way, so a person should read the transcript; it is not counted in the risk score. "
-        "<b>Not evaluated</b> - the scan could not get a usable response (a timeout, an unreachable target, or the "
-        "attacking model declining to write a prompt); this says nothing about the target's security.", body))
+        "showed it (a confirmed finding, counted in the risk score). <b>Needs review</b> - evidence or evaluation "
+        "is inconclusive, reference proof is missing, confidence is insufficient, or evaluators disagree; "
+        "a person should review the transcript. It is not counted in the risk score. "
+        "<b>Not evaluated</b> - a target request or evaluation failed; this says nothing about the target's security.", body))
     elements.append(Spacer(1, 0.3 * cm))
     glance = [["Resisted", "Vulnerable", "Needs review", "Not evaluated"],
               [str(totals["PASS"]), str(totals["FAIL"]), str(totals["REVIEW"]), str(totals["ERROR"])]]

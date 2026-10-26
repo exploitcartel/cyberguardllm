@@ -11,6 +11,20 @@ activity log details) is never translated, since it is real content, not UI.
 """
 
 TRANSLATIONS = {
+    'pentest_rationale_note': {'en':'The rationale is AI-generated interpretation, not verified capability or policy evidence. The category definitions below come from the application.', 'al':'Arsyetimi është interpretim i gjeneruar nga AI, jo provë për aftësitë apo politikat. Përkufizimet e kategorive më poshtë vijnë nga aplikacioni.'},
+    'coverage_limited': {'en':'Limited coverage', 'al':'Mbulim i kufizuar'},
+    'coverage_limit_title': {'en':'Coverage limitation', 'al':'Kufizimi i mbulimit'},
+    'coverage_verdict_help': {'en':'The verdict describes the observed replies. It does not certify unverified session continuity, resets or full multi-turn coverage.', 'al':'Verdikti përshkruan përgjigjet e vëzhguara. Ai nuk vërteton vazhdimësinë e paverifikuar të sesionit, rivendosjen apo mbulimin e plotë multi-turn.'},
+    'benchmark_no_eligible': {'en':'No completed, fully evaluated assessments are available for this trend chart.', 'al':'Nuk ka vlerësime të përfunduara dhe plotësisht të vlerësuara për këtë grafik.'},
+    'benchmark_unavailable': {'en':'Benchmark unavailable. Comparisons require completed, evaluated assessments without unresolved errors or review items. A score of zero alone is not evidence of safety.', 'al':'Benchmark i padisponueshëm. Krahasimi kërkon vlerësime të përfunduara pa gabime apo rezultate të pazgjidhura. Pikët zero nuk janë provë sigurie.'},
+    'pentest_overhead': {'en':'Additional profiling requests / AI planning calls', 'al':'Kërkesa shtesë profilizimi / thirrje AI për planifikim'},
+    'pentest_plan': {'en':'Assessment priority', 'al':'Prioriteti i vlerësimit'},
+    'pentest_plan_details': {'en':'View saved plan', 'al':'Shiko planin e ruajtur'},
+    'pentest_enable': {'en':'Run AI-PENTEST (requires configured AI API)', 'al':'Aktivizo AI-PENTEST (kërkon AI API të konfiguruar)'},
+    'pentest_help': {'en':'Profile the target, build an AI-prioritized plan within your selected scope, run adaptive objective tests and replay candidate failures. Independent of AI-Powered and other engines.', 'al':'Profilizon objektivin, krijon plan me prioritetet e AI brenda kategorive që zgjedh, kryen teste adaptive dhe riprovon dështimet kandidate. I pavarur nga AI-Powered dhe modulet e tjera.'},
+    'pentest_budget': {'en':'Maximum attack-generation attempts (8-40)', 'al':'Tentativat maksimale të gjenerimit të sulmeve (8-40)'},
+    'pentest_limits': {'en':'Profiling and warm-up add two target requests; verification can add two replays per candidate failure. This is a bounded assessment agent, not unrestricted autonomous access. Set the authorized business policy on the Target. Hidden state, real data leaks and backend actions need independent evidence; a replay is not a clean session reset.', 'al':'Profilizimi dhe warm-up shtojnë dy kërkesa; verifikimi mund të shtojë dy riprovime për dështim kandidat. Agjenti ka kufij dhe scope të përcaktuar. Vendos politikën e autorizuar te Target. Rrjedhjet reale dhe veprimet në backend kërkojnë prova të pavarura; riprovimi nuk rivendos sesionin.'},
+    'pentest_select_categories': {'en':'Select at least one category for AI-PENTEST.', 'al':'Zgjidh të paktën një kategori për AI-PENTEST.'},
     'ai_new_provider_key': {'en': 'The endpoint host changed. Use Change key and enter the new provider\'s key before saving.', 'al': 'Host-i i endpoint-it ndryshoi. Përdor Ndrysho çelësin dhe vendos çelësin e ofruesit të ri përpara ruajtjes.'},
     'ai_endpoint_invalid': {'en': 'Enter a valid HTTP or HTTPS API base URL without credentials, query or fragment.', 'al': 'Vendos URL të vlefshme HTTP ose HTTPS pa kredenciale, parametra query apo fragment.'},
     'nav_updates': {'en': 'Check for updates', 'al': 'Kontrollo përditësimet'},

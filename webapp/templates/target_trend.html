@@ -29,7 +29,7 @@
 
 <div class="card">
   {% if not scans %}
-  <p style="color:var(--text-muted);">{{ t('no_results_yet') }}</p>
+  <p style="color:var(--text-muted);">{{ t('benchmark_no_eligible') }}</p>
   {% else %}
   <table>
     <tr><th>{{ t('col_date') }}</th><th>{{ t('col_risk_score') }}</th><th>{{ t('col_findings') }}</th><th></th></tr>

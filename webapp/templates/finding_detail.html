@@ -17,6 +17,13 @@
   <span>{% if navigation %}{{ navigation.position }} / {{ navigation.total }}{% else %}{{ t('finding_no_match') }}{% endif %}</span>
   {% if next_url %}<a href="{{ next_url }}" class="btn" rel="next">{{ t('finding_next') }} &rarr;</a>{% else %}<span class="btn disabled" aria-disabled="true">{{ t('finding_next') }} &rarr;</span>{% endif %}
 </nav>
+{% if finding.coverage_note %}
+<div class="card" style="margin-bottom:16px;" role="note">
+  <h3 style="margin-top:0;">{{ t('coverage_limit_title') }}</h3>
+  <p>{{ finding.coverage_note }}</p>
+  <p class="muted">{{ t('coverage_verdict_help') }}</p>
+</div>
+{% endif %}
 <div class="card" style="margin-bottom:16px;">
   <h3 style="margin-top:0;">{{ t('description_title') }}</h3>
   <p>{{ finding.description or '-' }}</p>

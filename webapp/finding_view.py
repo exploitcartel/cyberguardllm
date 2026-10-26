@@ -9,6 +9,7 @@ SORTS = {
 VERDICTS = ("FAIL", "REVIEW", "ERROR", "PASS", "INFO")
 ENGINE_SQL = "CASE WHEN source IN ('cgllm_research','public_research','community_sourced','community','custom_ui','custom','base','static','rules') THEN 'static' ELSE COALESCE(source,'other') END"
 ENGINE_LABELS = {"static":"Static", "ai_agent":"AI-Powered", "garak":"Garak", "pyrit":"PyRIT",
+                 "ai_pentest":"AI-PENTEST",
                  "crescendo":"Crescendo", "ai_recon":"AI Recon", "canary":"Canary", "fingerprint":"Fingerprint",
                  "session_isolation":"Session isolation", "chaining":"Attack chains", "scanner":"Scanner", "other":"Other"}
 

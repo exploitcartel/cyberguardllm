@@ -6,6 +6,24 @@ from engine import pyrit_module as pm
 
 
 class PyritProgressTests(CyberGuardTestCase):
+    def test_coverage_and_discarded_proposal_do_not_change_observed_pass_or_sent_count(self):
+        def process(conn,payload,timeout,event):
+            event(dict(kind='phase',stage='attacker',message='Closing proposal discarded.',discarded_prompt='Nothing further.'))
+            event(dict(kind='turn',turn={'prompt':'Fixture override','response':'I refuse.','history_replayed':False}))
+            event(dict(kind='result',verdict='PASS',severity='low',confidence=90,reasoning='The target refused.',judge_verdict='PASS'))
+            return 0,None
+        self.run_fixture(process,keys=['persona_jailbreak'])
+        row=self.c.execute("SELECT * FROM findings WHERE rule_id='PYRIT-persona_jailbreak'").fetchone()
+        self.assertEqual((row['verdict'],row['judge_verdict']),('PASS','PASS'))
+        self.assertIn('coverage limitation',row['coverage_note'])
+        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM findings WHERE verdict='INFO'").fetchone()[0],1)
+        self.assertEqual(self.c.execute('SELECT sent FROM pyrit_progress').fetchone()[0],1)
+        from report.assessment import assessment_context
+        self.assertTrue(assessment_context({'status':'completed'},[row])['incomplete'])
+        page=self.client.get(f"/findings/{row['id']}").get_data(as_text=True)
+        self.assertIn('Coverage limitation',page)
+        self.assertIn('PASS',page)
+
     def setUp(self):
         super().setUp()
         self.c = self.get_conn()

@@ -15,7 +15,7 @@
           <input type="checkbox" name="enable_static" id="enableStatic"> Enable static payload scan
         </div>
         <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">
-          Uncheck this if you want this config to run AI-Powered mode and/or garak/PyRIT only, with no static
+          Uncheck this if you want AI-Powered, AI-PENTEST, Garak or PyRIT only, with no static
           OWASP payloads at all - no need to uncheck every category below one by one.
         </p>
         <fieldset id="staticScanOptions" class="config-options" data-enabled-by="enable_static" disabled>
@@ -67,6 +67,20 @@
         </fieldset>
       </details>
 
+      <details class="config-section">
+        <summary>AI-PENTEST</summary>
+        <div class="checkbox-row" style="margin-top:6px;">
+          <input type="checkbox" name="use_ai_pentest"> {{ t('pentest_enable') }}
+        </div>
+        <p class="muted">{{ t('pentest_help') }}</p>
+        <fieldset class="config-options" data-enabled-by="use_ai_pentest" disabled>
+          <div class="field"><label>{{ t('pentest_budget') }}</label><input type="number" name="pentest_budget" value="16" min="8" max="40"></div>
+          <p class="muted">{{ t('pentest_limits') }}</p>
+          {% for code,label,count in categories %}{% if code not in ('LLM04','LLM05') %}
+          <div class="checkbox-row"><input type="checkbox" name="pentest_categories" value="{{ code }}"> {{ code }} - {{ label }}</div>
+          {% endif %}{% endfor %}
+        </fieldset>
+      </details>
       <details class="config-section">
         <summary>{{ t('section_external_tools') }}</summary>
         <div style="margin-top:10px;">
@@ -185,8 +199,8 @@
       {% for c in configs %}
       <tr>
         {% if user_role in ('administrator','global_administrator') %}<td><input type="checkbox" class="config-check" value="{{ c.id }}"></td>{% endif %}
-        <td id="cfg-name-{{ c.id }}">{{ c.name }}</td><td>{% set cats = (c.categories or '').split(',') | select | list %}{% for i in range(0, cats | length, 3) %}<div>{{ cats[i:i+3] | join(', ') }}</div>{% endfor %}</td><td>
-        {% if c.ai_powered %}<span class="badge badge-cgllm">AI-Powered: {{ (c.ai_intensity or 'low') | capitalize }}</span>{% else %}<span class="badge badge-source">Offline</span>{% endif %}
+        <td id="cfg-name-{{ c.id }}">{{ c.name }}</td><td>{% set cats = ((c.categories or '') ~ ',' ~ ((c.pentest_categories or '') if c.use_ai_pentest else '')).split(',') | select | unique | list %}{% for i in range(0, cats | length, 3) %}<div>{{ cats[i:i+3] | join(', ') }}</div>{% endfor %}</td><td>
+        {% if c.ai_powered %}<span class="badge badge-cgllm">AI-Powered: {{ (c.ai_intensity or 'low') | capitalize }}</span>{% elif not c.use_ai_pentest %}<span class="badge badge-source">Offline</span>{% endif %}
         {% if c.enable_static is none or c.enable_static %}
         <span class="badge badge-{{ 'critical' if c.scan_level == 'aggressive' else ('high' if c.scan_level == 'medium' else 'low') }}">Static: {{ (c.scan_level or 'low') | capitalize }}</span>
         {% else %}
@@ -195,6 +209,7 @@
         {% if c.use_garak %}<span class="badge badge-triage-accepted_risk">Garak</span>{% endif %}
         {% if c.use_pyrit %}<span class="badge badge-triage-accepted_risk">PyRIT</span>{% endif %}
         {% if c.use_crescendo %}<span class="badge badge-triage-accepted_risk">Crescendo</span>{% endif %}
+        {% if c.use_ai_pentest %}<span class="badge badge-cgllm">AI-PENTEST: {{ c.pentest_budget }}</span>{% endif %}
         {% if c.mutation_techniques %}<span class="badge badge-triage-accepted_risk">Mutations</span>{% endif %}
         {% if c.enable_retest %}<span class="badge badge-triage-accepted_risk">Retest</span>{% endif %}
         {% if c.enable_canary %}<span class="badge badge-triage-accepted_risk">Canary</span>{% endif %}
