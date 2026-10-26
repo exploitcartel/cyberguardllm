@@ -19,7 +19,7 @@ class ScriptedAI:
         self.attacker_prompts = []
         self.msg_no = 0
 
-    def __call__(self, api_base, api_key, model, system_prompt, user_msg, timeout=30):
+    def __call__(self, api_base, api_key, model, system_prompt, user_msg, timeout=30, max_tokens=None):
         if system_prompt == cm.ATTACKER_SYSTEM_PROMPT:
             self.attacker_prompts.append(user_msg)
             self.msg_no += 1
@@ -62,6 +62,81 @@ def run(replies, objective=None, max_turns=6, **kw):
 
 
 class RunObjectiveTests(unittest.TestCase):
+    def test_judge_retries_invalid_output_without_resending_target_prompt(self):
+        answer = json.dumps(dict(achieved=False, refused=True, progress=0, confidence=90, reasoning='Refused.'))
+        with mock.patch.object(cm.ai_agent, '_chat', side_effect=['not JSON', answer]) as judge, \
+             mock.patch.object(cm, 'send_conversation_turn') as sender:
+            result = cm.assess_turn(AI_CFG, OBJ, 'same prompt', 'same reply', [])
+        self.assertEqual(judge.call_count, 2)
+        self.assertEqual([c.kwargs['max_tokens'] for c in judge.call_args_list], [1200, 1600])
+        self.assertIn('invalid JSON or schema', result['judge_diagnostics'][0])
+        sender.assert_not_called()
+        for call in judge.call_args_list:
+            self.assertIn('same reply', call.args[4])
+
+    def test_judge_rejects_truncation_even_if_json_parses(self):
+        answer = json.dumps(dict(achieved=False, refused=True, progress=0, confidence=90, reasoning='Refused.'))
+        calls = []
+        def model(*args, **kwargs):
+            calls.append(1)
+            cm.ai_agent.LAST_STOP_REASON['value'] = 'max_tokens' if len(calls) == 1 else 'end_turn'
+            return answer
+        with mock.patch.object(cm.ai_agent, '_chat', side_effect=model):
+            result = cm.assess_turn(AI_CFG, OBJ, 'fixture', 'reply', [])
+        self.assertIn('truncated output', result['judge_diagnostics'][0])
+
+    def test_judge_retry_exhaustion_explains_failure_kind(self):
+        with mock.patch.object(cm.ai_agent, '_chat', return_value='') as model:
+            with self.assertRaisesRegex(ValueError, 'empty output'):
+                cm.assess_turn(AI_CFG, OBJ, 'fixture', 'reply', [])
+        self.assertEqual(model.call_count, 2)
+
+    def test_refusal_proposals_are_never_sent_and_retry_budget_is_finite(self):
+        def ai(*args, **kw):
+            return "I can't write the next message. I can help in other ways."
+        with mock.patch.object(cm.ai_agent, '_chat', side_effect=ai) as model, \
+             mock.patch.object(cm, 'send_conversation_turn') as sender:
+            result = cm.run_objective(AI_CFG, {}, OBJ, 3, 60)
+        self.assertEqual(model.call_count, 3)
+        sender.assert_not_called()
+        self.assertEqual(result['verdict'], 'ERROR')
+        self.assertEqual(len(result['proposals']), 3)
+
+    def test_truncated_proposal_regenerates_with_larger_budget(self):
+        budgets = []
+        def ai(*args, **kw):
+            budgets.append(kw['max_tokens'])
+            cm.ai_agent.LAST_STOP_REASON['value'] = 'max_tokens' if len(budgets) == 1 else 'end_turn'
+            return 'unfinished but superficially plausible' if len(budgets) == 1 else 'Complete fixture question?'
+        with mock.patch.object(cm.ai_agent, '_chat', side_effect=ai):
+            message = cm.next_attacker_message(AI_CFG, OBJ, [], [], 1, 3)
+        self.assertEqual(message, 'Complete fixture question?')
+        self.assertEqual(budgets, [400, 800])
+
+    def test_empty_proposals_after_reply_preserve_observed_assessment(self):
+        scripted = ScriptedAI()
+        generations = 0
+        def ai(*args, **kw):
+            nonlocal generations
+            if args[3] == cm.ATTACKER_SYSTEM_PROMPT:
+                generations += 1
+                return 'Fixture question?' if generations == 1 else ''
+            return scripted(*args, **kw)
+        with mock.patch.object(cm.ai_agent, '_chat', side_effect=ai), \
+             mock.patch.object(cm, 'send_conversation_turn', return_value=('REFUSE', [])) as sender:
+            result = cm.run_objective(AI_CFG, {}, OBJ, 3, 60)
+        self.assertEqual(sender.call_count, 1)
+        self.assertEqual(result['verdict'], 'REVIEW')
+        self.assertIn('Observed-replies assessment: PASS', result['reasoning'])
+        self.assertIn('Campaign incomplete', result['reasoning'])
+        self.assertEqual(len(result['attempts_log']), 1)
+
+    def test_generation_stop_sends_nothing(self):
+        with mock.patch.object(cm.ai_agent, '_chat') as model:
+            with self.assertRaises(cm.InvalidAttackerOutput):
+                cm.next_attacker_message(AI_CFG, OBJ, [], [], 1, 3, should_stop=lambda: True)
+        model.assert_not_called()
+
     def test_claim_of_action_cannot_be_confirmed_fail_without_external_evidence(self):
         result, _, _ = run(['BREAK: refund applied'], max_turns=1)
         self.assertEqual(result['verdict'], 'REVIEW')

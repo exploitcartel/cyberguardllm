@@ -215,7 +215,21 @@ class EmptyModelOutput(Exception):
 
 
 # Why the most recent chat call stopped (provider's own field), kept so an empty reply can be explained.
-LAST_STOP_REASON = {"value": None}
+import threading
+
+
+class _StopReason(threading.local):
+    def __init__(self):
+        self.value = None
+
+    def __getitem__(self, key):
+        return self.value
+
+    def __setitem__(self, key, value):
+        self.value = value
+
+
+LAST_STOP_REASON = _StopReason()
 
 
 def _chat_openai_compatible(api_base, api_key, model, system_prompt, user_prompt, timeout, max_tokens=400):
