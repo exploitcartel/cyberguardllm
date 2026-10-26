@@ -135,6 +135,14 @@
       </select>
       <p style="color:var(--text-muted);font-size:14px;margin:4px 0 8px;">{{ t('provider_explanation') }}</p>
     </div>
+    <div class="field" id="endpointPresetField">
+      <label for="aiEndpointPreset">{{ t('ai_endpoint_preset') }}</label>
+      <select id="aiEndpointPreset">
+        {% for key, preset in endpoint_presets.items() %}<option value="{{ key }}">{{ preset.label }}</option>{% endfor %}
+        <option value="custom">{{ t('ai_endpoint_custom') }}</option>
+      </select>
+      <p class="muted">{{ t('ai_endpoint_help') }}</p>
+    </div>
     <div class="grid grid-2">
       <div class="field"><label>{{ t('field_ai_api_base') }}</label><input type="text" name="ai_api_base" id="aiApiBaseInput" placeholder="https://api.openai.com/v1" value="{{ settings.ai_api_base }}"></div>
       <div class="field">
@@ -176,6 +184,22 @@ const providerSelect = document.getElementById('aiProviderSelect');
 const apiBaseInput = document.getElementById('aiApiBaseInput');
 const modelInput = document.getElementById('aiModelInput');
 const anthropicPicks = document.getElementById('anthropicModelPicks');
+const endpointPresets = {{ endpoint_presets|tojson }};
+const endpointPreset = document.getElementById('aiEndpointPreset');
+function syncEndpointPreset(){
+  document.getElementById('endpointPresetField').hidden = providerSelect.value !== 'openai_compatible';
+  endpointPreset.value = Object.keys(endpointPresets).find(key => endpointPresets[key].api_base.replace(/\/$/, '') === apiBaseInput.value.replace(/\/$/, '')) || 'custom';
+}
+endpointPreset.addEventListener('change', function(){
+  const preset = endpointPresets[this.value];
+  if(!preset) return;
+  apiBaseInput.value = preset.api_base;
+  modelInput.value = preset.model;
+  modelInput.placeholder = preset.model || 'Model ID';
+  modelInput.focus();
+});
+apiBaseInput.addEventListener('input', syncEndpointPreset);
+syncEndpointPreset();
 
 function toggleAnthropicPicks(provider){
   if(!anthropicPicks) return;
@@ -228,12 +252,9 @@ if(providerSelect){
     const d = PROVIDER_DEFAULTS[this.value];
     toggleAnthropicPicks(this.value);
     if(!d) return;
-    if(!apiBaseInput.value || Object.values(PROVIDER_DEFAULTS).some(p => p.api_base === apiBaseInput.value)){
-      apiBaseInput.value = d.api_base;
-    }
-    if(!modelInput.value || Object.values(PROVIDER_DEFAULTS).some(p => p.model === modelInput.value)){
-      modelInput.value = d.model;
-    }
+    apiBaseInput.value = d.api_base;
+    modelInput.value = d.model;
+    syncEndpointPreset();
     apiBaseInput.placeholder = d.api_base;
     modelInput.placeholder = d.model;
   });

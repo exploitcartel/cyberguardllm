@@ -129,6 +129,13 @@ def _regex_judge_fields(raw):
         }
     return None
 
+ENDPOINT_PRESETS = {
+    'openai': {'label': 'OpenAI', 'api_base': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini'},
+    'openrouter': {'label': 'OpenRouter', 'api_base': 'https://openrouter.ai/api/v1', 'model': ''},
+    'groq': {'label': 'Groq', 'api_base': 'https://api.groq.com/openai/v1', 'model': ''},
+    'deepseek': {'label': 'DeepSeek', 'api_base': 'https://api.deepseek.com', 'model': ''},
+}
+
 PROVIDER_DEFAULTS = {
     "openai_compatible": {"api_base": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
     "anthropic": {"api_base": "https://api.anthropic.com", "model": "claude-sonnet-5"},

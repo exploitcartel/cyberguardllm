@@ -306,6 +306,8 @@ a.btn:hover,button.btn:hover:not(:disabled),button.s-btn:hover:not(:disabled){
 }
 a.btn:active,button.btn:active:not(:disabled),button.s-btn:active:not(:disabled){transform:translateY(0) scale(.97);box-shadow:none;}
 a.btn:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+button.btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none;}
+.muted{color:var(--text-muted);}
 @media(prefers-reduced-motion:reduce){a.btn,button.btn,button.s-btn,button.login-btn{transition:none;transform:none!important;}}
 
 

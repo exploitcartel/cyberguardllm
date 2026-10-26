@@ -56,6 +56,8 @@ def owasp_breakdown_rows(rows):
         if rule_id.endswith("-extension"):
             continue
         owasp = r["owasp"]
+        if owasp == 'N/A':
+            continue  # General content-safety and robustness tests do not establish OWASP coverage.
         breakdown.setdefault(owasp, {"total": 0, "failed": 0})
         breakdown[owasp]["total"] += 1
         if r["verdict"] == "FAIL":

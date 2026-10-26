@@ -3,6 +3,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import json, csv, io
 import secrets
+from functools import wraps
+from core import updates
 import yaml
 from flask import (Flask, request, render_template, redirect, make_response, send_file, jsonify, Response,
                     flash, get_flashed_messages, url_for, abort)
@@ -13,6 +15,7 @@ from auth.auth import (seed_admin, verify_password, hash_password, make_session_
 from core.discovery import discover_target, get_proxies, test_proxy_connectivity
 from core.crypto import encrypt_token, decrypt_token
 from engine.loader import load_all_rules, count_by_category, count_by_category_all_levels
+from engine.ai_agent import ENDPOINT_PRESETS
 from engine.runner import run_scan_async, get_task_progress, reap_orphaned_tasks, force_stop_task, AI_INTENSITY_LEVELS, AI_INTENSITY_ORDER
 from engine.scorer import severity_breakdown_rows, owasp_breakdown_rows
 from report.pdf_report import generate_pdf_report
@@ -57,6 +60,24 @@ load_all_rules()
 # the Origin check below still applies to it.
 _CSRF_EXEMPT_PREFIXES = ("/canary/",)
 _CSRF_TOKEN_EXEMPT_PATHS = ("/login",)
+
+
+@app.before_request
+def _update_maintenance():
+    if updates.in_progress() and not (request.path.startswith('/static/') or
+            (request.method == 'GET' and request.path in ('/updates', '/api/update-status', '/login'))):
+        return Response('Update in progress. Return to /updates and wait for the server to restart.',
+                        status=503, headers={'Retry-After': '5'})
+
+
+def _scan_update_gate(handler):
+    @wraps(handler)
+    def guarded(*args, **kwargs):
+        with updates.GATE:
+            if updates.in_progress():
+                return Response('An update is running. Wait before starting another scan.', status=503)
+            return handler(*args, **kwargs)
+    return guarded
 
 
 @app.before_request
@@ -229,7 +250,8 @@ def flash_t(key, category="success"):
 def ctx(**extra):
     username = current_user()
     base = {"username": username, "theme": theme(), "lang": current_lang(),
-            "user_role": get_user_role(username) if username else None}
+            "user_role": get_user_role(username) if username else None,
+            "endpoint_presets": ENDPOINT_PRESETS}
     base.update(extra)
     return base
 
@@ -962,6 +984,7 @@ def tasks_page():
 
 
 @app.route("/tasks/run", methods=["POST"])
+@_scan_update_gate
 def tasks_run():
     # Operators are allowed to run scans.
     username, err = require_role("operator")
@@ -1647,6 +1670,59 @@ def _mask_api_key(api_key_encrypted):
     return "•" * 12 + key[-4:]
 
 
+@app.route('/updates')
+def updates_page():
+    username, err = require_login()
+    if err: return err
+    conn = get_conn()
+    try:
+        view = updates.status(conn)
+    finally:
+        conn.close()
+    return render_template('updates.html', **ctx(active='updates', update=view))
+
+
+@app.route('/api/update-status')
+def update_status():
+    username, err = require_login()
+    if err: return err
+    return jsonify(updates.job_status())
+
+
+@app.route('/updates/check', methods=['POST'])
+def updates_check():
+    username, err = require_role('global_administrator')
+    if err: return err
+    result = updates.check_updates()
+    log_activity(username, 'Update Check', result.get('error') or result.get('latest', '')[:12])
+    return redirect('/updates')
+
+
+def _exit_for_update():
+    import time
+    # Let the redirect and the status page reach the browser before shutdown.
+    time.sleep(5)
+    os._exit(0)
+
+
+@app.route('/updates/install', methods=['POST'])
+def updates_install():
+    username, err = require_role('global_administrator')
+    if err: return err
+    conn = get_conn()
+    try:
+        updates.start_install(conn, request.form.get('version', ''))
+    except updates.UpdateError as exc:
+        flash(str(exc), 'error')
+        return redirect('/updates')
+    finally:
+        conn.close()
+    log_activity(username, 'Update Installation Started', request.form.get('version', '')[:12])
+    import threading
+    threading.Thread(target=_exit_for_update, daemon=True).start()
+    return redirect('/updates')
+
+
 @app.route("/settings", methods=["GET"])
 def settings_page():
     username, err = require_login()
@@ -1759,8 +1835,26 @@ def settings_scan_mode():
     if ai_provider not in PROVIDER_DEFAULTS:
         ai_provider = "openai_compatible"
     ai_api_base = request.form.get("ai_api_base", "").strip() or PROVIDER_DEFAULTS[ai_provider]["api_base"]
-    ai_model = request.form.get("ai_model", "").strip() or PROVIDER_DEFAULTS[ai_provider]["model"]
+    ai_model = request.form.get("ai_model", "").strip()
     ai_api_key = request.form.get("ai_api_key", "").strip()
+    if not ai_model:
+        if ai_api_base.rstrip('/') != PROVIDER_DEFAULTS[ai_provider]['api_base'].rstrip('/'):
+            flash_t('ai_model_required')
+            return redirect('/settings?tab=scan')
+        ai_model = PROVIDER_DEFAULTS[ai_provider]['model']
+    from urllib.parse import urlsplit
+    try:
+        endpoint = urlsplit(ai_api_base)
+        if endpoint.scheme not in ('https', 'http') or not endpoint.hostname or endpoint.username or endpoint.query or endpoint.fragment:
+            raise ValueError('Invalid endpoint')
+        previous = urlsplit(get_setting('ai_api_base', '') or PROVIDER_DEFAULTS['openai_compatible']['api_base'])
+        destination_changed = (endpoint.scheme, endpoint.hostname, endpoint.port) != (previous.scheme, previous.hostname, previous.port)
+    except ValueError:
+        flash_t('ai_endpoint_invalid')
+        return redirect('/settings?tab=scan')
+    if destination_changed and get_setting('ai_api_key_encrypted', '') and (not ai_api_key or '•' in ai_api_key):
+        flash_t('ai_new_provider_key')
+        return redirect('/settings?tab=scan')
 
     set_setting("scan_mode", scan_mode if scan_mode in ("offline", "ai_powered") else "offline")
     set_setting("ai_provider", ai_provider)

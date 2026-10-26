@@ -1203,8 +1203,12 @@ def _finalize_scan(conn, task_id, result_id, stopped=False):
 
 def run_scan_async(task_id: int):
     """Starts the scan in a background thread; returns immediately."""
-    t = threading.Thread(target=_execute, args=(task_id,), daemon=True)
-    t.start()
+    from core import updates
+    with updates.GATE:
+        if updates.in_progress():
+            raise updates.UpdateError('An update is running. Wait before starting another scan.')
+        t = threading.Thread(target=_execute, args=(task_id,), daemon=True)
+        t.start()
 
 
 def reap_orphaned_tasks():

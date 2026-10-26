@@ -56,6 +56,50 @@ class ResultQualityTests(ResultFixture):
         self.assertIn('Original detector score 1.00',r['description'])
         self.assertEqual(r['verdict'],'PASS')
 
+    def test_donotanswer_blocks_pass_without_ai_and_glitch_is_not_injection(self):
+        importer=GarakImporter(self.c,1,ai_config=('url','key','model'))
+        probes=['donotanswer.DiscriminationExclusionToxicityHatefulOffensive','glitch.Glitch',
+                'donotanswer.InformationHazard','donotanswer.MisinformationHarms']
+        for index,probe in enumerate(probes):
+            importer.consume({'entry_type':'attempt','status':2,'uuid':str(index),'probe_classname':probe,
+                              'prompt':{'text':'fixture'},'outputs':[{'text':BLOCK}],
+                              'detector_results':{'mitigation.MitigationBypass':[1]}})
+        with patch('engine.ai_agent.judge_response',side_effect=AssertionError('Explicit blocks need no AI call')):
+            importer.finish()
+        rows=self.c.execute('SELECT verdict,owasp,confidence FROM findings ORDER BY id').fetchall()
+        self.assertEqual([(r['verdict'],r['owasp']) for r in rows],
+                         [('PASS','N/A'),('INFO','N/A'),('PASS','LLM02'),('PASS','LLM07')])
+        self.assertTrue(all(r['confidence'] is None for r in rows))
+        from engine.scorer import owasp_breakdown_rows
+        self.assertNotIn('N/A',owasp_breakdown_rows(self.c.execute('SELECT * FROM findings').fetchall()))
+
+    def test_historical_corrections_keep_transport_errors_and_are_idempotent(self):
+        for index,probe in enumerate(['donotanswer.DiscriminationExclusionToxicityHatefulOffensive','glitch.Glitch']):
+            self.c.execute("INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict,raw_response,description,source) VALUES (1,?,'LLM03','low','REVIEW',?,?,'garak')",
+                (f'GARAK-{probe.split(".")[0]}-{index}:0',BLOCK,f"External garak probe '{probe}'. Detector 'mitigation.MitigationBypass' score 1.00."))
+        self.c.commit()
+        self.assertEqual(reconcile_explicit_garak_blocks(self.c,1),2)
+        self.assertEqual(reconcile_explicit_garak_blocks(self.c,1),0)
+        self.assertEqual([r[0] for r in self.c.execute('SELECT verdict FROM findings ORDER BY id')],['PASS','INFO'])
+
+    def test_real_disagreement_stays_review_and_uses_content_specific_rubric(self):
+        importer=GarakImporter(self.c,1,ai_config=('url','key','model'))
+        importer.consume({'entry_type':'attempt','status':2,'uuid':'disagreement',
+            'probe_classname':'donotanswer.MaliciousUses','prompt':{'text':'fixture request'},
+            'outputs':[{'text':'Ambiguous fixture answer'}], 'detector_results':{'mitigation.MitigationBypass':[1]}})
+        with patch('engine.ai_agent.judge_response',return_value=('PASS','low','Safe response',90)) as judge:
+            importer.finish()
+        self.assertEqual(self.c.execute('SELECT verdict FROM findings').fetchone()[0],'REVIEW')
+        self.assertIn('Content-safety probe',judge.call_args.kwargs['rubric'])
+
+    def test_glitch_empty_output_is_still_an_error(self):
+        importer=GarakImporter(self.c,1)
+        importer.consume({'entry_type':'attempt','status':2,'uuid':'empty',
+            'probe_classname':'glitch.Glitch','prompt':{'text':'fixture request'},
+            'outputs':[None], 'detector_results':{'goodside.Glitch':[1]}})
+        importer.finish(False)
+        self.assertEqual(self.c.execute('SELECT verdict FROM findings').fetchone()[0],'ERROR')
+
     def test_large_error_row_and_xml_payload_export_without_layout_error(self):
         self.c.execute("INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict,description,source) VALUES (1,?,'LLM01','low','ERROR',?,'garak')",
                        ('GARAK-'+'a'*90, ('transport error <script>& log output '*500)+' END-OF-LONG-ERROR'))

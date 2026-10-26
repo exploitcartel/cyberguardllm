@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header"><div><h1>{{ t('nav_updates') }}</h1><p class="muted">{{ t('updates_intro') }}</p></div></div>
+<div class="grid grid-2">
+  <section class="card">
+    <h3>{{ t('updates_installed') }}</h3>
+    <p><code>{{ update.local.installed[:12] or t('updates_unknown') }}</code> <span class="badge">{{ update.local.branch or 'Git' }}</span></p>
+    <p>{{ t('updates_source') }}: <a href="{{ update.source }}" target="_blank" rel="noopener">exploitcartel/cyberguardllm</a></p>
+    {% if update.local.dirty %}<p class="muted">{{ t('updates_dirty') }}</p>{% endif %}
+    {% if update.local.error %}<p role="alert">{{ update.local.error }}</p>{% endif %}
+  </section>
+  <section class="card">
+    <h3>{{ t('updates_available') }}</h3>
+    {% if update.check.error %}<p role="alert">{{ update.check.error }}</p>
+    {% elif update.check.latest %}
+      <p><code>{{ update.check.latest[:12] }}</code></p>
+      <p>{{ update.check.behind }} {{ t('updates_commits') }}{% if update.check.ahead %}, {{ update.check.ahead }} {{ t('updates_ahead') }}{% endif %}</p>
+      <p class="muted">{{ t('updates_checked') }}: <time data-unix="{{ update.check.checked_at }}"></time></p>
+    {% else %}<p>{{ t('updates_not_checked') }}</p>{% endif %}
+    {% if user_role == 'global_administrator' %}
+    <form method="post" action="/updates/check"><button class="btn" {% if update.job.status in ['waiting_restart','backing_up','installing','restarting','rolling_back'] %}disabled{% endif %}>{{ t('updates_check') }}</button></form>
+    {% else %}<p class="muted">{{ t('updates_admin') }}</p>{% endif %}
+  </section>
+</div>
+<section class="card" style="margin-top:16px;">
+  <h3>{{ t('updates_changes') }}</h3>
+  {% if update.check.commits %}<ul>{% for commit in update.check.commits %}<li><a href="{{ update.source }}/commit/{{ commit.sha }}" target="_blank" rel="noopener"><code>{{ commit.sha[:8] }}</code></a> {{ commit.title }} <span class="muted">{{ commit.date }}</span></li>{% endfor %}</ul>
+  {% else %}<p class="muted">{{ t('updates_no_changes') }}</p>{% endif %}
+  <p class="muted">{{ t('updates_install_help') }}</p>
+  {% if update.check.behind or update.local.error %}
+    {% if update.blockers %}<ul>{% for reason in update.blockers %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+  {% endif %}
+  {% if user_role == 'global_administrator' %}
+  <form method="post" action="/updates/install" data-confirm="{{ t('updates_confirm') }}" onsubmit="return confirm(this.dataset.confirm)">
+    <input type="hidden" name="version" value="{{ update.check.latest or '' }}">
+    <button class="btn btn-primary" {% if not update.can_install %}disabled{% endif %}>{{ t('updates_install') }}</button>
+  </form>
+  {% endif %}
+  <p class="muted">{{ t('updates_manual') }} <a href="{{ update.source }}#-quickstart" target="_blank" rel="noopener">GitHub</a></p>
+</section>
+<section class="card" style="margin-top:16px;" aria-live="polite">
+  <h3>{{ t('updates_status') }}</h3>
+  <p id="updateJob">{{ update.job.status or t('updates_idle') }}</p>
+  {% if update.job.error %}<p role="alert">{{ update.job.error }}</p>{% endif %}
+  {% if update.job.backup %}<p>{{ t('updates_backup') }}: <code>.runtime/updates/backups/{{ update.job.backup }}</code></p>{% endif %}
+  {% if update.history %}<details><summary>{{ t('updates_history') }}</summary><ul>{% for job in update.history %}<li><time data-unix="{{ job.updated_at }}"></time>: {{ job.status }} {{ job.target[:12] }}{% if job.error %}. {{ job.error }}{% endif %}</li>{% endfor %}</ul></details>{% endif %}
+</section>
+<script>
+document.querySelectorAll('time[data-unix]').forEach(el => el.textContent = new Date(Number(el.dataset.unix)*1000).toLocaleString());
+const updateActive = {{ (update.job.status in ['waiting_restart','backing_up','installing','restarting','rolling_back'])|tojson }};
+if(updateActive){
+  const pollUpdate = async () => {
+    try {
+      const response = await fetch('/api/update-status', {cache:'no-store'});
+      if(response.ok){
+        const job = await response.json();
+        document.getElementById('updateJob').textContent = job.status || '';
+        if(['completed','error','interrupted'].includes(job.status)){ location.reload(); return; }
+      }
+    } catch(error) { /* The managed server is restarting. Keep the page and reconnect. */ }
+    setTimeout(pollUpdate, 2000);
+  };
+  pollUpdate();
+}
+</script>
+{% endblock %}

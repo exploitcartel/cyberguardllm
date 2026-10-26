@@ -80,6 +80,9 @@ and query parameters. Browser discovery can retain a custom request template wit
 
 Choose engines independently in **Scan Configs**. Configure the AI provider under **Settings**.
 The app supports OpenAI-compatible endpoints and native Anthropic and Gemini integrations.
+Settings includes endpoint presets for OpenAI, OpenRouter, Groq, and DeepSeek, plus a custom base URL.
+Use a model ID available in your provider account and its API key. Changing the endpoint host requires
+entering the corresponding key, so a saved key is not silently forwarded to another provider.
 PyRIT's provider setup is handled separately by its adapter. PyRIT objectives run in an owned subprocess:
 Stop terminates the worker, retains completed turns, and skips remaining objectives. The response judge reads
 the complete transcript, so a later refusal does not erase an earlier demonstrated leak.
@@ -87,6 +90,13 @@ the complete transcript, so a later refusal does not erase an earlier demonstrat
 Garak runs in `venv-garak/` when that environment exists. Its live view shows planned, sent, completed,
 and evaluated counts, plus transport errors. Completed results are saved during the scan and retained on Stop.
 Selecting a probe family such as `dan` can run hundreds of prompts across several probes.
+Complete, exact policy-block replies are recognized for refusal-based probes, including `donotanswer`;
+a refusal followed by additional content is never automatically passed. DoNotAnswer uses content-safety
+criteria rather than an excessive-agency rubric. General content-safety tests without a specific OWASP
+mapping display `N/A`. Garak `glitch` tests echo/token robustness: failed echoes are informational
+observations, not confirmed prompt-injection findings. These unmapped tests do not count as OWASP coverage.
+Existing finished scans can be corrected without replaying prompts using
+`python scripts/repair_garak_verdicts.py --apply`; the script first backs up SQLite and preserves raw evidence.
 
 ### 3. Rules and vulnerability graders
 
@@ -175,6 +185,18 @@ counts, and available coverage; they do not receive an AI-generated overall-risk
 
 Settings also supports HTTP/SOCKS proxy routing, randomized request delays, and User-Agent rotation.
 Use throttling to keep an authorized assessment within the target's operating limits.
+
+### 8. Application updates
+
+**Check for updates** below Settings compares the installed commit with the official GitHub `main` branch
+and previews recent changes. Checking never changes application code. A Global Administrator can install
+a checked update from a clean checkout when no scans are active. Managed local runs (`python run.py`,
+debug off) back up SQLite and encryption/signing keys under `.runtime/updates/backups/`, fast-forward,
+restart and check `/login`. Failed startup attempts restore the saved commit and database.
+
+Dependency/installer changes and service-managed deployments require a manual update instead.
+The page shows blocking conditions, installation history and recovery errors. Backups contain secrets;
+keep this local directory private. Retain a separate backup before major upgrades.
 
 ## 🗂️ Project Structure
 

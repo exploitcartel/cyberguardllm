@@ -23,4 +23,6 @@ if __name__ == "__main__":
     # Anything still "running" was orphaned by the previous server process; clear it. Only done here, in the process
     # that serves the app, so importing webapp.app elsewhere can never stop a live scan.
     reap_orphaned_tasks()
+    os.environ['CGLLM_MANAGED_LOCAL'] = '1'
+    os.environ['CGLLM_PORT'] = str(port)
     app.run(host=host, port=port, debug=debug)
