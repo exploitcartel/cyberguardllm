@@ -1059,6 +1059,75 @@ def api_scan_status(task_id):
     return progress
 
 
+@app.route('/api/pentest/<int:task_id>')
+def pentest_live_feed(task_id):
+    username, err = require_login()
+    if err: return err
+    try:
+        after = max(0, int(request.args.get('after', '0')))
+    except ValueError:
+        return jsonify(error='Invalid event cursor'), 400
+    conn = get_conn()
+    try:
+        task = conn.execute('SELECT t.*,r.mode FROM tasks t LEFT JOIN scan_results r ON r.id=t.result_id WHERE t.id=?', (task_id,)).fetchone()
+        if not task:
+            return jsonify(error='Task not found'), 404
+        from engine.pentest_live import feed
+        rows = feed(conn, task['result_id'], after) if task['result_id'] else []
+        return jsonify(active=task['mode'] == 'ai_pentest', status=task['status'], result_id=task['result_id'], events=rows,
+                       more=len(rows) == 50, next=rows[-1]['id'] if rows else after)
+    finally:
+        conn.close()
+
+
+@app.route('/api/pentest/<int:task_id>/command', methods=['POST'])
+def pentest_live_command(task_id):
+    username, err = require_role('operator')
+    if err: return err
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify(error='Expected an object'), 400
+    action = data.get('action')
+    if action not in ('steer', 'skip', 'approve', 'deny', 'reevaluate'):
+        return jsonify(error='Unsupported command'), 400
+    conn = get_conn()
+    try:
+        task = conn.execute('SELECT t.*,r.mode FROM tasks t JOIN scan_results r ON r.id=t.result_id WHERE t.id=?', (task_id,)).fetchone()
+        if not task or task['mode'] != 'ai_pentest' or (task['status'] != 'running' and action != 'reevaluate'):
+            return jsonify(error='An active AI-PENTEST task is required'), 409
+        if conn.execute("SELECT COUNT(*) FROM pentest_commands WHERE task_id=? AND status='pending'", (task_id,)).fetchone()[0] >= 20:
+            return jsonify(error='Command queue is full'), 429
+        payload = {}
+        if action == 'steer':
+            value = data.get('text')
+            if not isinstance(value, str) or not 1 <= len(value.strip()) <= 1500:
+                return jsonify(error='Direction must contain 1 to 1500 characters'), 400
+            payload['text'] = value.strip()
+        if action in ('approve', 'deny'):
+            event_id = data.get('event_id')
+            if type(event_id) != int:
+                return jsonify(error='Invalid proposal ID'), 400
+            row = conn.execute("SELECT payload FROM pentest_events WHERE id=? AND result_id=? AND kind='proposal'", (event_id, task['result_id'])).fetchone()
+            if not row or not json.loads(row['payload']).get('approval_required'):
+                return jsonify(error='Proposal does not belong to this assessment or needs no approval'), 400
+            payload['event_id'] = event_id
+        if action == 'reevaluate':
+            finding_id = data.get('finding_id')
+            if type(finding_id) != int or not conn.execute("SELECT 1 FROM findings WHERE id=? AND scan_result_id=? AND source='ai_pentest' AND verdict IN ('ERROR','REVIEW')", (finding_id, task['result_id'])).fetchone():
+                return jsonify(error='No eligible finding in this assessment'), 400
+            payload['finding_id'] = finding_id
+        command = conn.execute('INSERT INTO pentest_commands(task_id,action,payload,username,timestamp) VALUES(?,?,?,?,?)',
+                     (task_id, action, json.dumps(payload), username, now()))
+        conn.commit()
+        if action == 'reevaluate' and task['status'] != 'running':
+            import threading
+            from engine.pentest_live import reevaluate_saved
+            threading.Thread(target=reevaluate_saved, args=(task_id, command.lastrowid), daemon=True).start()
+        return jsonify(ok=True, message='Queued for the next safe boundary. An in-flight request is not interrupted.')
+    finally:
+        conn.close()
+
+
 def _set_task_control(task_id, control, action_label):
     # Operators are allowed to control a running scan (pause/resume/stop),
     # same role bar as starting one.

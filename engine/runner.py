@@ -368,7 +368,7 @@ def _retest_fail(target, rule, ai_judge_cfg, min_confidence, retest_count):
 
 def _retest_ai_fail(target, prompt, owasp_code, label, api_base, api_key, model, min_confidence,
                      retest_count, business_context, timeout, rubric=None, history=None, conn=None, task_id=None,
-                     objective=None, usage=None):
+                     objective=None, usage=None, live=None):
     """
     _retest_fail's counterpart for AI-Powered mode: re-sends the EXACT
     winning prompt that just got a confirmed FAIL (not a newly generated
@@ -388,10 +388,16 @@ def _retest_ai_fail(target, prompt, owasp_code, label, api_base, api_key, model,
         if usage is not None:
             usage["retest_target_requests"] += 1
         try:
+            if live:
+                live.event('sending', category=owasp_code, objective=objective.id if objective else '', prompt=prompt,
+                           explanation='Exact-prompt reproducibility verification; not a new generated attack.')
             if history is not None:
                 resend_response, _ = send_conversation_turn(target, prompt, list(history), timeout=timeout, max_retries=0)
             else:
                 resend_response = send_prompt(target, prompt, timeout=timeout, max_retries=0)
+            if live:
+                live.event('response', category=owasp_code, prompt=prompt, response=resend_response,
+                           explanation='Verification response retained before evaluation.')
             if conn is not None and _check_control(conn, task_id):
                 break
             if is_transport_error(resend_response):
@@ -409,6 +415,8 @@ def _retest_ai_fail(target, prompt, owasp_code, label, api_base, api_key, model,
             if objective:
                 from engine.ai_objectives import evidence_verdict
                 resend_verdict, _ = evidence_verdict(objective, resend_verdict, resend_response, business_context)
+            if live:
+                live.event('verification', verdict=resend_verdict, confidence=resend_confidence, explanation=_reason)
             if details and (not details.get("valid") or details["progress"] != 3):
                 resend_verdict = "REVIEW"
             # Same bar the original FAIL had to clear: a low-confidence FAIL
@@ -586,7 +594,7 @@ def _run_static(conn, task_id, result_id, target, categories, config=None):
     return False  # ran to completion (or aborted on an unresponsive target), not stopped by the operator
 
 
-def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=None, intensity=None, config=None, recon_context=None, source_tag="ai_agent"):
+def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=None, intensity=None, config=None, recon_context=None, source_tag="ai_agent", live=None):
     """Run a bounded objective campaign with accumulated evidence and explicit session limits."""
     from engine import ai_agent
     from core.crypto import decrypt_token
@@ -685,7 +693,11 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
     # model. Its result is discarded either way - this is not a probe and
     # is never recorded as a finding or counted against total_ai_calls.
     try:
-        send_prompt(target, "Hello", timeout=120.0, max_retries=0)
+        if live:
+            live.event('sending', prompt='Hello', explanation='Unscored model warm-up; counted separately from attack generation.')
+        warmup_response = send_prompt(target, "Hello", timeout=120.0, max_retries=0)
+        if live:
+            live.event('response', prompt='Hello', response=warmup_response, explanation='Unscored warm-up response.')
     except Exception:
         pass
 
@@ -693,6 +705,8 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
         business_context = target["business_context"]
     except (IndexError, KeyError):
         business_context = None
+    if live:
+        business_context = dict(target).get('assessment_policy') or business_context
     try:
         client_history = target["body_format"] == "messages" and (target["transport"] or "http") == "http"
     except (KeyError, IndexError):
@@ -753,11 +767,14 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
             prev_prompt, prev_response, prev_reasoning = ((previous["prompt"], previous["response"], previous["reasoning"]) if previous else (None, None, None))
             try:
                 usage["generation_calls"] += 1
+                campaign_context = memory.context(objective, business_context, recon_context)
+                if live:
+                    campaign_context = live.context(objective, campaign_context)
                 prompt = ai_agent.generate_adversarial_prompt(
                     api_base, api_key, model, owasp_code, label, prev_prompt, prev_response,
                     previous_reasoning=prev_reasoning, technique_hint=technique_hint,
                     attempt_number=attempt, attempts_budget=effective_budget,
-                    campaign_context=memory.context(objective, business_context, recon_context))
+                    campaign_context=campaign_context)
                 consecutive_empty_prompts = 0
             except ai_agent.EmptyModelOutput as e:
                 # Nothing was written, so nothing is sent: an empty prompt is not an attack, and scoring the
@@ -840,6 +857,17 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 continue
             if _check_control(conn, task_id):
                 return True
+            if live:
+                action = live.before_send(objective, owasp_code, prompt)
+                if action == 'stop':
+                    return True
+                if action == 'skip':
+                    memory.skipped.add(objective.id)
+                    step -= 1
+                    total -= 1
+                    conn.execute('UPDATE tasks SET progress_total=?,progress_done=? WHERE id=?', (total, step, task_id))
+                    conn.commit()
+                    continue
             # Explicit histories are separate per objective. Do not pretend a
             # server-managed cookie session can be reset from this client.
             prior_history = list(histories.get(objective.id, []))
@@ -850,6 +878,8 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 response_text, histories[objective.id] = send_conversation_turn(target, prompt, prior_history, timeout=dynamic_timeout, max_retries=0)
             else:
                 response_text = send_prompt(target, prompt, timeout=dynamic_timeout, max_retries=0)
+            if live:
+                live.response(objective, owasp_code, prompt, response_text)
             stopped_after_response = _check_control(conn, task_id)
             judging_prompt = prompt
             if prior_history:
@@ -903,12 +933,12 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 findings_count += 1
 
             repro_hits, repro_total = None, None
-            if verdict == "FAIL" and enable_retest:
+            if verdict == "FAIL" and enable_retest and not (live and live.last_approval_required):
                 repro_hits, repro_total = _retest_ai_fail(
                     target, prompt, owasp_code, label, api_base, api_key, model, min_confidence,
                     retest_count, business_context, dynamic_timeout, rubric=rubric,
                     history=prior_history if client_history else None, conn=conn, task_id=task_id,
-                    objective=objective, usage=usage)
+                    objective=objective, usage=usage, live=live)
                 step += repro_total - 1
                 total += repro_total - 1
                 conn.execute("UPDATE tasks SET progress_total=? WHERE id=?", (total, task_id))
@@ -922,7 +952,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
             if repro_total:
                 description += f" | Retested {repro_total}x, reproduced {repro_hits}/{repro_total}"
 
-            conn.execute(
+            finding_cursor = conn.execute(
                 """INSERT INTO findings (scan_result_id, rule_id, owasp, severity, verdict, prompt_sent, raw_response, description, module, source, recommendation, confidence, reproducibility_hits, reproducibility_total)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (result_id, rule_id, owasp_code, severity, verdict, judging_prompt, response_text, description,
@@ -933,6 +963,9 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
             conn.execute("UPDATE tasks SET progress_done=?, progress_findings=?, last_rule_id=? WHERE id=?",
                          (step, findings_count, f"AI {objective.id}: {usage['primary_target_requests']} sent; objective {progress}/3; {verdict}", task_id))
             conn.commit()
+
+            if live:
+                live.evaluated(objective, finding_cursor.lastrowid, verdict, reasoning, confidence)
 
             if stopped_after_response or _check_control(conn, task_id):
                 return True
@@ -965,6 +998,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                                     attempts=memory.tries.get(o.id, 0),
                                     requests=memory.sent.get(o.id, 0),
                                     confirmed=o.id in memory.confirmed,
+                                    operator_skipped=o.id in memory.skipped,
                                     progress=memory.progress.get(o.id, 0)) for code in cats for o in OBJECTIVES[code]])
     conn.execute("INSERT INTO findings(scan_result_id,rule_id,owasp,severity,verdict,description,module,source) VALUES(?,?,?,?,?,?,?,?)",
                  (result_id, f"{rule_prefix}-campaign-summary", cats[0], "low", "INFO", json.dumps(summary), "AI campaign execution summary", source_tag))
@@ -1310,7 +1344,7 @@ def force_stop_task(task_id: int):
 
 def get_task_progress(task_id: int, after=0):
     conn = get_conn()
-    task = conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+    task = conn.execute("SELECT t.*,r.mode AS scan_mode FROM tasks t LEFT JOIN scan_results r ON r.id=t.result_id WHERE t.id=?", (task_id,)).fetchone()
     recent = []
     hits = []
     if task and task["result_id"] is not None:
@@ -1346,6 +1380,7 @@ def get_task_progress(task_id: int, after=0):
     if not task:
         return None
     return {
+        "is_pentest": task["scan_mode"] == "ai_pentest",
         "status": task["status"],
         "total": task["progress_total"] or 0,
         "done": task["progress_done"] or 0,

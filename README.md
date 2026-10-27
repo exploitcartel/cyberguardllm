@@ -350,3 +350,11 @@ This repository does not include a license file. Contact the author to clarify u
 - Issues and bug reports: [github.com/exploitcartel/cyberguardllm/issues](https://github.com/exploitcartel/cyberguardllm/issues)
 
 [Back to top](#top)
+
+### AI-PENTEST live workspace
+
+AI-PENTEST keeps a durable live timeline of hypotheses, generated prompts, target replies, verdicts and short decision explanations. Requests appear as tickets around the 3D target and link to the timeline; evaluated findings link directly to their evidence. The timeline shows 50 events per page and survives refreshes.
+
+Operators can steer the next step, skip a branch, pause/stop, or re-evaluate saved replies without contacting the target again (up to three manual evaluations per assessment). Commands apply between requests, not during an in-flight HTTP call. LLM03 proposals and prompts matching the conservative external-action check need approval for the exact prompt; approval expires after five minutes. Such prompts are never automatically replayed. This textual check is not a substitute for target-side tool permissions or a sandbox.
+
+Generation remains limited to the selected categories and configured budget; the live controller stops sending new prompts after 30 minutes. Profiling, planning, warm-up and optional verification add calls beyond the generation budget. Model claims and observed text are labeled separately; external effects and cross-account access require independent evidence. The workspace does not invent backend verification or execute model-suggested shell commands.

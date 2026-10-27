@@ -185,6 +185,18 @@ CREATE TABLE IF NOT EXISTS scan_events (
     kind TEXT NOT NULL, message TEXT, finding_id INTEGER,
     UNIQUE(result_id,event_key)
 );
+CREATE TABLE IF NOT EXISTS pentest_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    result_id INTEGER NOT NULL REFERENCES scan_results(id) ON DELETE CASCADE,
+    timestamp TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pentest_events_result ON pentest_events(result_id,id);
+CREATE TABLE IF NOT EXISTS pentest_commands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    action TEXT NOT NULL, payload TEXT NOT NULL, username TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending', timestamp TEXT NOT NULL
+);
 CREATE TRIGGER IF NOT EXISTS trg_scan_event_finding AFTER INSERT ON findings
 BEGIN
     INSERT OR IGNORE INTO scan_events(result_id,event_key,kind,message,finding_id)

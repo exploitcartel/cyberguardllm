@@ -16,6 +16,7 @@
     color:var(--s-text);border:1px solid var(--s-line);border-radius:18px;overflow:hidden;
     box-shadow:var(--s-shadow);
   }
+  .stage.pentest-live-stage{height:min(72vh,680px);min-height:520px;}
   /* Follows the app theme: the stage is dark in dark mode and light in light mode. */
   body.light .stage{
     --s-bg:#ffffff; --s-line:rgba(30,64,175,.14); --s-text:#0f172a; --s-muted:#5b6b86;
@@ -182,6 +183,26 @@
 
 </section>
 
+<section id="pentestWorkspace" class="card" hidden style="margin-top:20px;">
+  <h2>AI-PENTEST Live workspace</h2>
+  <p class="muted">Hypotheses, target evidence and short decision explanations. Claimed capabilities are not verified actions. Requests that could change external state require approval. Commands apply at the next safe boundary.</p>
+  <div id="pentestCapabilities" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+  <form id="pentestDirection" style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;">
+    <input id="pentestDirectionText" aria-label="Assessment direction" maxlength="1500" placeholder="Direct the assessment within its configured scope" style="flex:1;min-width:220px;">
+    <button type="submit" class="btn">Send direction</button>
+    <button id="pentestSkip" type="button" class="btn">Skip current branch</button>
+    <a id="pentestResults" class="btn" href="/results">Open results</a>
+  </form>
+  <p id="pentestCommandStatus" role="status" aria-live="polite"></p>
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
+    <button class="btn" id="pentestPrev" type="button">Previous</button>
+    <span id="pentestPage"></span>
+    <button class="btn" id="pentestNext" type="button">Next</button>
+    <button class="btn" id="pentestLatest" type="button">Follow latest</button>
+  </div>
+  <div id="pentestTimeline"></div>
+</section>
+
 <script type="importmap">
 {"imports":{
   "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -217,7 +238,7 @@ btnStop.addEventListener('click', () => {
   if(actionInFlight) return;
   if(!confirm('Je i sigurt qe do te ndalosh skanimin? Gjetjet e deritanishme do te ruhen.')) return;
   actionInFlight = true;
-  btnStop.textContent='Stopping…';
+  btnStop.textContent='Stoppingâ€¦';
   postControl('stop').then(r => { if(!r.ok) throw new Error(r.error || 'Stop failed'); })
     .catch(e => { addLog(esc(e.message),'log-note'); btnStop.textContent='Stop'; })
     .finally(() => { actionInFlight = false; });
@@ -353,7 +374,7 @@ function addTicket(ev, opts){
   const v = (ev.verdict || 'FAIL').toLowerCase();
   const el = document.createElement('a');
   el.className = 'ticket ' + v;
-  el.href = '/findings/' + ev.id;                       // straight to the finding this ticket stands for
+  el.href = ev.live_event_id ? '#pentest-event-' + ev.live_event_id : '/findings/' + ev.id;
   const category = OWASP_LABELS[ev.owasp] || ev.owasp || 'Test';
   // the AI agent's module name is generic ("AI-Powered Adversarial Agent"); only show a module that says something
   const module = ev.module && !/^AI-Powered/i.test(ev.module) ? ' \u00b7 ' + ev.module : '';
@@ -362,7 +383,7 @@ function addTicket(ev, opts){
     '<div class="ticket-top"><span class="ticket-code">' + esc(ev.owasp) + '</span>' +
     '<span class="chip ' + v + '">' + (VERDICT_TEXT[ev.verdict] || esc(ev.verdict)) + '</span></div>' +
     '<div class="ticket-label">' + esc(category) + '</div>' +
-    '<div class="ticket-rule">' + esc(ev.rule_id + module) + '</div>';
+    '<div class="ticket-rule">' + esc((ev.preview || ev.rule_id) + module) + '</div>';
   ticketBox.appendChild(el);
 
   const line = document.createElementNS(SVGNS, 'line');
@@ -438,22 +459,22 @@ function poll(){
     const total=usePyrit ? data.pyrit.objectives_total : data.total;
     const done=usePyrit ? data.pyrit.objectives_done : data.done;
     const pct = total > 0 ? Math.min(terminal ? 100 : 99, Math.floor((done / total) * 100)) : 0;
-    $('progressPct').textContent = usePyrit && data.pyrit.phase === 'error' ? 'ERROR' : unknownPlan ? '…' : pct + '%';
+    $('progressPct').textContent = usePyrit && data.pyrit.phase === 'error' ? 'ERROR' : unknownPlan ? 'â€¦' : pct + '%';
     $('progressBar').style.width = pct + '%';
     $('progressBar').classList.toggle('indeterminate', !!(pyritActive && !terminal));
-    $('progressCount').textContent = usePyrit ? data.pyrit.finished+' attempts finished · '+data.pyrit.responses+' replies · '+data.pyrit.errors+' transport errors' : unknownPlan ? 'Preparing the probe plan...' : data.done + ' / ' + data.total + ' payloads';
+    $('progressCount').textContent = usePyrit ? data.pyrit.finished+' attempts finished Â· '+data.pyrit.responses+' replies Â· '+data.pyrit.errors+' transport errors' : unknownPlan ? 'Preparing the probe plan...' : data.done + ' / ' + data.total + ' payloads';
     const waitingEvaluation=data.garak && !data.garak.evaluated && !terminal;
     $('findingsCount').textContent = waitingEvaluation ? '-' : data.findings;
     $('findingsCount').title = waitingEvaluation ? 'Waiting for the first detector evaluation' : 'Confirmed FAIL results';
     let stats=$('garakStats');
     if(data.garak){
       if(!stats){ stats=document.createElement('div'); stats.id='garakStats'; stats.className='module-stats'; $('phaseLabel').parentNode.appendChild(stats); }
-      stats.textContent='Planned: '+(data.garak.planned ?? 'preparing')+' · Sent: '+data.garak.sent+' · Finished: '+data.garak.completed+' · Evaluated: '+data.garak.evaluated+' · Transport errors: '+data.garak.errors;
+      stats.textContent='Planned: '+(data.garak.planned ?? 'preparing')+' Â· Sent: '+data.garak.sent+' Â· Finished: '+data.garak.completed+' Â· Evaluated: '+data.garak.evaluated+' Â· Transport errors: '+data.garak.errors;
     }
     $('testedLabel').textContent = usePyrit ? 'Replies' : 'Tested';
     $('totalLabel').textContent = usePyrit ? 'Objectives finished' : 'Total';
     $('testedCount').textContent = usePyrit ? data.pyrit.responses : data.done;
-    $('totalCount').textContent = usePyrit ? data.pyrit.objectives_done+' / '+data.pyrit.objectives_total : unknownPlan ? '…' : data.total;
+    $('totalCount').textContent = usePyrit ? data.pyrit.objectives_done+' / '+data.pyrit.objectives_total : unknownPlan ? 'â€¦' : data.total;
 
     // last_rule_id is a bare rule id while the static/AI engine is testing payloads, or a sentence
     // (e.g. "Running PyRIT module...") once an external module has taken over.
@@ -499,12 +520,87 @@ function poll(){
                 data.status === 'completed' ? 'done' : 'stopped');
       btnPauseResume.disabled = true;
       btnStop.disabled = true;
-      setTimeout(() => { window.location.href = '/results/' + data.result_id; }, 1400);
+      if(!data.is_pentest) setTimeout(() => { window.location.href = '/results/' + data.result_id; }, 1400);
     } else {
       setTimeout(poll, data.more_events ? 100 : 700);
     }
   }).catch(() => { setTimeout(poll, 1200); });
 }
+let pentestActive=false, pentestCursor=0, pentestPage=1, pentestFollow=true, pentestTerminal=false;
+const pentestEvents=[], pentestCapabilities=[], pentestOpen=new Set();
+async function pentestCommand(action, payload={}){
+  const status=$('pentestCommandStatus');
+  try{
+    const response=await fetch('/api/pentest/'+taskId+'/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...payload})});
+    const data=await response.json();
+    status.textContent=response.ok ? data.message : (data.error || 'Command failed');
+    if(response.ok && action==='reevaluate' && pentestTerminal)setTimeout(pollPentest,1000);
+  }catch(e){status.textContent='Connection failed. Command was not confirmed.';}
+}
+$('pentestDirection').addEventListener('submit',e=>{e.preventDefault();const text=$('pentestDirectionText').value.trim();if(text){pentestCommand('steer',{text});$('pentestDirectionText').value='';}});
+$('pentestSkip').onclick=()=>pentestCommand('skip');
+function renderPentest(){
+  const pages=Math.max(1,Math.ceil(pentestEvents.length/50));
+  if(pentestFollow) pentestPage=pages;
+  pentestPage=Math.min(pages,Math.max(1,pentestPage));
+  $('pentestPage').textContent='Page '+pentestPage+' / '+pages+' | '+pentestEvents.length+' saved events';
+  $('pentestPrev').disabled=pentestPage===1; $('pentestNext').disabled=pentestPage===pages;
+  const box=$('pentestTimeline');box.replaceChildren();
+  for(const ev of pentestEvents.slice((pentestPage-1)*50,pentestPage*50)){
+    const card=document.createElement('details');card.className='card';card.id='pentest-event-'+ev.id;card.style.marginBottom='10px';
+    const summary=document.createElement('summary');summary.style.cursor='pointer';
+    summary.textContent=ev.kind.toUpperCase()+' | '+(ev.category||ev.objective||'AI-PENTEST')+' | '+(ev.verdict||'')+' '+(ev.prompt||ev.explanation||'').slice(0,160);
+    card.appendChild(summary);card.open=pentestOpen.has(ev.id);
+    card.addEventListener('toggle',()=>{if(card.open)pentestOpen.add(ev.id);else pentestOpen.delete(ev.id);});
+    for(const [label,key] of [['Hypothesis','goal'],['Prompt in','prompt'],['Prompt out','response'],['Decision explanation','explanation'],['Next decision','next_decision']]){
+      if(ev[key]){const title=document.createElement('strong');title.textContent=label;const text=document.createElement('pre');text.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;';text.textContent=ev[key];card.append(title,text);}
+    }
+    if(ev.finding_id){const link=document.createElement('a');link.className='btn';link.href='/findings/'+ev.finding_id;link.textContent='Open exact finding';card.appendChild(link);}
+    const button=(label,action,payload)=>{const b=document.createElement('button');b.type='button';b.className='btn';b.textContent=label;b.disabled=pentestTerminal&&action!=='reevaluate';b.onclick=()=>{b.disabled=true;pentestCommand(action,payload);};card.appendChild(b);};
+    if(ev.kind==='approval'){button('Approve exact prompt','approve',{event_id:ev.event_id});button('Deny','deny',{event_id:ev.event_id});}
+    if(ev.kind==='evaluation'&&['ERROR','REVIEW'].includes(ev.verdict))button('Retry evaluation only','reevaluate',{finding_id:ev.finding_id});
+    box.appendChild(card);
+  }
+}
+$('pentestPrev').onclick=()=>{pentestFollow=false;pentestPage--;renderPentest();};
+$('pentestNext').onclick=()=>{pentestFollow=false;pentestPage++;renderPentest();};
+$('pentestLatest').onclick=()=>{pentestFollow=true;renderPentest();};
+ticketBox.addEventListener('click',e=>{
+  const link=e.target.closest('a[href^="#pentest-event-"]');if(!link)return;
+  e.preventDefault();const id=Number(link.hash.replace('#pentest-event-',''));const index=pentestEvents.findIndex(ev=>ev.id===id);
+  if(index>=0){pentestFollow=false;pentestPage=Math.floor(index/50)+1;pentestOpen.add(id);renderPentest();$('pentest-event-'+id)?.scrollIntoView({behavior:'smooth',block:'center'});}
+});
+async function pollPentest(){
+  try{
+    const response=await fetch('/api/pentest/'+taskId+'?after='+pentestCursor);
+    if(!response.ok)throw new Error('feed');
+    const data=await response.json();pentestActive=data.active;
+    if(data.active){
+      document.querySelector('.stage').classList.add('pentest-live-stage');
+      $('pentestWorkspace').hidden=false;
+      $('pentestResults').href='/results/'+data.result_id;
+      const wasTerminal=pentestTerminal;
+      pentestTerminal=['completed','error','stopped'].includes(data.status);
+      document.querySelector('.stage-title h1').textContent=pentestTerminal ? 'AI-PENTEST: '+data.status : 'AI-PENTEST live assessment';
+      for(const ev of data.events){
+        pentestEvents.push(ev);pentestCursor=ev.id;
+        if(ev.kind==='capability'){
+          const chip=document.createElement('span');chip.className='btn';chip.textContent=ev.name+' | '+ev.level;chip.title=ev.explanation;$('pentestCapabilities').appendChild(chip);
+        }
+        if(ev.kind==='sending'){
+          head.pulse(.8);
+          addTicket({id:'event-'+ev.id,live_event_id:ev.id,owasp:ev.category||'AI',rule_id:ev.objective||'Profiling',verdict:'INFO',preview:ev.prompt?.slice(0,90)});
+        }
+        if(ev.kind==='response')head.pulse(.4);
+      }
+      if(data.events.length || wasTerminal!==pentestTerminal || $('pentestTimeline').children.length===0)renderPentest();
+      $('pentestSkip').disabled=pentestTerminal;
+      $('pentestDirectionText').disabled=pentestTerminal;
+    }
+    if(data.more||data.active||!pentestTerminal)setTimeout(pollPentest,data.more?100:(pentestTerminal?3000:900));
+  }catch(e){setTimeout(pollPentest,1800);}
+}
+pollPentest();
 poll();
 </script>
 {% endblock %}

@@ -96,6 +96,7 @@ class CampaignMemory:
     records: list = field(default_factory=list)
     seen: set = field(default_factory=set)
     confirmed: set = field(default_factory=set)
+    skipped: set = field(default_factory=set)
     progress: dict = field(default_factory=dict)
     tries: dict = field(default_factory=dict)
     sent: dict = field(default_factory=dict)
@@ -109,7 +110,7 @@ class CampaignMemory:
         return False
 
     def choose(self, code, attempt):
-        available = [o for o in OBJECTIVES[code] if o.id not in self.confirmed]
+        available = [o for o in OBJECTIVES[code] if o.id not in self.confirmed and o.id not in self.skipped]
         if not available:
             return None
         # Explore each objective before following partial, quoted evidence.
