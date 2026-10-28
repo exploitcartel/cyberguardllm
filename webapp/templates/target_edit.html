@@ -47,6 +47,7 @@
       <textarea name="assessment_policy" rows="4">{{ target.assessment_policy or '' }}</textarea>
       <p class="muted">Document the actual allowed actions and prohibited commitments. Do not include secrets. This reference guides evaluation; it does not prove an external action occurred.</p>
     </div>
+    {% set selected_avatar = target.avatar_variant %}{% set random_avatar = target.avatar_random %}{% include '_target_avatar.html' %}
     {% set request_timeout = target.request_timeout %}{% include '_target_timeout.html' %}
     <button class="btn btn-primary" type="submit">{{ t('btn_save_changes') }}</button>
     <a href="/targets" class="btn">{{ t('btn_cancel') }}</a>

@@ -145,6 +145,7 @@
       <div>
         <h1>Scan in progress</h1>
         <p>Target: {{ target_name }} &nbsp;|&nbsp; Config: {{ config_name }}</p>
+        <p id="avatarLabel" title="{{ t('avatar_help') }}">{{ t('avatar_label') }}: {{ avatar_options[avatar_variant] }}</p>
       </div>
     </div>
     <div class="stage-actions">
@@ -217,6 +218,7 @@ const $ = (id) => document.getElementById(id);
 
 const head = createHeadScene($('headWrap'), $('headCanvas'), {
   theme: document.body.classList.contains('light') ? 'light' : 'dark',
+  variant: {{ avatar_variant|tojson }},
   onFail: () => $('headWrap').classList.add('no-webgl'),
 });
 
@@ -238,7 +240,7 @@ btnStop.addEventListener('click', () => {
   if(actionInFlight) return;
   if(!confirm('Je i sigurt qe do te ndalosh skanimin? Gjetjet e deritanishme do te ruhen.')) return;
   actionInFlight = true;
-  btnStop.textContent='Stoppingâ€¦';
+  btnStop.textContent='Stopping…';
   postControl('stop').then(r => { if(!r.ok) throw new Error(r.error || 'Stop failed'); })
     .catch(e => { addLog(esc(e.message),'log-note'); btnStop.textContent='Stop'; })
     .finally(() => { actionInFlight = false; });
@@ -452,6 +454,7 @@ let finished = false;
 
 function poll(){
   fetch('/api/scan-status/' + taskId + '?after=' + lastEvent).then(r => r.json()).then(data => {
+    if(data.avatar_variant){head.setVariant(data.avatar_variant);$('avatarLabel').textContent={{ t('avatar_label')|tojson }}+': '+({{ avatar_options|tojson }}[data.avatar_variant]||data.avatar_variant);}
     const terminal=['completed','stopped','error'].includes(data.status);
     const pyritActive=data.pyrit && ['running','paused'].includes(data.pyrit.phase);
     const usePyrit=data.pyrit && (pyritActive || data.total === 0);
@@ -459,22 +462,22 @@ function poll(){
     const total=usePyrit ? data.pyrit.objectives_total : data.total;
     const done=usePyrit ? data.pyrit.objectives_done : data.done;
     const pct = total > 0 ? Math.min(terminal ? 100 : 99, Math.floor((done / total) * 100)) : 0;
-    $('progressPct').textContent = usePyrit && data.pyrit.phase === 'error' ? 'ERROR' : unknownPlan ? 'â€¦' : pct + '%';
+    $('progressPct').textContent = usePyrit && data.pyrit.phase === 'error' ? 'ERROR' : unknownPlan ? '…' : pct + '%';
     $('progressBar').style.width = pct + '%';
     $('progressBar').classList.toggle('indeterminate', !!(pyritActive && !terminal));
-    $('progressCount').textContent = usePyrit ? data.pyrit.finished+' attempts finished Â· '+data.pyrit.responses+' replies Â· '+data.pyrit.errors+' transport errors' : unknownPlan ? 'Preparing the probe plan...' : data.done + ' / ' + data.total + ' payloads';
+    $('progressCount').textContent = usePyrit ? data.pyrit.finished+' attempts finished · '+data.pyrit.responses+' replies · '+data.pyrit.errors+' transport errors' : unknownPlan ? 'Preparing the probe plan...' : data.done + ' / ' + data.total + ' payloads';
     const waitingEvaluation=data.garak && !data.garak.evaluated && !terminal;
     $('findingsCount').textContent = waitingEvaluation ? '-' : data.findings;
     $('findingsCount').title = waitingEvaluation ? 'Waiting for the first detector evaluation' : 'Confirmed FAIL results';
     let stats=$('garakStats');
     if(data.garak){
       if(!stats){ stats=document.createElement('div'); stats.id='garakStats'; stats.className='module-stats'; $('phaseLabel').parentNode.appendChild(stats); }
-      stats.textContent='Planned: '+(data.garak.planned ?? 'preparing')+' Â· Sent: '+data.garak.sent+' Â· Finished: '+data.garak.completed+' Â· Evaluated: '+data.garak.evaluated+' Â· Transport errors: '+data.garak.errors;
+      stats.textContent='Planned: '+(data.garak.planned ?? 'preparing')+' · Sent: '+data.garak.sent+' · Finished: '+data.garak.completed+' · Evaluated: '+data.garak.evaluated+' · Transport errors: '+data.garak.errors;
     }
     $('testedLabel').textContent = usePyrit ? 'Replies' : 'Tested';
     $('totalLabel').textContent = usePyrit ? 'Objectives finished' : 'Total';
     $('testedCount').textContent = usePyrit ? data.pyrit.responses : data.done;
-    $('totalCount').textContent = usePyrit ? data.pyrit.objectives_done+' / '+data.pyrit.objectives_total : unknownPlan ? 'â€¦' : data.total;
+    $('totalCount').textContent = usePyrit ? data.pyrit.objectives_done+' / '+data.pyrit.objectives_total : unknownPlan ? '…' : data.total;
 
     // last_rule_id is a bare rule id while the static/AI engine is testing payloads, or a sentence
     // (e.g. "Running PyRIT module...") once an external module has taken over.

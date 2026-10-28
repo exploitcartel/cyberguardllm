@@ -769,7 +769,10 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 usage["generation_calls"] += 1
                 campaign_context = memory.context(objective, business_context, recon_context)
                 if live:
-                    campaign_context = live.context(objective, campaign_context)
+                    campaign_context, technique_hint, previous_values = live.prepare(
+                        objective, campaign_context, technique_hint,
+                        (prev_prompt, prev_response, prev_reasoning))
+                    prev_prompt, prev_response, prev_reasoning = previous_values
                 prompt = ai_agent.generate_adversarial_prompt(
                     api_base, api_key, model, owasp_code, label, prev_prompt, prev_response,
                     previous_reasoning=prev_reasoning, technique_hint=technique_hint,
@@ -843,7 +846,12 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 AI_POWERED_TIMEOUT_BASE + AI_POWERED_TIMEOUT_GROWTH_PER_CALL * (total_ai_calls - 1),
                 AI_POWERED_TIMEOUT_CAP,
             )
-            if memory.duplicate(prompt):
+            if live:
+                prompt = live.search.transform(prompt)
+            duplicate = live.search.duplicate(prompt) if live else memory.duplicate(prompt)
+            if duplicate:
+                if live:
+                    live.search.feedback(prompt, '', 'INFO', 0, 'Duplicate prompt was not sent.')
                 usage["duplicate_prompts"] += 1
                 step -= 1
                 total -= 1
@@ -870,12 +878,13 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                     continue
             # Explicit histories are separate per objective. Do not pretend a
             # server-managed cookie session can be reset from this client.
-            prior_history = list(histories.get(objective.id, []))
+            history_key = live.branch_key if live else objective.id
+            prior_history = list(histories.get(history_key, []))
             if len(prior_history) >= 8:
                 prior_history = []  # start a fresh explicit four-turn branch
             usage["primary_target_requests"] += 1
             if client_history:
-                response_text, histories[objective.id] = send_conversation_turn(target, prompt, prior_history, timeout=dynamic_timeout, max_retries=0)
+                response_text, histories[history_key] = send_conversation_turn(target, prompt, prior_history, timeout=dynamic_timeout, max_retries=0)
             else:
                 response_text = send_prompt(target, prompt, timeout=dynamic_timeout, max_retries=0)
             if live:
@@ -965,7 +974,7 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
             conn.commit()
 
             if live:
-                live.evaluated(objective, finding_cursor.lastrowid, verdict, reasoning, confidence)
+                live.evaluated(objective, finding_cursor.lastrowid, verdict, reasoning, confidence, prompt, response_text, progress)
 
             if stopped_after_response or _check_control(conn, task_id):
                 return True
@@ -1038,6 +1047,10 @@ def _execute(task_id: int):
         (task["id"], target["id"], now(), "running", "ai_pentest" if ai_pentest else ("ai_powered" if ai_powered else "offline"), proxy_used),
     )
     result_id = cur.lastrowid
+    from core.avatars import resolve_avatar
+    previous_avatar = conn.execute('SELECT avatar_variant FROM scan_results WHERE target_id=? AND id<>? AND avatar_variant IS NOT NULL ORDER BY id DESC LIMIT 1', (target['id'], result_id)).fetchone()
+    conn.execute('UPDATE scan_results SET avatar_variant=? WHERE id=?',
+                 (resolve_avatar(target, previous=previous_avatar[0] if previous_avatar else None), result_id))
     from core.provenance import scanner_version
     conn.execute('UPDATE scan_results SET scanner_version=? WHERE id=?', (scanner_version(), result_id))
     # Link the task to its result right away: a scan with no static or AI phase (garak only) never set this, so the
@@ -1344,7 +1357,7 @@ def force_stop_task(task_id: int):
 
 def get_task_progress(task_id: int, after=0):
     conn = get_conn()
-    task = conn.execute("SELECT t.*,r.mode AS scan_mode FROM tasks t LEFT JOIN scan_results r ON r.id=t.result_id WHERE t.id=?", (task_id,)).fetchone()
+    task = conn.execute("SELECT t.*,r.mode AS scan_mode,r.avatar_variant FROM tasks t LEFT JOIN scan_results r ON r.id=t.result_id WHERE t.id=?", (task_id,)).fetchone()
     recent = []
     hits = []
     if task and task["result_id"] is not None:
@@ -1381,6 +1394,7 @@ def get_task_progress(task_id: int, after=0):
         return None
     return {
         "is_pentest": task["scan_mode"] == "ai_pentest",
+        "avatar_variant": task['avatar_variant'],
         "status": task["status"],
         "total": task["progress_total"] or 0,
         "done": task["progress_done"] or 0,

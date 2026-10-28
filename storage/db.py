@@ -295,6 +295,9 @@ def _create_indexes(conn):
 # that an existing cyberguardllm.db (with real scan history) picks them up
 # via ALTER TABLE instead of needing the database to be deleted and recreated.
 _MIGRATIONS = [
+    ('targets', 'avatar_variant', "TEXT DEFAULT 'auto'"),
+    ('targets', 'avatar_random', 'INTEGER DEFAULT 0'),
+    ('scan_results', 'avatar_variant', 'TEXT'),
     ('scan_results', 'scanner_version', 'TEXT'),
     ('targets', 'assessment_policy', 'TEXT'),
     ("findings", "confidence", "INTEGER"),

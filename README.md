@@ -358,3 +358,11 @@ AI-PENTEST keeps a durable live timeline of hypotheses, generated prompts, targe
 Operators can steer the next step, skip a branch, pause/stop, or re-evaluate saved replies without contacting the target again (up to three manual evaluations per assessment). Commands apply between requests, not during an in-flight HTTP call. LLM03 proposals and prompts matching the conservative external-action check need approval for the exact prompt; approval expires after five minutes. Such prompts are never automatically replayed. This textual check is not a substitute for target-side tool permissions or a sandbox.
 
 Generation remains limited to the selected categories and configured budget; the live controller stops sending new prompts after 30 minutes. Profiling, planning, warm-up and optional verification add calls beyond the generation budget. Model claims and observed text are labeled separately; external effects and cross-account access require independent evidence. The workspace does not invent backend verification or execute model-suggested shell commands.
+
+AI-PENTEST explores separate strategy branches per objective, keeps explicit message histories isolated by branch, applies the selected payload mutation, and updates branch selection using observed objective progress. Server-side session reset remains unverified.
+
+### Target AI busts
+
+The login page always uses the original human head with fingerprint-style ridges. New targets default to random robotic avatars for each scan.
+
+Ten original procedural robotic busts share the live scan network globe, drag rotation, theme and finding effects. Preview them under `/avatars`, or choose one under Edit Target. Automatic identities stay consistent per target. Random mode selects a different bust from that target's previous scan and stores it on the scan result, so refreshes and later target edits do not change an existing scan's identity. The bust is a symbolic visualization, not a depiction of the target's internal architecture.

@@ -249,10 +249,11 @@ def flash_t(key, category="success"):
 
 
 def ctx(**extra):
+    from core.avatars import AVATARS
     username = current_user()
     base = {"username": username, "theme": theme(), "lang": current_lang(),
             "user_role": get_user_role(username) if username else None,
-            "endpoint_presets": ENDPOINT_PRESETS}
+            "endpoint_presets": ENDPOINT_PRESETS, 'avatar_options': AVATARS}
     base.update(extra)
     return base
 
@@ -567,6 +568,11 @@ def target_discover_socketio():
 def target_save():
     username, err = require_role("administrator")
     if err: return err
+    from core.avatars import validate_avatar
+    try:
+        avatar_variant = validate_avatar(request.form.get('avatar_variant', 'auto'))
+    except ValueError as exc:
+        return Response(str(exc), status=400)
     try:
         request_timeout = parse_timeout(request.form.get('request_timeout', DEFAULT_RESPONSE_TIMEOUT))
     except ValueError as exc:
@@ -591,6 +597,8 @@ def target_save():
          body_template_json, transport, ws_auth_mode, ws_event_name, body_encoding),
     )
     conn.execute('UPDATE targets SET request_timeout=? WHERE id=?',(request_timeout,cur.lastrowid))
+    conn.execute('UPDATE targets SET avatar_variant=?,avatar_random=? WHERE id=?',
+                 (avatar_variant, int(request.form.get('avatar_random') == 'on'), cur.lastrowid))
     conn.commit()
     conn.close()
     log_activity(username, "Target Created", name)
@@ -637,6 +645,12 @@ def target_edit_save(target_id):
     if not target:
         conn.close()
         return forbidden("Target not found.")
+    from core.avatars import validate_avatar
+    try:
+        avatar_variant = validate_avatar(request.form.get('avatar_variant', target['avatar_variant'] or 'auto'))
+    except ValueError as exc:
+        conn.close()
+        return Response(str(exc), status=400)
 
     try:
         request_timeout = parse_timeout(request.form.get('request_timeout', target['request_timeout'] or DEFAULT_RESPONSE_TIMEOUT))
@@ -660,10 +674,11 @@ def target_edit_save(target_id):
         conn.execute("UPDATE targets SET token_encrypted=? WHERE id=?", (encrypt_token(new_token.strip()), target_id))
 
     conn.execute(
-        """UPDATE targets SET name=?, url=?, auth_scheme=?, body_format=?, body_encoding=?, response_field=?,request_timeout=?,assessment_policy=?
+        """UPDATE targets SET name=?, url=?, auth_scheme=?, body_format=?, body_encoding=?, response_field=?,request_timeout=?,assessment_policy=?,avatar_variant=?,avatar_random=?
            WHERE id=?""",
         (name, url, auth_scheme, body_format, body_encoding, response_field, request_timeout,
-         request.form.get('assessment_policy', target['assessment_policy'] or '').strip(), target_id),
+         request.form.get('assessment_policy', target['assessment_policy'] or '').strip(), avatar_variant,
+         int(request.form.get('avatar_random') == 'on'), target_id),
     )
     conn.commit()
     conn.close()
@@ -1036,13 +1051,25 @@ def scan_live(task_id):
                             LEFT JOIN targets t ON tk.target_id=t.id
                             LEFT JOIN scan_configs c ON tk.scan_config_id=c.id
                             WHERE tk.id=?""", (task_id,)).fetchone()
-    conn.close()
     if not task:
+        conn.close()
         return redirect("/tasks")
+    from core.avatars import resolve_avatar
+    target = conn.execute('SELECT * FROM targets WHERE id=?', (task['target_id'],)).fetchone()
+    saved = conn.execute('SELECT avatar_variant FROM scan_results WHERE id=?', (task['result_id'],)).fetchone()
+    avatar_variant = saved['avatar_variant'] if saved and saved['avatar_variant'] else resolve_avatar(target or {}, randomize=False)
+    conn.close()
     return render_template("scan_live.html", **ctx(
         active="tasks", task_id=task_id, target_name=task["target_name"], config_name=task["config_name"],
-        owasp_labels=OWASP_LABELS,
+        owasp_labels=OWASP_LABELS, avatar_variant=avatar_variant,
     ))
+
+
+@app.route('/avatars')
+def avatar_gallery():
+    username, err = require_login()
+    if err: return err
+    return render_template('avatars.html', **ctx(active='targets'))
 
 
 @app.route("/api/scan-status/<int:task_id>")

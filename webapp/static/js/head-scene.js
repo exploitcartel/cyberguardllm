@@ -1,4 +1,5 @@
-// 3D head used by the live scan page and the login page: a scanned human head rendered as fingerprint-style ridges
+// Target AI bust used by live scans and login. Ten original procedural robot variants share the same network,
+// interaction and scan-event controller. The optional legacy asset is rendered as fingerprint-style ridges
 // with a neural node mesh, enclosed in a rotating geodesic network globe whose nodes are linked by data arcs with
 // packets travelling along them. It is driven by what the scan is actually doing (activity pulses, a red flash on a
 // finding, slow-down while paused) and it follows the page theme: additive glow on dark, solid deep blues on light.
@@ -8,6 +9,7 @@
 // /static/models/head-license.txt. Only its geometry is used; the surface look is a custom shader, so the
 // original skin textures are never loaded.
 import * as THREE from "three";
+import { buildRobotAvatar, ROBOT_VARIANTS } from "/static/js/robot-avatars.js?v=1";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const MODEL_URL = "/static/models/head.glb";
@@ -141,7 +143,7 @@ const POINT_FRAG = /* glsl */ `
  *   dispose()
  * `theme` is "dark" (default) or "light". `onFail` is called once if WebGL or the model is unavailable.
  */
-export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark" } = {}) {
+export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark", variant = "android" } = {}) {
   let light = theme === "light";
   let BLEND = light ? THREE.NormalBlending : THREE.AdditiveBlending;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -152,7 +154,7 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
     renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !lowPower, powerPreference: "high-performance" });
   } catch (e) {
     onFail();
-    return { pulse() {}, alert() {}, alertPulses() {}, setPaused() {}, dispose() {},
+    return { pulse() {}, alert() {}, alertPulses() {}, setPaused() {}, setVariant() {}, dispose() {},
              setReserve() {},
              getShield: () => ({ cx: wrap.clientWidth / 2, cy: wrap.clientHeight / 2,
                                  r: Math.min(wrap.clientWidth, wrap.clientHeight) * 0.38 }) };
@@ -274,7 +276,8 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
 
   // ---- Head
   let disposed = false;
-  new GLTFLoader().load(
+  let avatar = variant === 'legacy' ? null : buildRobotAvatar(headGroup, variant, {lowPower,reduceMotion});
+  if (variant === 'legacy') new GLTFLoader().load(
     MODEL_URL,
     (gltf) => {
       if (disposed) return;
@@ -478,11 +481,19 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
     pointUniforms.uAlert.value = cageUniforms.uAlert.value = state.alert;
     pointUniforms.uActivity.value = cageUniforms.uActivity.value = state.activity;
 
+    avatar?.update(clock, state.alert, state.activity, light, state.paused);
     renderer.render(scene, camera);
   };
   raf = requestAnimationFrame(frame);
 
   return {
+    setVariant(name) {
+      if(!ROBOT_VARIANTS.includes(name) || avatar?.variant === name || disposed)return;
+      // Rebuild only the original procedural bust; retain cage, camera, drag and scan state.
+      if(variant === 'legacy')return;
+      avatar?.dispose();
+      avatar=buildRobotAvatar(headGroup,name,{lowPower,reduceMotion});
+    },
     pulse(amount = 0.6) { state.activity = Math.min(1, state.activity + amount); },
     alert() { state.alert = 1; state.activity = 1; },
     setReserve(px) {
@@ -516,8 +527,10 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
       canvas.removeEventListener("pointercancel", onUp);
       canvas.removeEventListener("dblclick", onReset);
       document.removeEventListener("visibilitychange", onVis);
+      avatar?.dispose();
       disposables.forEach((d) => d.dispose());
       renderer.dispose();
+      renderer.forceContextLoss();
     },
   };
 }

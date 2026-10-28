@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header"><div><h1>{{ t('avatar_gallery') }}</h1><p>{{ t('avatar_help') }}</p></div><a href="/targets" class="btn">{{ t('btn_back') }}</a></div>
+<style>
+.avatar-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(225px,1fr));gap:16px;}
+.avatar-card{padding:14px;overflow:hidden;}
+.avatar-preview{height:280px;position:relative;touch-action:none;}
+.avatar-preview canvas{width:100%;height:100%;display:block;}
+.avatar-card h2{font-size:17px;margin:8px 0;}
+.avatar-card p{font-size:13px;color:var(--text-muted);}
+</style>
+<div class="avatar-grid">
+{% for key,label in avatar_options.items() %}
+<article class="card avatar-card"><div class="avatar-preview" data-avatar="{{ key }}"><canvas aria-label="{{ label }}"></canvas></div><h2>{{ label }}</h2><p>{{ t('avatar_interaction') }}</p></article>
+{% endfor %}
+</div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
+<script type="module">
+import {createHeadScene} from '/static/js/head-scene.js?v={{ head_scene_v }}';
+const scenes=new Map();
+const observer=new IntersectionObserver(entries=>{
+  for(const entry of entries){const wrap=entry.target;
+    if(entry.isIntersecting&&!scenes.has(wrap)){
+      const scene=createHeadScene(wrap,wrap.querySelector('canvas'),{variant:wrap.dataset.avatar,theme:document.body.classList.contains('light')?'light':'dark',onFail:()=>{wrap.setAttribute('aria-label','3D unavailable');}});
+      scenes.set(wrap,scene);
+    }else if(!entry.isIntersecting&&scenes.has(wrap)){scenes.get(wrap).dispose();scenes.delete(wrap);}
+  }
+},{rootMargin:'30px'});
+document.querySelectorAll('.avatar-preview').forEach(wrap=>observer.observe(wrap));
+window.addEventListener('pagehide',()=>{observer.disconnect();scenes.forEach(scene=>scene.dispose());});
+</script>
+{% endblock %}

@@ -160,7 +160,7 @@ import { createHeadScene } from '/static/js/head-scene.js?v={{ head_scene_v }}';
 const stage = document.getElementById('headStage');
 // The left panel is hidden on narrow screens; do not load three.js and the model for a view nobody can see.
 if (stage && stage.offsetParent !== null) {
-  createHeadScene(stage, document.getElementById('headCanvas'), { onFail: () => stage.classList.add('no-webgl') });
+  createHeadScene(stage, document.getElementById('headCanvas'), { variant: 'legacy', onFail: () => stage.classList.add('no-webgl') });
 
   // Illustrative callouts: well-known LLM attack classes this tool probes (OWASP LLM Top 10). Not live data.
   const THREATS = [
