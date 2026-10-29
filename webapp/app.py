@@ -838,6 +838,7 @@ def scan_config_create():
     ai_powered = 1 if request.form.get("ai_powered") == "on" else 0
     from engine.ai_objectives import OBJECTIVES as pentest_objectives
     use_ai_pentest = int(request.form.get('use_ai_pentest') == 'on')
+    pentest_agent = int(use_ai_pentest and request.form.get('pentest_agent') == 'on')
     pentest_categories = list(dict.fromkeys(c for c in request.form.getlist('pentest_categories') if c in pentest_objectives))
     try:
         pentest_budget = max(8, min(40, int(request.form.get('pentest_budget', '16'))))
@@ -901,8 +902,8 @@ def scan_config_create():
          enable_static, ",".join(ai_categories), use_crescendo, ",".join(crescendo_objectives),
          crescendo_max_turns, now()),
     )
-    conn.execute('UPDATE scan_configs SET use_ai_pentest=?,pentest_categories=?,pentest_budget=? WHERE id=?',
-                 (use_ai_pentest, ','.join(pentest_categories), pentest_budget, cur.lastrowid))
+    conn.execute('UPDATE scan_configs SET use_ai_pentest=?,pentest_categories=?,pentest_budget=?,pentest_agent=? WHERE id=?',
+                 (use_ai_pentest, ','.join(pentest_categories), pentest_budget, pentest_agent, cur.lastrowid))
     conn.commit()
     conn.close()
     log_activity(username, "Config Created", name)

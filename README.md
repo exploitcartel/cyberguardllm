@@ -370,6 +370,18 @@ Generation remains limited to the selected categories and configured budget; the
 
 AI-PENTEST explores separate strategy branches per objective, keeps explicit message histories isolated by branch, applies the selected payload mutation, and updates branch selection using observed objective progress. Server-side session reset remains unverified.
 
+### AI-PENTEST agent mode
+
+An opt-in switch in the AI-PENTEST section of Scan Configs ("Agent mode") replaces the fixed strategy rotation with a decision loop (`engine/pentest_agent.py`): observe the reply, update a structured target model, form hypotheses, choose the most useful probe, send it, learn from the answer, replan. The model proposes; the engine decides, and the only action is one prompt to the configured target, still behind the same Pause/Stop, approval and 30-minute gates. Scope cannot widen: the objectives are the built-in ones for the selected categories.
+
+- **Target model**: declared capabilities (from the unverified profile), observed capabilities, limits, ambiguities, useful primitives, counter-evidence and open questions. A claim about the target is only recorded as observed when the AI quotes words that really appear in the reply; otherwise it is stored as an unverified open question.
+- **Hypotheses**: claim, support, expected result and what would contradict it, moving through new, testing, supported, contradicted, unclear and exhausted. Several are held at once and a closed one is never proposed again.
+- **Planner**: the AI proposes up to three next steps; rules drop repeats, malformed or out-of-scope prompts and closed hypotheses, then prefer a step along a supported hypothesis, a probe that separates explanations of an unclear result, or another hypothesis when a branch has stalled. One step is planned at a time and the run stops with a stated reason (budget, no valid step, target not answering, or no new knowledge or progress for four steps).
+- **Progress** is reported in stages (no signal, surface mapped, boundary understood, objective evidence) instead of only FAIL/PASS, and the knowledge is shared across objectives. Conversation history is not replayed between steps, so a target that keeps its own session state may still carry it.
+- Verdicts use the same judge and evidence rules as the other AI-PENTEST paths. A FAIL means objective evidence was found and still needs independent verification. Cost is about three AI calls per target request (plan, judge, analysis).
+
+Not yet included: MCP, log/canary reading, HTTP requests and local decoding as agent actions, and a per-target objective written by the operator.
+
 ### Target AI busts
 
 The login page always uses the original human head with fingerprint-style ridges.

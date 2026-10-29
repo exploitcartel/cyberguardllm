@@ -75,6 +75,8 @@
         <p class="muted">{{ t('pentest_help') }}</p>
         <fieldset class="config-options" data-enabled-by="use_ai_pentest" disabled>
           <div class="field"><label>{{ t('pentest_budget') }}</label><input type="number" name="pentest_budget" value="16" min="8" max="40"></div>
+          <div class="checkbox-row"><input type="checkbox" name="pentest_agent"> {{ t('pentest_agent_enable') }}</div>
+          <p class="muted">{{ t('pentest_agent_help') }}</p>
           <p class="muted">{{ t('pentest_limits') }}</p>
           {% for code,label,count in categories %}{% if code not in ('LLM04','LLM05') %}
           <div class="checkbox-row"><input type="checkbox" name="pentest_categories" value="{{ code }}"> {{ code }} - {{ label }}</div>

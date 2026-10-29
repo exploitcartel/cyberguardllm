@@ -324,6 +324,7 @@ _MIGRATIONS = [
     ("scan_configs", "use_ai_pentest", "INTEGER DEFAULT 0"),
     ("scan_configs", "pentest_categories", "TEXT"),
     ("scan_configs", "pentest_budget", "INTEGER DEFAULT 16"),
+    ("scan_configs", "pentest_agent", "INTEGER DEFAULT 0"),
     ("scan_configs", "crescendo_objectives", "TEXT"),
     ("scan_configs", "crescendo_max_turns", "INTEGER DEFAULT 8"),
     ("scan_configs", "mutation_techniques", "TEXT"),

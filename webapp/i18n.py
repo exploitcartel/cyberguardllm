@@ -22,6 +22,8 @@ TRANSLATIONS = {
     'pentest_overhead': {'en':'Additional profiling requests / AI planning calls', 'al':'Kërkesa shtesë profilizimi / thirrje AI për planifikim'},
     'pentest_plan': {'en':'Assessment priority', 'al':'Prioriteti i vlerësimit'},
     'pentest_plan_details': {'en':'View saved plan', 'al':'Shiko planin e ruajtur'},
+    'pentest_agent_enable': {'en':'Agent mode: target model, hypotheses and one planned step at a time', 'al':'Modaliteti agjent: model i targetit, hipoteza dhe një hap i planifikuar çdo herë'},
+    'pentest_agent_help': {'en':'Each reply updates what is known about the target and the next probe is chosen from tested hypotheses instead of a fixed strategy list. Uses about three AI calls per request. Scope and operator controls are unchanged.', 'al':'Çdo përgjigje përditëson njohuritë për targetin dhe prova tjetër zgjidhet nga hipotezat e testuara, jo nga një listë strategjish e fiksuar. Përdor rreth tre thirrje AI për kërkesë. Scope dhe kontrollet e operatorit nuk ndryshojnë.'},
     'pentest_enable': {'en':'Run AI-PENTEST (requires configured AI API)', 'al':'Aktivizo AI-PENTEST (kërkon AI API të konfiguruar)'},
     'avatar_fixed': {'en':'This identity stays the same for every scan until the target is deleted. Re-adding the same target assigns a different identity. The original human head is included.', 'al':'Kjo figurë mbetet e njëjtë në çdo skanim deri kur targeti fshihet. Nëse e shton sërish, merr një figurë tjetër. Përfshihet edhe njeriu origjinal me vija.'},
     'avatar_label': {'en':'Target AI visualization','al':'Vizualizimi i AI-së së target-it'},
