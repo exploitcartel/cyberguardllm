@@ -1,9 +1,5 @@
 <div class="field">
   <label>{{ t('avatar_label') }}</label>
-  <select name="avatar_variant">
-    <option value="auto" {% if not selected_avatar or selected_avatar == 'auto' %}selected{% endif %}>{{ t('avatar_auto') }}</option>
-    {% for value,label in avatar_options.items() %}<option value="{{ value }}" {% if selected_avatar == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-  </select>
-  <label style="display:flex;align-items:center;gap:8px;margin-top:10px;"><input type="checkbox" name="avatar_random" {% if random_avatar %}checked{% endif %}> {{ t('avatar_random') }}</label>
-  <p class="muted">{{ t('avatar_help') }} <a href="/avatars" target="_blank" rel="noopener">{{ t('avatar_gallery') }}</a></p>
+  <p>{% if selected_avatar and selected_avatar in avatar_options %}{{ avatar_options[selected_avatar] }}{% else %}{{ t('avatar_auto') }}{% endif %}</p>
+  <p class="muted">{{ t('avatar_fixed') }} <a href="/avatars" target="_blank" rel="noopener">{{ t('avatar_gallery') }}</a></p>
 </div>

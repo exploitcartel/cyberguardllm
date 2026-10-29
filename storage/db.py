@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS target_avatar_history (
+    target_key TEXT PRIMARY KEY,
+    avatar_variant TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS targets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -263,6 +268,8 @@ def init_db():
     conn.commit()
     _migrate(conn)
     _migrate_owasp_2026(conn)
+    from core.avatars import migrate_identities
+    migrate_identities(conn)
     _create_indexes(conn)
     conn.close()
 

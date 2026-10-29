@@ -9,7 +9,7 @@
 // /static/models/head-license.txt. Only its geometry is used; the surface look is a custom shader, so the
 // original skin textures are never loaded.
 import * as THREE from "three";
-import { buildRobotAvatar, ROBOT_VARIANTS } from "/static/js/robot-avatars.js?v=1";
+import { buildRobotAvatar, ROBOT_VARIANTS } from "/static/js/robot-avatars.js?v=3";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const MODEL_URL = "/static/models/head.glb";
@@ -143,7 +143,7 @@ const POINT_FRAG = /* glsl */ `
  *   dispose()
  * `theme` is "dark" (default) or "light". `onFail` is called once if WebGL or the model is unavailable.
  */
-export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark", variant = "android" } = {}) {
+export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark", variant = "legacy" } = {}) {
   let light = theme === "light";
   let BLEND = light ? THREE.NormalBlending : THREE.AdditiveBlending;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -276,7 +276,16 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
 
   // ---- Head
   let disposed = false;
-  let avatar = variant === 'legacy' ? null : buildRobotAvatar(headGroup, variant, {lowPower,reduceMotion});
+  const avatarSurface = {
+    uniforms:{...ridgeUniforms,uFreq:{value:lowPower?8:11}},
+    fragmentShader:RIDGE_FRAG
+      .replace('noise(p * 2.3) * 1.7 + noise(p * 6.0) * 0.35', 'noise(p * 2.3) * 0.25')
+      .replace('float fill = rim * 0.09', 'float fill = 0.07 + diffuse * 0.035 + rim * 0.09'),
+    blending:BLEND,
+    vertexShader:RIDGE_VERT.replace('varying vec3 vPos;', 'uniform mat4 uAvatarMatrix;\nvarying vec3 vPos;')
+      .replace('vPos = position;', 'vPos = (uAvatarMatrix * vec4(position, 1.0)).xyz;'),
+  };
+  let avatar = variant === 'legacy' ? null : buildRobotAvatar(headGroup, variant, {lowPower,reduceMotion,surfaceStyle:avatarSurface});
   if (variant === 'legacy') new GLTFLoader().load(
     MODEL_URL,
     (gltf) => {
@@ -492,7 +501,7 @@ export function createHeadScene(wrap, canvas, { onFail = () => {}, theme = "dark
       // Rebuild only the original procedural bust; retain cage, camera, drag and scan state.
       if(variant === 'legacy')return;
       avatar?.dispose();
-      avatar=buildRobotAvatar(headGroup,name,{lowPower,reduceMotion});
+      avatar=buildRobotAvatar(headGroup,name,{lowPower,reduceMotion,surfaceStyle:avatarSurface});
     },
     pulse(amount = 0.6) { state.activity = Math.min(1, state.activity + amount); },
     alert() { state.alert = 1; state.activity = 1; },

@@ -3,32 +3,35 @@ import * as THREE from 'three';
 
 export const ROBOT_VARIANTS = ['android','visor','cyclops','oracle','neural-core','facet','twin-halo','synapse','sentient','spectre'];
 
-export function buildRobotAvatar(parent, variant='android', {lowPower=false,reduceMotion=false}={}) {
+export function buildRobotAvatar(parent, variant='android', {lowPower=false,reduceMotion=false,surfaceStyle=null}={}) {
   if(!ROBOT_VARIANTS.includes(variant))variant='android';
   const root=new THREE.Group();root.name='ai-bust-'+variant;parent.add(root);
   const resources=new Set(), materials=[], moving=[];
   const track=o=>{resources.add(o);return o;};
+  // Geometry variants share the exact ridge surface supplied by the human head scene.
+  // These blue templates only tag geometry parts; no metallic/Phong robot skin is used.
   function material(kind='shell',opacity=1){
-    const m=track(new THREE.MeshPhongMaterial({color:0x9abce5,shininess:55,specular:0x729cbd,
-      transparent:true,opacity,depthWrite:opacity>.4,side:THREE.DoubleSide}));
-    // Fade only the bottom of the bust, without a platform or a cut-off base.
-    m.onBeforeCompile=shader=>{
-      shader.vertexShader='varying float vBustY;\n'+shader.vertexShader;
-      shader.vertexShader=shader.vertexShader.replace('#include <begin_vertex>',
-        '#include <begin_vertex>\nvBustY=(modelMatrix*vec4(transformed,1.0)).y;');
-      shader.fragmentShader='varying float vBustY;\n'+shader.fragmentShader;
-      shader.fragmentShader=shader.fragmentShader.replace('#include <dithering_fragment>',
-        '#include <dithering_fragment>\ngl_FragColor.a*=smoothstep(-1.35,-.92,vBustY);');
-    };
-    m.customProgramCacheKey=()=> 'robot-bust-fade-v1';
+    const m=track(new THREE.MeshBasicMaterial({color:0x62d9ff,transparent:true,opacity,depthWrite:false}));
+    m.userData.contourSurface=kind==='shell';
     materials.push([m,kind,opacity]);return m;
   }
   const shell=material(),dark=material('dark'),metal=material('metal'),glow=material('glow'),ghost=material('ghost',.16);
-  const ambient=new THREE.AmbientLight(0xc0dcff,1.1);root.add(ambient);
-  const key=new THREE.DirectionalLight(0xe6f7ff,1.8);key.position.set(-3,4,5);root.add(key);
-  const rim=new THREE.DirectionalLight(0x408cff,1.7);rim.position.set(3,1,-2);root.add(rim);
+  const occlusion=track(new THREE.MeshBasicMaterial({colorWrite:false,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1}));
   function mesh(geometry,mat,pos=[0,0,0],scale=[1,1,1],rot=[0,0,0],group=root){
-    const o=new THREE.Mesh(track(geometry),mat);o.position.set(...pos);o.scale.set(...scale);o.rotation.set(...rot);group.add(o);return o;
+    const o=new THREE.Mesh(track(geometry),mat);o.position.set(...pos);o.scale.set(...scale);o.rotation.set(...rot);group.add(o);
+    if(surfaceStyle&&mat.userData.contourSurface){
+      o.updateMatrix();
+      // Sample the contour field in bust coordinates, so stripes continue across
+      // separately scaled face/shoulder parts and rotate with the whole identity.
+      const skin=track(new THREE.ShaderMaterial({
+        uniforms:{...surfaceStyle.uniforms,uAvatarMatrix:{value:o.matrix}},
+        vertexShader:surfaceStyle.vertexShader,fragmentShader:surfaceStyle.fragmentShader,
+        transparent:true,depthWrite:false,blending:surfaceStyle.blending,
+      }));
+      o.material=skin;o.userData.ridgeSurface=true;materials.push([skin,'ridge',1]);
+      const depth=new THREE.Mesh(geometry,occlusion);depth.renderOrder=-1;o.add(depth);
+    }
+    return o;
   }
   const sphere=(mat,pos,scale,detail=24)=>mesh(new THREE.SphereGeometry(1,lowPower?16:detail,lowPower?12:20),mat,pos,scale);
   const box=(mat,pos,scale,rot=[0,0,0])=>mesh(new THREE.BoxGeometry(1,1,1),mat,pos,scale,rot);
@@ -48,21 +51,17 @@ export function buildRobotAvatar(parent, variant='android', {lowPower=false,redu
   }
   // Common neck, clavicles and shoulder silhouette connect every variant to the existing bust design.
   if(variant!=='spectre'&&variant!=='synapse'){
-    mesh(new THREE.CylinderGeometry(.18,.27,.42,20),dark,[0,-.35,0]);
+    mesh(new THREE.CylinderGeometry(.18,.27,.42,20),shell,[0,-.35,0]);
     for(const y of [-.23,-.34,-.45])ring(.19,.014,[0,y,0],[Math.PI/2,0,0]);
-    sphere(shell,[0,-.92,-.035],[.72,.42,.35]);
-    for(const side of [-1,1]){
-      sphere(variant==='facet'?metal:shell,[side*.72,-.75,-.015],[.36,.25,.32]);
-      polygon([[0,0],[side*.69,.17],[side*.95,.03],[side*.63,-.12]],.07,metal,[0,-.69,.25]);
-      line([[side*.14,-.58,.25],[side*.42,-.64,.32],[side*.8,-.64,.27]],glow,.012);
-    }
-    polygon([[-.14,.1],[.14,.1],[.1,-.14],[0,-.21],[-.1,-.14]],.035,dark,[0,-.87,.33]);
-    ring(.065,.014,[0,-.88,.36]);
+    // A single smooth shoulder surface keeps the contour silhouette continuous.
+    sphere(shell,[0,-.92,-.035],[1.02,.38,.34]);
+    line([[-.68,-.69,.23],[-.3,-.61,.29],[0,-.69,.32],[.3,-.61,.29],[.68,-.69,.23]],glow,.008);
+
   }else{
     for(let j=0;j<12;j++){let t=j/11;contour(-1.18+t*.64,.48+Math.sin(t*Math.PI)*.5,.25+t*.05);}
     for(let j=0;j<4;j++)contour(-.5+j*.08,.19,.19);
   }
-  const cheeks=()=>{for(const s of [-1,1])polygon([[s*.1,.12],[s*.4,.23],[s*.44,-.05],[s*.2,-.28]],.08,metal,[0,.1,.36]);};
+  const cheeks=()=>{for(const side of [-1,1])line([[side*.36,.34,.30],[side*.37,.12,.29],[side*.22,-.02,.31]],glow,.006);};
   const eyes=(y=.47,z=.37)=>{for(const s of [-1,1]){
     sphere(dark,[s*.235,y,z],[.16,.055,.025]);
     sphere(glow,[s*.235,y,z+.024],[.125,.019,.02]);
@@ -73,7 +72,6 @@ export function buildRobotAvatar(parent, variant='android', {lowPower=false,redu
   }};
   const face=()=>{
     sphere(shell,[0,.51,-.035],[.48,.64,.42]);
-    polygon([[-.39,.2],[.39,.2],[.29,-.27],[.12,-.4],[-.12,-.4],[-.29,-.27]],.29,shell,[0,.17,.15]);
     polygon([[-.045,.13],[.045,.13],[.08,-.09],[0,-.14],[-.08,-.09]],.08,metal,[0,.36,.44]);
     line([[-.12,-.035,.36],[0,-.05,.39],[.12,-.035,.36]],dark,.012);
   };
@@ -89,21 +87,16 @@ export function buildRobotAvatar(parent, variant='android', {lowPower=false,redu
       sphere(glow,[.74,y,0],[.035,.035,.035]);
     }
   }else if(variant==='visor'){
-    mesh(new THREE.DodecahedronGeometry(.63),shell,[0,.5,0],[.85,1.1,.78]);
+    sphere(shell,[0,.5,0],[.49,.64,.43]);
     polygon([[-.49,.28],[.49,.28],[.42,-.12],[.17,-.47],[-.17,-.47],[-.42,-.12]],.12,metal,[0,.48,.34]);
     box(dark,[0,.55,.44],[.91,.16,.09]);
     line([[-.44,.55,.43],[-.2,.53,.51],[0,.53,.54],[.2,.53,.51],[.44,.55,.43]],glow,.026);
     ears();line([[-.15,.13,.43],[0,.05,.46],[.15,.13,.43]],dark,.018);
   }else if(variant==='cyclops'){
-    sphere(metal,[0,.5,0],[.59,.59,.52]);
+    sphere(shell,[0,.5,0],[.53,.63,.46]);
     sphere(dark,[0,.5,.4],[.44,.44,.15]);
     for(const [r,z] of [[.36,.49],[.28,.54],[.17,.57]])ring(r,.016,[0,.5,z]);
     sphere(glow,[0,.5,.56],[.12,.12,.045]);
-    for(let i=0;i<6;i++){
-      const a=i*Math.PI/3;
-      const plate=box(shell,[Math.cos(a)*.48,.5+Math.sin(a)*.48,.3],[.23,.17,.23],[0,0,a]);
-      moving.push([plate,'plate',a]);
-    }
   }else if(variant==='neural-core'){
     mesh(new THREE.IcosahedronGeometry(.31,1),glow,[0,.5,0]);
     for(let i=0;i<3;i++){
@@ -115,7 +108,7 @@ export function buildRobotAvatar(parent, variant='android', {lowPower=false,redu
       sphere(glow,[Math.cos(a)*.8,.5+Math.sin(a)*.8,0],[.035,.035,.035]);
     }
   }else if(variant==='facet'){
-    mesh(new THREE.IcosahedronGeometry(.63,0),metal,[0,.5,0],[.8,1.13,.77]);
+    mesh(new THREE.IcosahedronGeometry(.63,1),shell,[0,.5,0],[.8,1.13,.77]);
     polygon([[-.37,.2],[0,.12],[.37,.2],[.23,-.24],[0,-.4],[-.23,-.24]],.1,shell,[0,.27,.35],0);
     eyes(.51,.435);cheeks();
     for(const s of [-1,1])polygon([[0,.15],[s*.34,.28],[s*.45,-.05],[s*.25,-.18]],.08,dark,[0,.78,.12],0);
@@ -154,13 +147,45 @@ export function buildRobotAvatar(parent, variant='android', {lowPower=false,redu
     }
     eyes(.49,.39);line([[0,1.12,0],[0,.9,.25],[0,.65,.39]],glow,.013);
   }
+  // Sparse surface nodes and short neural connections repeat the human identity's
+  // visual language without hiding each variant's silhouette under solid plates.
+  if(surfaceStyle){
+    const candidates=[],seen=new Set();
+    root.traverse(o=>{
+      if(!o.userData.ridgeSurface)return;
+      const positions=o.geometry.attributes.position;
+      for(let i=0;i<positions.count;i+=Math.max(1,Math.ceil(positions.count/10))){
+        const point=new THREE.Vector3().fromBufferAttribute(positions,i).applyMatrix4(o.matrix);
+        if(point.y<-.45)continue;
+        const key=[point.x,point.y,point.z].map(v=>v.toFixed(2)).join(':');
+        if(!seen.has(key)){seen.add(key);candidates.push(point);}
+      }
+    });
+    const budget=lowPower?45:85;
+    const points=candidates.filter((_,i)=>i%Math.max(1,Math.ceil(candidates.length/budget))===0).slice(0,budget);
+    const geometry=track(new THREE.BufferGeometry().setFromPoints(points));
+    const dots=track(new THREE.PointsMaterial({color:0x91eaff,size:.018,transparent:true,depthWrite:false,blending:surfaceStyle.blending}));
+    materials.push([dots,'glow',1]);root.add(new THREE.Points(geometry,dots));
+    const links=[];
+    points.forEach((point,i)=>{
+      let count=0;
+      for(let j=i+1;j<points.length&&count<2;j++)if(point.distanceToSquared(points[j])<.25*.25){links.push(point,points[j]);count++;}
+    });
+    const linkGeometry=track(new THREE.BufferGeometry().setFromPoints(links));
+    const linkMaterial=track(new THREE.LineBasicMaterial({color:0x62d9ff,transparent:true,opacity:.18,depthWrite:false,blending:surfaceStyle.blending}));
+    materials.push([linkMaterial,'line',.18]);root.add(new THREE.LineSegments(linkGeometry,linkMaterial));
+  }
   const red=new THREE.Color(0xff354e);
   function update(time,alert=0,activity=0,light=false,paused=false){
     for(const [m,kind,opacity] of materials){
-      const color=kind==='glow'||kind==='line'?(light?0x1761d9:0x62d9ff):kind==='dark'?(light?0x25406a:0x0a1d39):kind==='metal'?(light?0x6d91bd:0x37608c):(light?0xc5daef:0x87a6ca);
+      const blending=light?THREE.NormalBlending:THREE.AdditiveBlending;
+      if(m.transparent&&m.blending!==blending){m.blending=blending;m.needsUpdate=true;}
+      // Shared ridge uniforms are advanced by the scene, just like the human head.
+      if(m.isShaderMaterial)continue;
+      const color=kind==='glow'||kind==='line'?(light?0x1761d9:0x62d9ff):kind==='dark'?(light?0x25406a:0x0a1d39):kind==='metal'?(light?0x3467a4:0x173855):(light?0x3467a4:0x173855);
       m.color.setHex(color).lerp(red,Math.min(1,alert)*.85);
       if(m.emissive){m.emissive.copy(m.color);m.emissiveIntensity=kind==='glow'?.65+activity*.7:.04+alert*.15;}
-      if(m.isLineBasicMaterial)m.opacity=light?.45:.65;
+      if(m.isLineBasicMaterial)m.opacity=light?opacity*.7:opacity;
     }
     if(!reduceMotion&&!paused)for(const [o,type,i=0] of moving){
       if(type==='core'){o.rotation.x=.8+i*.65+time*.12;o.rotation.y=.3+i*.7+time*.17;}

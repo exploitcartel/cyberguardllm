@@ -6,7 +6,7 @@ import random
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak,
-                                 HRFlowable)
+                                 HRFlowable, KeepTogether)
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.units import cm
@@ -14,6 +14,8 @@ import os
 import json
 from xml.sax.saxutils import escape
 from report.assessment import assessment_context, assessment_notice
+from report.grouping import group_findings, score_rows, methodology
+from engine.scorer import compute_risk_score_rows, severity_breakdown_rows
 
 
 def _safe_table(data, colWidths=None, has_header=True, **kwargs):
@@ -252,7 +254,7 @@ def make_severity_pie(breakdown, out_path):
         labels, values, colors_list = ["none"], [1], ["#888888"]
     fig, ax = plt.subplots(figsize=(4, 4))
     ax.pie(values, labels=labels, colors=colors_list, autopct='%1.0f%%', startangle=90)
-    ax.set_title("Findings by severity")
+    ax.set_title("FAIL evidence groups by severity")
     plt.savefig(out_path, dpi=120, bbox_inches="tight")
     plt.close(fig)
 
@@ -263,8 +265,8 @@ def make_owasp_bar(owasp_breakdown, out_path):
     total = [owasp_breakdown[k]["total"] for k in labels]
     fig, ax = plt.subplots(figsize=(6, 3.5))
     x = range(len(labels))
-    ax.bar(x, total, color="#B5D4F4", label="tested")
-    ax.bar(x, failed, color="#378ADD", label="findings")
+    ax.bar(x, total, color="#B5D4F4", label="PASS / FAIL / REVIEW records")
+    ax.bar(x, failed, color="#378ADD", label="FAIL attempts")
     ax.set_xticks(list(x))
     ax.set_xticklabels(labels, rotation=30, ha="right")
     ax.set_title("OWASP LLM Top 10 coverage")
@@ -308,8 +310,8 @@ def _fallback_exec_summary(target, findings, risk_score, business_context, asses
         lines.append(f"No vulnerability has been confirmed, but {unresolved} result(s) remain unresolved or could not be evaluated. A score of zero is not evidence of safety. Review the evidence and complete the interrupted tests before assessing overall risk.")
         return " ".join(lines)
     lines.append(
-        f"Overall, this assessment found the system's risk level to be {tier.upper()} ({risk_score}/100), based on "
-        f"{len(fails)} confirmed weakness(es) out of everything tested."
+        f"The grouped-evidence score for this assessment is {risk_score}/100, based on "
+        f"{len(fails)} FAIL attempt record(s), which may include repeated evidence rather than independent weaknesses."
     )
     if top:
         bullets = "; ".join(
@@ -335,7 +337,10 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     pie_path = os.path.join(tmp_dir, f"_pie_{scan_result['id']}.png")
     bar_path = os.path.join(tmp_dir, f"_bar_{scan_result['id']}.png")
     brain_section_path = os.path.join(tmp_dir, f"_brain_section_{scan_result['id']}.png")
-    make_severity_pie(severity_breakdown_data, pie_path)
+    groups = group_findings(findings)
+    fail_groups = [g for g in groups if g['representative']['verdict'] == 'FAIL']
+    grouped_score = compute_risk_score_rows(score_rows(groups))
+    make_severity_pie(severity_breakdown_rows(score_rows(groups)), pie_path)
     make_owasp_bar(owasp_breakdown_data, bar_path)
     make_brain_graphic(brain_section_path, seed=(scan_result["id"] or 1) + 1000,
                         accent="#378ADD", accent2="#E24B4A", glow="#EF9F27")
@@ -352,8 +357,8 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
                                 textColor=colors.HexColor("#2563eb"), spaceAfter=4)
     cover_meta = ParagraphStyle("CoverMeta", parent=styles["Normal"], fontSize=10.5, alignment=TA_CENTER,
                                  textColor=colors.HexColor("#6b7280"))
-    h2 = ParagraphStyle("H2", parent=styles["Heading2"], textColor=colors.HexColor("#0a0e1a"))
-    h3 = ParagraphStyle("H3", parent=styles["Heading3"], textColor=colors.HexColor("#1f2937"))
+    h2 = ParagraphStyle("H2", parent=styles["Heading2"], textColor=colors.HexColor("#0a0e1a"), keepWithNext=True)
+    h3 = ParagraphStyle("H3", parent=styles["Heading3"], textColor=colors.HexColor("#1f2937"), keepWithNext=True)
     body = ParagraphStyle("Body", parent=styles["Normal"], fontSize=10, leading=14)
     toc_entry = ParagraphStyle("TocEntry", parent=styles["Normal"], fontSize=12, leading=22)
 
@@ -377,7 +382,7 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     elements.append(Spacer(1, 1.2 * cm))
     elements.append(HRFlowable(width="60%", thickness=1, color=colors.HexColor("#e5e7eb"), hAlign="CENTER"))
     elements.append(Spacer(1, 0.6 * cm))
-    elements.append(Paragraph(f"Target: {target['name']} ({target['url']})", cover_meta))
+    elements.append(Paragraph(f"Target: {escape(target['name'])} ({escape(target['url'])})", cover_meta))
     elements.append(Paragraph(f"Report generated: {_row_get(scan_result, 'finished_at') or scan_result['timestamp']}", cover_meta))
     elements.append(Paragraph(f"Scan mode: {mode_label}", cover_meta))
     elements.append(Paragraph("Assessment framework: OWASP Top 10 for Large Language Model Applications", cover_meta))
@@ -385,15 +390,20 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
 
     assessment = assessment_context(scan_result, findings,
         assessment.get("garak") if assessment else None)
-    if assessment["incomplete"]:
+    if assessment["incomplete"] or len(fail_groups) != sum(f["verdict"] == "FAIL" for f in findings):
         exec_summary_text = None
 
     # ---------- Page 2: Plain-language executive summary ----------
     elements.append(Paragraph("Executive Summary", h2))
     elements.append(Spacer(1, 0.3 * cm))
     exec_text = (exec_summary_text or "").strip() or _fallback_exec_summary(
-        target, findings, scan_result["risk_score"], _row_get(target, "business_context"), assessment)
+        target, findings, grouped_score, _row_get(target, "business_context"), assessment)
     elements.append(Paragraph(escape(exec_text), body))
+    elements.append(Spacer(1, 0.2 * cm))
+    elements.append(Paragraph(
+        f"<b>FAIL attempts: {sum(f['verdict'] == 'FAIL' for f in findings)}; distinct FAIL evidence groups: {len(fail_groups)}.</b> "
+        "Groups combine identical replies within the same Garak probe family/category and verdict; they are not a verified count of independent vulnerabilities. "
+        "Other engines retain separate rule identities. All attempts remain in the full evidence export.", body))
     coverage_notes = list(dict.fromkeys(_row_get(f,'coverage_note') for f in findings if _row_get(f,'coverage_note')))
     if coverage_notes:
         elements.append(Spacer(1, 0.3 * cm))
@@ -431,7 +441,7 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
         if _row_get(scan_config, 'use_ai_pentest', 0):
             summary_data.append(['AI-PENTEST generation budget', str(_row_get(scan_config, 'pentest_budget', 16))])
     if ai_info:
-        summary_data.append(["AI model (attacker and judge)", ai_info])
+        summary_data.append(["AI model (attacker / judge where enabled)", ai_info])
     for finding in findings:
         if _row_get(finding,'source') == 'ai_pentest' and _row_get(finding,'rule_id') == 'ai-pentest-plan':
             try:
@@ -447,8 +457,9 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     summary_data += [
         ["OWASP edition", "OWASP Top 10 for LLM Applications 2026"],
         ["Proxy used", _row_get(scan_result, "proxy_used") or "No"],
-        ["Total findings", str(scan_result["total_findings"])],
-        ["Overall risk score", f"{scan_result['risk_score']} / 100"],
+        ["FAIL attempts / evidence groups", f"{sum(f['verdict'] == 'FAIL' for f in findings)} / {len(fail_groups)}"],
+        ["Grouped-evidence score", f"{grouped_score} / 100"],
+        ["Saved attempt-based score", f"{scan_result['risk_score']} / 100"],
     ]
     st = _safe_table(summary_data, colWidths=[5 * cm, 10.5 * cm], has_header=False)
     st.setStyle(TableStyle([
@@ -460,8 +471,18 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
         ("LINEBELOW", (0, 0), (-1, -1), 0.5, colors.HexColor("#e5e7eb")),
     ]))
     elements.append(st)
+    result_count = sum(assessment['counts'][v] for v in ('PASS','FAIL','REVIEW','ERROR'))
+    unresolved = assessment['counts']['REVIEW'] + assessment['counts']['ERROR']
+    elements.append(Paragraph(
+        f"<b>{'INCOMPLETE ASSESSMENT' if assessment['incomplete'] else 'Recorded scope completed'}.</b> "
+        f"{unresolved} of {result_count} test/error records remain unresolved "
+        f"({100 * unresolved / result_count if result_count else 0:.1f}%). "
+        "The grouped-evidence score counts the highest recorded severity once per FAIL evidence group. "
+        "The saved score counts every FAIL attempt and may increase with repeated equivalent responses. "
+        "Neither score is a measured probability of compromise, proof of distinct vulnerabilities, or a safety certification. "
+        "REVIEW and ERROR records are excluded from both scores.", body))
     elements.append(Spacer(1, 0.4 * cm))
-    if benchmark and assessment['incomplete']:
+    if benchmark and (assessment['incomplete'] or grouped_score != scan_result['risk_score']):
         benchmark = None
     if benchmark:
         ratio = benchmark.get("ratio")
@@ -483,18 +504,8 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     if not benchmark:
         elements.append(Paragraph('Benchmark unavailable: comparisons require completed, evaluated assessments without unresolved errors or review items. A score of zero alone is not evidence of safety.', body))
         elements.append(Spacer(1, 0.3 * cm))
-    elements.append(Paragraph(
-        "Purpose of this report: this assessment was performed by CYBERGUARD LLM, a black-box security scanner for "
-        "AI chatbots and LLM-backed agents. The tool was given only the target's URL and a session token, and it "
-        "automatically inferred the target's authentication scheme, request body format, and response field before "
-        "running adversarial payloads mapped to the OWASP Top 10 for Large Language Model Applications. Each test "
-        "either used CYBERGUARD LLM's static payload library (community-sourced and proprietary research modules) "
-        "or, in AI-Powered mode, an AI red-teaming agent that dynamically generated and escalated attack prompts "
-        "against the target. The goal is to surface concrete, reproducible weaknesses the target exhibited, along "
-        "with remediation guidance, so the target's owner can harden it before a real attacker finds the same gaps.",
-        body))
-    elements.append(Spacer(1, 0.6 * cm))
-    elements.append(Image(pie_path, width=5.5 * cm, height=5.5 * cm, hAlign="CENTER"))
+    elements.append(Paragraph('<b>Methodology:</b> ' + escape(methodology(mode_label)), body))
+    elements.append(Spacer(1, 0.3 * cm))
     elements.append(PageBreak())
 
     # ---------- Results at a glance ----------
@@ -505,12 +516,12 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
         f"This scan recorded <b>{len(findings)}</b> total records: <b>{sum(totals.values())}</b> test/error records and "
         f"<b>{sum(_row_get(f,'verdict') == 'INFO' for f in findings)}</b> informational notes. What each outcome means: "
         "<b>Resisted</b> - the target did not show the weakness being tested. <b>Vulnerable</b> - the target "
-        "showed it (a confirmed finding, counted in the risk score). <b>Needs review</b> - evidence or evaluation "
+        "was classified as showing it by the configured evaluation; inspect the recorded evidence. <b>Needs review</b> - evidence or evaluation "
         "is inconclusive, reference proof is missing, confidence is insufficient, or evaluators disagree; "
         "a person should review the transcript. It is not counted in the risk score. "
         "<b>Not evaluated</b> - a target request or evaluation failed; this says nothing about the target's security.", body))
     elements.append(Spacer(1, 0.3 * cm))
-    glance = [["Resisted", "Vulnerable", "Needs review", "Not evaluated"],
+    glance = [["PASS attempts", "FAIL attempts", "Needs review", "Not evaluated"],
               [str(totals["PASS"]), str(totals["FAIL"]), str(totals["REVIEW"]), str(totals["ERROR"])]]
     gt = _safe_table(glance, colWidths=[3.9 * cm] * 4)
     gt.setStyle(TableStyle([
@@ -525,7 +536,7 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     elements.append(gt)
     elements.append(Spacer(1, 0.5 * cm))
     elements.append(Paragraph("By OWASP category", h3))
-    cat_rows = [["Category", "Tested", "Resisted", "Vulnerable", "Needs review", "Not evaluated"]]
+    cat_rows = [["Category", "With verdict", "PASS", "FAIL", "REVIEW", "ERROR"]]
     for code in sorted(per_category):
         c = per_category[code]
         cat_rows.append([Paragraph(f"{code} - {OWASP_NAMES.get(code, code)}", body),
@@ -542,6 +553,7 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f8fa")]),
     ]))
     elements.append(ct)
+    elements.append(Paragraph('With verdict = PASS + FAIL + REVIEW; REVIEW is inconclusive. ERROR means no usable security verdict, including missing replies or evaluation failures. These record counts are not unique prompts or proof that every request received a usable reply.', body))
     elements.append(PageBreak())
 
     # ---------- Page 3: Table of contents ----------
@@ -566,6 +578,7 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
     elements.append(Paragraph("OWASP LLM Top 10 Coverage", h2))
     elements.append(Spacer(1, 0.3 * cm))
     elements.append(Image(bar_path, width=15 * cm, height=8 * cm, hAlign="CENTER"))
+    elements.append(Image(pie_path, width=5.0 * cm, height=5.0 * cm, hAlign="CENTER"))
     elements.append(Spacer(1, 0.4 * cm))
     elements.append(Paragraph(
         "Two OWASP LLM Top 10 categories are not shown above and are not tested by this scan: see "
@@ -603,125 +616,46 @@ def _generate_pdf_report(scan_result, findings, target, output_path, severity_br
             elements.append(Spacer(1, 0.35 * cm))
     elements.append(PageBreak())
 
-    # ---------- Detailed findings ----------
-    elements.append(Image(brain_section_path, width=3.6 * cm, height=3.6 * cm, hAlign="CENTER"))
-    elements.append(Spacer(1, 0.1 * cm))
+    # ---------- Grouped evidence cards ----------
     elements.append(Paragraph("Detailed Findings", h2))
-    elements.append(Spacer(1, 0.2 * cm))
-    failing = [f for f in findings if f["verdict"] == "FAIL"]
-    if not failing:
-        elements.append(Paragraph(
-            "No vulnerabilities were confirmed in the available results. This does not establish that every "
-            "planned test ran or passed. Check the scan status, infrastructure issues and manual-review "
-            "items below before interpreting coverage or safety.", body))
-    else:
-        elements.append(Paragraph(
-            "Each confirmed finding below is mapped to its OWASP Top 10 for LLM Applications category, so you "
-            "can trace exactly which weakness class was exploited and why it matters, followed by a short, "
-            "concrete fix.", body))
+    elements.append(Paragraph(
+        "Repeated Garak replies are grouped as observed evidence, not counted as separate proven vulnerabilities. "
+        "A quoted claim that restrictions are disabled, a tool ran or data is secret does not independently prove that effect. "
+        "Judge commentary is interpretation; verify it against the reply and the authorized target policy. "
+        "Grouping does not re-evaluate saved verdicts. The JSON export under Results contains every full prompt, response, record ID and original evaluation. "
+        "Excerpts below are explicitly limited to keep this document readable.", body))
+    failing = [f for f in findings if f['verdict'] == 'FAIL']
+    for verdict, title in [('FAIL', 'FAIL Evidence Groups'), ('REVIEW', 'Needs Manual Review'), ('ERROR', 'Execution / Evaluation Issues')]:
+        selected = [g for g in groups if g['representative']['verdict'] == verdict]
+        if selected and verdict != 'FAIL':
+            elements.append(PageBreak())
         elements.append(Spacer(1, 0.3 * cm))
-        table_data = [["ID", "OWASP", "Severity", "Source", "Description"]]
-        for f in failing:
-            owasp_label = f"{f['owasp']}\n{OWASP_NAMES.get(f['owasp'], '')}"
-            table_data.append([
-                f["rule_id"], Paragraph(owasp_label.replace(chr(10), "<br/>"), body),
-                f["severity"].title(),
-                (f["source"] or "custom"),
-                Paragraph(escape(f["description"] or "-") + _evidence(f, 350), body),
-            ])
-        t = _safe_table(table_data, colWidths=[2.3 * cm, 3.0 * cm, 2 * cm, 2.3 * cm, 5.7 * cm])
-        t.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#131B2E")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f8fa")]),
-        ]))
-        elements.append(t)
-        elements.append(Spacer(1, 0.6 * cm))
-
-        # Narrative per-finding cards for the higher-severity findings, so
-        # the report reads as an analysis rather than just a raw table dump:
-        # each one names its OWASP category plainly and pairs it with the
-        # concrete recommendation, right next to the evidence.
-        notable = [f for f in failing if f["severity"] in ("critical", "high")]
-        if notable:
-            elements.append(Paragraph("Findings Requiring Priority Attention", h3))
-            elements.append(Spacer(1, 0.2 * cm))
-            for f in notable:
-                sev_color = SEVERITY_COLORS.get(f["severity"], "#378ADD")
-                elements.append(Paragraph(
-                    f"<font color='{sev_color}'>&#9679;</font> <b>{f['rule_id']}</b> &nbsp;"
-                    f"<font color='#6b7280'>[{f['owasp']} - {OWASP_NAMES.get(f['owasp'], f['owasp'])}]</font>",
-                    body))
-                elements.append(Paragraph(escape(f["description"] or "-"), body))
-                try:
-                    own_rec = (f["recommendation"] or "").strip()
-                except (IndexError, KeyError):
-                    own_rec = ""
-                if own_rec.startswith("Review the target's system instructions and output filtering"):
-                    own_rec = ""  # the generic runner default; the per-category text below is better
-                rec_text = own_rec or RECOMMENDATIONS.get(f['owasp'], 'Review the targets handling of this category and apply defense-in-depth controls.')
-                elements.append(Paragraph(f"<b>Recommendation:</b> {rec_text}", body))
-                elements.append(Spacer(1, 0.35 * cm))
-
-    # ---------- Needs manual review ----------
-    needs_review = [f for f in findings if f["verdict"] == "REVIEW"]
-    if needs_review:
-        elements.append(Spacer(1, 0.3 * cm))
-        elements.append(Paragraph("Needs Manual Review", h3))
-        elements.append(Paragraph(
-            "These responses remain unresolved: scoring or AI verification may be incomplete, judges may disagree, "
-            "or confidence may be insufficient. Each row explains the reason. They are excluded from the risk "
-            "score; a human should read the evidence before deciding.", body))
-        elements.append(Spacer(1, 0.2 * cm))
-        review_table = [["ID", "OWASP", "Confidence", "Description"]]
-        for f in needs_review:
-            review_table.append([
-                f["rule_id"], f["owasp"],
-                f"{_row_get(f, 'confidence', '-')}%" if _row_get(f, 'confidence') is not None else "-",
-                Paragraph(escape(f["description"] or "-") + _evidence(f, 400), body),
-            ])
-        rt = _safe_table(review_table, colWidths=[3.2 * cm, 1.8 * cm, 2.2 * cm, 8.7 * cm])
-        rt.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#92650a")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fdf6e8")]),
-        ]))
-        elements.append(rt)
-
-    # ---------- Scan infrastructure issues (target never actually responded) ----------
-    errored = [f for f in findings if f["verdict"] == "ERROR"]
-    if errored:
-        elements.append(Spacer(1, 0.3 * cm))
-        elements.append(Paragraph("Scan Infrastructure Issues - Re-run Recommended", h3))
-        elements.append(Paragraph(
-            f"The {len(errored)} records below describe tests that could not be evaluated or module interruptions. "
-            "These are not PASS or FAIL results and are excluded from the risk score. Read each description "
-            "to distinguish missing target responses, failed evaluations and stopped modules. Resolve the "
-            "reported problem before repeating the affected tests.", body))
-        elements.append(Spacer(1, 0.2 * cm))
-        error_table = [["ID", "OWASP", "Description"]]
-        for f in errored:
-            error_table.append([
-                f["rule_id"], f["owasp"],
-                Paragraph(escape(f["description"] or "-"), body),
-            ])
-        et = _safe_table(error_table, colWidths=[3.2 * cm, 1.8 * cm, 10.9 * cm])
-        et.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4b5563")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f3f4f6")]),
-        ]))
-        elements.append(et)
-
+        elements.append(Paragraph(title, h3))
+        if not selected:
+            elements.append(Paragraph('No records in this section.', body))
+        for index, group in enumerate(selected, 1):
+            f = group['representative']
+            label = f"{verdict}-{index:03d} | {f['owasp']} | {group['severity'].title()} | {len(group['members'])} attempt record(s)"
+            elements.append(KeepTogether([
+                Paragraph(escape(label), h3),
+                Paragraph('<b>Engine / probe family:</b> ' + escape(str(_row_get(f, 'module') or _row_get(f, 'source') or 'custom')), body),
+                Paragraph('<b>Representative record:</b> ' + escape(str(_row_get(f, 'id') or f['rule_id'])), body),
+            ]))
+            elements.append(Paragraph('<b>Recorded evaluation / judge commentary excerpt (not independent proof):</b> ' + _excerpt(f['description'], max(1100, len(f['description'] or '')) if verdict == 'ERROR' else 1100), body))
+            if verdict != 'ERROR':
+                elements.append(Paragraph('<b>Prompt excerpt (up to 900 characters):</b> ' + _excerpt(_row_get(f, 'prompt_sent'), 900), body))
+                elements.append(Paragraph('<b>Observed reply excerpt (up to 1200 characters):</b> ' + _excerpt(_row_get(f, 'raw_response'), 1200), body))
+            if _row_get(f, 'source') == 'garak' and f['owasp'] in ('LLM01','LLM02','LLM03','LLM08'):
+                elements.append(Paragraph('<b>Evidence limit:</b> Override language or a code-like string alone does not establish that policy controls were disabled, a secret was leaked or a backend action occurred. Those claims need independent reference or action evidence.', body))
+            if verdict == 'FAIL':
+                recommendation = RECOMMENDATIONS.get(f['owasp'], 'Review the observed behavior and enforce the authorized policy boundary.')
+                own_recommendation = _row_get(f, 'recommendation')
+                if own_recommendation == 'Verify the response and enforce the tested policy boundary.':
+                    own_recommendation = None
+                elements.append(Paragraph('<b>Recommendation:</b> ' + escape(own_recommendation or recommendation), body))
+            ids = [str(_row_get(member, 'id') or member['rule_id']) for member in group['members']]
+            elements.append(Paragraph('<b>Member records (match IDs in JSON export):</b> ' + escape(', '.join(ids)), body))
+            elements.append(Spacer(1, 0.3 * cm))
     elements.append(PageBreak())
 
     # ---------- Remediation ----------

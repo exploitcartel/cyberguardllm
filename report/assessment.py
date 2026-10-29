@@ -95,7 +95,7 @@ def assessment_notice(context):
                  f"{campaign.get('retest_target_requests', 0)} replay requests and {campaign.get('judge_calls', 0)} judge calls. ")
     if context["incomplete"]:
         text += " ".join(context.get("incomplete_reasons", [])) + " "
-        text += ("The assessment is incomplete. The recorded score reflects confirmed FAIL findings only; "
+        text += ("The assessment is incomplete. The saved attempt-based score reflects recorded FAIL attempts only; "
                  "a score of zero is not evidence of safety or low overall risk. Resolve incomplete tests and "
                  "manual-review items before drawing a security conclusion.")
     else:

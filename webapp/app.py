@@ -597,8 +597,8 @@ def target_save():
          body_template_json, transport, ws_auth_mode, ws_event_name, body_encoding),
     )
     conn.execute('UPDATE targets SET request_timeout=? WHERE id=?',(request_timeout,cur.lastrowid))
-    conn.execute('UPDATE targets SET avatar_variant=?,avatar_random=? WHERE id=?',
-                 (avatar_variant, int(request.form.get('avatar_random') == 'on'), cur.lastrowid))
+    from core.avatars import assign_avatar
+    assign_avatar(conn, cur.lastrowid, url)
     conn.commit()
     conn.close()
     log_activity(username, "Target Created", name)
@@ -645,9 +645,10 @@ def target_edit_save(target_id):
     if not target:
         conn.close()
         return forbidden("Target not found.")
-    from core.avatars import validate_avatar
+    from core.avatars import validate_avatar, ensure_avatar, remember_avatar
     try:
-        avatar_variant = validate_avatar(request.form.get('avatar_variant', target['avatar_variant'] or 'auto'))
+        validate_avatar(request.form.get('avatar_variant', target['avatar_variant'] or 'auto'))
+        avatar_variant = ensure_avatar(conn, target)
     except ValueError as exc:
         conn.close()
         return Response(str(exc), status=400)
@@ -678,8 +679,9 @@ def target_edit_save(target_id):
            WHERE id=?""",
         (name, url, auth_scheme, body_format, body_encoding, response_field, request_timeout,
          request.form.get('assessment_policy', target['assessment_policy'] or '').strip(), avatar_variant,
-         int(request.form.get('avatar_random') == 'on'), target_id),
+         0, target_id),
     )
+    remember_avatar(conn, url, avatar_variant)
     conn.commit()
     conn.close()
     log_activity(username, "Target Edited", name)
@@ -741,6 +743,9 @@ def _cascade_delete_targets(conn, target_ids):
         conn.execute(f"UPDATE tasks SET result_id=NULL WHERE result_id IN ({rplaceholders})", result_ids)
         conn.execute(f"DELETE FROM scan_results WHERE id IN ({rplaceholders})", result_ids)
     conn.execute(f"DELETE FROM tasks WHERE target_id IN ({tplaceholders})", target_ids)
+    from core.avatars import remember_avatar, resolve_avatar
+    for removed in conn.execute(f"SELECT * FROM targets WHERE id IN ({tplaceholders})", target_ids).fetchall():
+        remember_avatar(conn, removed['url'], resolve_avatar(removed))
     conn.execute(f"DELETE FROM targets WHERE id IN ({tplaceholders})", target_ids)
 
 
@@ -1479,7 +1484,7 @@ def result_json(result_id):
         "total_findings": result["total_findings"],
         "findings": [
             {
-                "rule_id": f["rule_id"], "owasp": f["owasp"], "severity": f["severity"],
+                "id": f["id"], "rule_id": f["rule_id"], "owasp": f["owasp"], "severity": f["severity"],
                 "verdict": f["verdict"], "confidence": _row_get_app(f, "confidence"),
                 "triage_status": _row_get_app(f, "triage_status", "open"),
                 "module": f["module"], "source": f["source"], "description": f["description"],

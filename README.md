@@ -195,6 +195,15 @@ Garak detector hits are heuristic evidence and can produce false positives. AI v
 can leave a candidate in REVIEW if it is incomplete or disagrees with the detector. Read the transcript
 before treating any finding as a demonstrated security issue.
 
+PDF findings use full-width evidence cards. Identical Garak replies within the same probe family,
+category and verdict are grouped; this is evidence grouping, not a verified count of unique vulnerabilities.
+The PDF shows FAIL attempt counts, evidence-group counts, a grouped-evidence score (highest recorded
+severity once per FAIL group), and the original saved attempt-based score separately. Saved results and
+raw verdicts are not rewritten by exporting. REVIEW/ERROR counts and incompleteness appear next to the
+scores. Full prompts, replies and all member record IDs remain available through the Results JSON export;
+PDF excerpts are explicitly labeled. Methodology describes the selected engines. New DAN AI cross-checks
+require valid quoted evidence of complete objective success; partial override claims remain REVIEW.
+
 Export results as PDF, JSON, or CSV. Reports include assessment details, category coverage, confirmed
 findings, unresolved items, infrastructure issues, and remediation. PDF reports are written in English. Incomplete assessments use a deterministic summary of recorded status,
 counts, and available coverage; they do not receive an AI-generated overall-risk conclusion.
@@ -363,6 +372,11 @@ AI-PENTEST explores separate strategy branches per objective, keeps explicit mes
 
 ### Target AI busts
 
-The login page always uses the original human head with fingerprint-style ridges. New targets default to random robotic avatars for each scan.
-
-Ten original procedural robotic busts share the live scan network globe, drag rotation, theme and finding effects. Preview them under `/avatars`, or choose one under Edit Target. Automatic identities stay consistent per target. Random mode selects a different bust from that target's previous scan and stores it on the scan result, so refreshes and later target edits do not change an existing scan's identity. The bust is a symbolic visualization, not a depiction of the target's internal architecture.
+The login page always uses the original human head with fingerprint-style ridges.
+Targets receive one randomly assigned identity at creation from eleven variants, including that original
+human head and ten procedural forms. The identity stays fixed across scans and target edits until deletion.
+Re-adding the same endpoint excludes its most recently assigned identity; only a hash of the endpoint and
+its previous variant are retained for this purpose. Existing targets keep their latest saved scan identity
+where available. Historical scan snapshots remain unchanged. Preview all eleven identities under `/avatars`.
+The procedural forms use spaced blue contours and clear eyes, visors and rings, with the shared network
+globe, drag rotation, theme and finding effects. The visualization is symbolic, not the target architecture.

@@ -1047,10 +1047,9 @@ def _execute(task_id: int):
         (task["id"], target["id"], now(), "running", "ai_pentest" if ai_pentest else ("ai_powered" if ai_powered else "offline"), proxy_used),
     )
     result_id = cur.lastrowid
-    from core.avatars import resolve_avatar
-    previous_avatar = conn.execute('SELECT avatar_variant FROM scan_results WHERE target_id=? AND id<>? AND avatar_variant IS NOT NULL ORDER BY id DESC LIMIT 1', (target['id'], result_id)).fetchone()
+    from core.avatars import ensure_avatar
     conn.execute('UPDATE scan_results SET avatar_variant=? WHERE id=?',
-                 (resolve_avatar(target, previous=previous_avatar[0] if previous_avatar else None), result_id))
+                 (ensure_avatar(conn, target), result_id))
     from core.provenance import scanner_version
     conn.execute('UPDATE scan_results SET scanner_version=? WHERE id=?', (scanner_version(), result_id))
     # Link the task to its result right away: a scan with no static or AI phase (garak only) never set this, so the
