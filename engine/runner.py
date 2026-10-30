@@ -870,12 +870,16 @@ def _run_ai_powered(conn, task_id, result_id, target, categories, max_attempts=N
                 if action == 'stop':
                     return True
                 if action == 'skip':
-                    memory.skipped.add(objective.id)
+                    if live.prompt_skip:
+                        memory.remember(objective, technique_hint, prompt, "", "INFO", "The operator did not approve this prompt: choose a different one.", sent=False)
+                    else:
+                        memory.skipped.add(objective.id)
                     step -= 1
                     total -= 1
                     conn.execute('UPDATE tasks SET progress_total=?,progress_done=? WHERE id=?', (total, step, task_id))
                     conn.commit()
                     continue
+                prompt = live.take_override(prompt)
             # Explicit histories are separate per objective. Do not pretend a
             # server-managed cookie session can be reset from this client.
             history_key = live.branch_key if live else objective.id

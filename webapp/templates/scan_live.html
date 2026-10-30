@@ -89,6 +89,14 @@
   .ticket-code{font:700 11px var(--mono);letter-spacing:.06em;color:var(--s-sub);}
   .ticket-label{margin-top:6px;font:600 13px/1.25 var(--font);color:var(--s-text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
   .ticket-rule{margin-top:5px;font:11.5px var(--mono);color:var(--s-sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ticket.await{border-color:#fbbf24;animation:ticket-in .45s cubic-bezier(.22,1,.36,1) both, ticket-await 1.1s ease-in-out .45s infinite;}
+  @keyframes ticket-await{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.55);transform:scale(1);}50%{box-shadow:0 0 18px 6px rgba(251,191,36,.55);transform:scale(1.07);}}
+  .pentest-pending-banner{display:block;width:100%;margin-bottom:12px;border-color:#fbbf24;color:#fbbf24;font-weight:700;animation:banner-await 1.1s ease-in-out infinite;}
+  .pentest-pending-banner[hidden]{display:none;}
+  @keyframes banner-await{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.5);}50%{box-shadow:0 0 14px 4px rgba(251,191,36,.5);}}
+  .card.pentest-pending{border:1px solid #fbbf24;box-shadow:0 0 14px rgba(251,191,36,.35);}
+  .pentest-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin-top:10px;}
+  .pentest-actions textarea{flex:1 1 100%;min-width:220px;}
   .chip{font:700 10.5px var(--mono);letter-spacing:.06em;padding:3px 7px;border-radius:6px;flex-shrink:0;}
   .chip.fail{color:var(--c-fail);background:rgba(248,113,113,.2);}
   .chip.pass{color:var(--c-pass);background:rgba(52,211,153,.16);}
@@ -135,7 +143,7 @@
     .stage-side{border-left:0;border-top:1px solid var(--s-line);}
     .log{max-height:260px;}
   }
-  @media (prefers-reduced-motion:reduce){.ticket,.ticket.hit,.link.hit,.link-dot.hit{animation:none;}.ticket.hit{transform:scale(1.06);}.bar > span{transition:none;}}
+  @media (prefers-reduced-motion:reduce){.ticket.await,.pentest-pending-banner{animation:none;}.ticket,.ticket.hit,.link.hit,.link-dot.hit{animation:none;}.ticket.hit{transform:scale(1.06);}.bar > span{transition:none;}}
 </style>
 
 <section class="stage" id="stage">
@@ -201,6 +209,7 @@
     <button class="btn" id="pentestNext" type="button">Next</button>
     <button class="btn" id="pentestLatest" type="button">Follow latest</button>
   </div>
+  <button id="pentestPending" type="button" class="btn pentest-pending-banner" hidden>&#9888; A prompt is waiting for your decision - click to approve it, skip it or write your own</button>
   <div id="pentestTimeline"></div>
 </section>
 
@@ -395,7 +404,8 @@ function addTicket(ev, opts){
   dot.setAttribute('class', 'link-dot ' + v);
   linkSvg.appendChild(line); linkSvg.appendChild(dot);
 
-  const t = {el, line, dot, side, row, id: ev.id};
+  const t = {el, line, dot, side, row, id: ev.id, awaiting: !!opts.awaiting};
+  if(opts.awaiting){ el.classList.add('await'); el.querySelector('.chip').textContent = 'APPROVE?'; el.title = 'Waiting for your decision - click to approve, skip or write your own prompt'; }
   tickets.push(t);
   placeTicket(t);
 
@@ -542,37 +552,86 @@ async function pentestCommand(action, payload={}){
 }
 $('pentestDirection').addEventListener('submit',e=>{e.preventDefault();const text=$('pentestDirectionText').value.trim();if(text){pentestCommand('steer',{text});$('pentestDirectionText').value='';}});
 $('pentestSkip').onclick=()=>pentestCommand('skip');
+function evTime(ev){
+  return ev.timestamp ? new Date(ev.timestamp.endsWith('Z') ? ev.timestamp : ev.timestamp+'Z').toLocaleTimeString() : '';
+}
+// The approval that still waits for the operator: nothing has been sent, decided or answered after it.
+function pendingApproval(){
+  if(pentestTerminal) return null;
+  for(let i=pentestEvents.length-1;i>=0;i--){
+    const ev=pentestEvents[i];
+    if(ev.kind==='approval') return ev;
+    if(['sending','decision','response','evaluation'].includes(ev.kind)) return null;
+  }
+  return null;
+}
+function syncAwaiting(){
+  const pending=pendingApproval();
+  tickets.forEach(t=>{
+    if(!t.awaiting) return;
+    const open=pending && t.id==='approval-'+pending.id;
+    t.el.classList.toggle('await',!!open);
+    const chip=t.el.querySelector('.chip');
+    if(chip) chip.textContent=open ? 'APPROVE?' : 'DECIDED';
+  });
+  const banner=$('pentestPending');
+  banner.hidden=!pending;
+  if(pending) banner.dataset.target=pending.id;
+}
 function renderPentest(){
-  const pages=Math.max(1,Math.ceil(pentestEvents.length/50));
-  if(pentestFollow) pentestPage=pages;
+  const ordered=pentestEvents.slice().reverse();      // newest first
+  const pages=Math.max(1,Math.ceil(ordered.length/50));
+  if(pentestFollow) pentestPage=1;
   pentestPage=Math.min(pages,Math.max(1,pentestPage));
-  $('pentestPage').textContent='Page '+pentestPage+' / '+pages+' | '+pentestEvents.length+' saved events';
+  $('pentestPage').textContent='Page '+pentestPage+' / '+pages+' | '+pentestEvents.length+' saved events | newest first';
   $('pentestPrev').disabled=pentestPage===1; $('pentestNext').disabled=pentestPage===pages;
+  const pending=pendingApproval();
   const box=$('pentestTimeline');box.replaceChildren();
-  for(const ev of pentestEvents.slice((pentestPage-1)*50,pentestPage*50)){
-    const card=document.createElement('details');card.className='card';card.id='pentest-event-'+ev.id;card.style.marginBottom='10px';
+  for(const ev of ordered.slice((pentestPage-1)*50,pentestPage*50)){
+    const isPending=!!pending && pending.id===ev.id;
+    const card=document.createElement('details');card.className='card'+(isPending?' pentest-pending':'');card.id='pentest-event-'+ev.id;card.style.marginBottom='10px';
     const summary=document.createElement('summary');summary.style.cursor='pointer';
-    summary.textContent=ev.kind.toUpperCase()+' | '+(ev.category||ev.objective||'AI-PENTEST')+' | '+(ev.verdict||'')+' '+(ev.prompt||ev.explanation||'').slice(0,160);
-    card.appendChild(summary);card.open=pentestOpen.has(ev.id);
+    summary.textContent='#'+ev.seq+' | '+evTime(ev)+' | '+ev.kind.toUpperCase()+' | '+(ev.category||ev.objective||'AI-PENTEST')+' | '+(ev.verdict||'')+' '+(ev.prompt||ev.explanation||'').slice(0,160);
+    card.appendChild(summary);card.open=pentestOpen.has(ev.id)||isPending;
     card.addEventListener('toggle',()=>{if(card.open)pentestOpen.add(ev.id);else pentestOpen.delete(ev.id);});
     for(const [label,key] of [['Hypothesis','goal'],['Prompt in','prompt'],['Prompt out','response'],['Decision explanation','explanation'],['Next decision','next_decision']]){
       if(ev[key]){const title=document.createElement('strong');title.textContent=label;const text=document.createElement('pre');text.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;max-height:420px;overflow:auto;';text.textContent=ev[key];card.append(title,text);}
     }
     if(ev.finding_id){const link=document.createElement('a');link.className='btn';link.href='/findings/'+ev.finding_id;link.textContent='Open exact finding';card.appendChild(link);}
-    const button=(label,action,payload)=>{const b=document.createElement('button');b.type='button';b.className='btn';b.textContent=label;b.disabled=pentestTerminal&&action!=='reevaluate';b.onclick=()=>{b.disabled=true;pentestCommand(action,payload);};card.appendChild(b);};
-    if(ev.kind==='approval'){button('Approve exact prompt','approve',{event_id:ev.event_id});button('Deny','deny',{event_id:ev.event_id});}
+    const button=(label,action,payload,into)=>{const b=document.createElement('button');b.type='button';b.className='btn';b.textContent=label;b.disabled=pentestTerminal&&action!=='reevaluate';b.onclick=()=>{b.disabled=true;pentestCommand(action,payload);};(into||card).appendChild(b);return b;};
+    if(ev.kind==='approval'){
+      if(isPending){
+        const actions=document.createElement('div');actions.className='pentest-actions';
+        button('Approve and send','approve',{event_id:ev.event_id},actions);
+        button('Skip - AI generates another prompt','deny',{event_id:ev.event_id},actions);
+        const own=document.createElement('textarea');own.rows=3;own.maxLength=2000;own.placeholder='Or write your own prompt to send instead (goes to the configured target only)';own.setAttribute('aria-label','Your own prompt');
+        const send=document.createElement('button');send.type='button';send.className='btn';send.textContent='Send my own prompt';
+        send.onclick=()=>{const text=own.value.trim();if(text){send.disabled=true;pentestCommand('manual',{event_id:ev.event_id,text});}};
+        actions.append(own,send);card.appendChild(actions);
+      } else {
+        const done=document.createElement('p');done.className='muted';done.textContent='Decision already made for this prompt.';card.appendChild(done);
+      }
+    }
     if(ev.kind==='evaluation'&&['ERROR','REVIEW'].includes(ev.verdict))button('Retry evaluation only','reevaluate',{finding_id:ev.finding_id});
     box.appendChild(card);
   }
+  syncAwaiting();
+}
+function goToEvent(id){
+  const ordered=pentestEvents.slice().reverse();
+  const index=ordered.findIndex(ev=>ev.id===id);
+  if(index<0) return;
+  pentestFollow=false;pentestPage=Math.floor(index/50)+1;pentestOpen.add(id);renderPentest();
+  $('pentest-event-'+id)?.scrollIntoView({behavior:'smooth',block:'center'});
 }
 $('pentestPrev').onclick=()=>{pentestFollow=false;pentestPage--;renderPentest();};
 $('pentestNext').onclick=()=>{pentestFollow=false;pentestPage++;renderPentest();};
 $('pentestLatest').onclick=()=>{pentestFollow=true;renderPentest();};
 ticketBox.addEventListener('click',e=>{
   const link=e.target.closest('a[href^="#pentest-event-"]');if(!link)return;
-  e.preventDefault();const id=Number(link.hash.replace('#pentest-event-',''));const index=pentestEvents.findIndex(ev=>ev.id===id);
-  if(index>=0){pentestFollow=false;pentestPage=Math.floor(index/50)+1;pentestOpen.add(id);renderPentest();$('pentest-event-'+id)?.scrollIntoView({behavior:'smooth',block:'center'});}
+  e.preventDefault();goToEvent(Number(link.hash.replace('#pentest-event-','')));
 });
+$('pentestPending').addEventListener('click',()=>goToEvent(Number($('pentestPending').dataset.target)));
 async function pollPentest(){
   try{
     const response=await fetch('/api/pentest/'+taskId+'?after='+pentestCursor);
@@ -586,7 +645,7 @@ async function pollPentest(){
       pentestTerminal=['completed','error','stopped'].includes(data.status);
       document.querySelector('.stage-title h1').textContent=pentestTerminal ? 'AI-PENTEST: '+data.status : 'AI-PENTEST live assessment';
       for(const ev of data.events){
-        pentestEvents.push(ev);pentestCursor=ev.id;
+        ev.seq=pentestEvents.length+1;pentestEvents.push(ev);pentestCursor=ev.id;
         if(ev.kind==='capability'){
           const chip=document.createElement('span');chip.className='btn';chip.textContent=ev.name+' | '+ev.level;chip.title=ev.explanation;$('pentestCapabilities').appendChild(chip);
         }
@@ -595,8 +654,13 @@ async function pollPentest(){
           addTicket({id:'event-'+ev.id,live_event_id:ev.id,owasp:ev.category||'AI',rule_id:ev.objective||'Profiling',verdict:'INFO',preview:ev.prompt?.slice(0,90)});
         }
         if(ev.kind==='response')head.pulse(.4);
+        if(ev.kind==='approval'){
+          head.pulse(.9);
+          addTicket({id:'approval-'+ev.id,live_event_id:ev.id,owasp:ev.category||'LLM03',rule_id:'awaiting approval',verdict:'REVIEW',preview:'Needs your decision: '+(ev.prompt||'').slice(0,70)},{awaiting:true});
+        }
       }
       if(data.events.length || wasTerminal!==pentestTerminal || $('pentestTimeline').children.length===0)renderPentest();
+      syncAwaiting();
       $('pentestSkip').disabled=pentestTerminal;
       $('pentestDirectionText').disabled=pentestTerminal;
     }

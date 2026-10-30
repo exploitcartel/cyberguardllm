@@ -1121,7 +1121,7 @@ def pentest_live_command(task_id):
     if not isinstance(data, dict):
         return jsonify(error='Expected an object'), 400
     action = data.get('action')
-    if action not in ('steer', 'skip', 'approve', 'deny', 'reevaluate'):
+    if action not in ('steer', 'skip', 'approve', 'deny', 'manual', 'reevaluate'):
         return jsonify(error='Unsupported command'), 400
     conn = get_conn()
     try:
@@ -1136,7 +1136,12 @@ def pentest_live_command(task_id):
             if not isinstance(value, str) or not 1 <= len(value.strip()) <= 1500:
                 return jsonify(error='Direction must contain 1 to 1500 characters'), 400
             payload['text'] = value.strip()
-        if action in ('approve', 'deny'):
+        if action == 'manual':
+            value = data.get('text')
+            if not isinstance(value, str) or not 1 <= len(value.strip()) <= 2000:
+                return jsonify(error='The prompt must contain 1 to 2000 characters'), 400
+            payload['text'] = value.strip()
+        if action in ('approve', 'deny', 'manual'):
             event_id = data.get('event_id')
             if type(event_id) != int:
                 return jsonify(error='Invalid proposal ID'), 400
