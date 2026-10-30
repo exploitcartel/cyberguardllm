@@ -45,8 +45,12 @@
   .s-btn:disabled{opacity:.4;cursor:default;}
   a.s-btn{text-decoration:none;display:inline-block;}
   a.s-btn[hidden]{display:none;}
-  .report-btn{padding:6px 12px;font-size:13px;border-color:var(--s-accent);color:var(--s-accent);background:transparent;}
-  .report-btn:hover{background:var(--s-btn-h);}
+  .report-btn{padding:14px 30px;font-size:16px;font-weight:700;border-radius:999px;border:0;color:#fff;letter-spacing:.02em;
+    background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 8px 22px rgba(37,99,235,.38);
+    transition:transform .15s,box-shadow .15s,filter .15s;}
+  .report-btn:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(37,99,235,.5);filter:brightness(1.06);}
+  .report-btn:active{transform:translateY(0);box-shadow:0 4px 12px rgba(37,99,235,.4);}
+  .report-btn:focus-visible{outline:3px solid rgba(147,197,253,.8);outline-offset:3px;}
   .s-btn.danger{border-color:rgba(248,113,113,.45);color:var(--s-danger-fg);background:rgba(248,113,113,.1);}
   .s-btn.danger:hover:not(:disabled){background:rgba(248,113,113,.2);}
 
