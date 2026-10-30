@@ -47,6 +47,10 @@
       <textarea name="assessment_policy" rows="4">{{ target.assessment_policy or '' }}</textarea>
       <p class="muted">Document the actual allowed actions and prohibited commitments. Do not include secrets. This reference guides evaluation; it does not prove an external action occurred.</p>
     </div>
+    <div class="field"><label>Authorization for this test</label>
+      <textarea name="authorization_note" rows="3" maxlength="1000" placeholder="e.g. Our own staging chatbot, owned by ACME. Testing authorized by J. Doe (CISO) on 2026-10-30. Synthetic data only.">{{ target.authorization_note or '' }}</textarea>
+      <p class="muted">Who owns this target and who authorized the test. It is shown to the AI planner and attacker as the operator's own statement, and saved in the scan record. It does not prove authorization and must not contain secrets.</p>
+    </div>
     {% set selected_avatar = target.avatar_variant %}{% include '_target_avatar.html' %}
     {% set request_timeout = target.request_timeout %}{% include '_target_timeout.html' %}
     <button class="btn btn-primary" type="submit">{{ t('btn_save_changes') }}</button>

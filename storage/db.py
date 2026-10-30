@@ -307,6 +307,7 @@ _MIGRATIONS = [
     ('scan_results', 'avatar_variant', 'TEXT'),
     ('scan_results', 'scanner_version', 'TEXT'),
     ('targets', 'assessment_policy', 'TEXT'),
+    ('targets', 'authorization_note', 'TEXT'),
     ("findings", "confidence", "INTEGER"),
     ("findings", "triage_status", "TEXT DEFAULT 'open'"),
     ("findings", "triage_note", "TEXT"),

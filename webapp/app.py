@@ -675,10 +675,11 @@ def target_edit_save(target_id):
         conn.execute("UPDATE targets SET token_encrypted=? WHERE id=?", (encrypt_token(new_token.strip()), target_id))
 
     conn.execute(
-        """UPDATE targets SET name=?, url=?, auth_scheme=?, body_format=?, body_encoding=?, response_field=?,request_timeout=?,assessment_policy=?,avatar_variant=?,avatar_random=?
+        """UPDATE targets SET name=?, url=?, auth_scheme=?, body_format=?, body_encoding=?, response_field=?,request_timeout=?,assessment_policy=?,authorization_note=?,avatar_variant=?,avatar_random=?
            WHERE id=?""",
         (name, url, auth_scheme, body_format, body_encoding, response_field, request_timeout,
-         request.form.get('assessment_policy', target['assessment_policy'] or '').strip(), avatar_variant,
+         request.form.get('assessment_policy', target['assessment_policy'] or '').strip(),
+         request.form.get('authorization_note', target['authorization_note'] or '').strip()[:1000], avatar_variant,
          0, target_id),
     )
     remember_avatar(conn, url, avatar_variant)
