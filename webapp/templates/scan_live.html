@@ -43,6 +43,10 @@
     background:var(--s-btn);cursor:pointer;transition:background .15s,border-color .15s;}
   .s-btn:hover:not(:disabled){background:var(--s-btn-h);}
   .s-btn:disabled{opacity:.4;cursor:default;}
+  a.s-btn{text-decoration:none;display:inline-block;}
+  a.s-btn[hidden]{display:none;}
+  .report-btn{background:var(--s-accent);border-color:var(--s-accent);color:#fff;}
+  .report-btn:hover{filter:brightness(1.12);}
   .s-btn.danger{border-color:rgba(248,113,113,.45);color:var(--s-danger-fg);background:rgba(248,113,113,.1);}
   .s-btn.danger:hover:not(:disabled){background:rgba(248,113,113,.2);}
 
@@ -159,6 +163,7 @@
     <div class="stage-actions">
       <button id="btnPauseResume" class="s-btn" type="button">&#9208; Pause</button>
       <button id="btnStop" class="s-btn danger" type="button">&#9209; Stop</button>
+      <a id="viewReport" class="s-btn report-btn" href="/results" hidden>&#128196; View report</a>
     </div>
   </header>
 
@@ -643,6 +648,8 @@ async function pollPentest(){
       $('pentestResults').href='/results/'+data.result_id;
       const wasTerminal=pentestTerminal;
       pentestTerminal=['completed','error','stopped'].includes(data.status);
+      const report=$('viewReport');report.href='/results/'+data.result_id;report.hidden=!pentestTerminal;
+      if(pentestTerminal){$('btnPauseResume').hidden=true;$('btnStop').hidden=true;}
       document.querySelector('.stage-title h1').textContent=pentestTerminal ? 'AI-PENTEST: '+data.status : 'AI-PENTEST live assessment';
       for(const ev of data.events){
         ev.seq=pentestEvents.length+1;pentestEvents.push(ev);pentestCursor=ev.id;
