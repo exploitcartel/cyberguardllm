@@ -7,7 +7,7 @@ from core.transport_policy import response_timeout, http_timeout
 
 # "none" = send no credentials at all, for chat endpoints that need no token. It is
 # tried last when a token was supplied, and is the only scheme tried when it was not.
-AUTH_SCHEMES = ["bearer", "cookie", "x-session-token", "x-auth-token", "query", "none"]
+AUTH_SCHEMES = ["bearer", "cookie", "cookie-raw", "x-session-token", "x-auth-token", "query", "none"]
 
 # A small rotation of realistic, current desktop browser User-Agent strings.
 # Used only in stealth mode, so an authorized scan against a target with
