@@ -16,7 +16,7 @@
 
 ⭐ Star this repo if it's useful to you - it genuinely helps.
 
-📸 **[See what it looks like](https://claude.ai/artifact/8gZGXxYS9wAMCAZRUZoRQj)** - screenshots of the dashboard, critical findings, and targets screens, no setup required.
+📸 **[See what it looks like](https://exploitcartel.github.io/cyberguardllm/preview.html)** - screenshots of the dashboard, critical findings, and targets screens, no setup required.
 
 CYBERGUARD LLM is a self-hosted platform for testing the security of AI chatbots and agents.
 Add a target, choose a scan configuration, and review the prompts, responses, and results in your browser.
