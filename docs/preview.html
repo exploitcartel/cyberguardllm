@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CyberGuard LLM preview</title>
+<style>
+/* layout: a single scrolling column of full-width screenshots, each with a short caption below it */
+:root {
+  --bg: #0a0e1a;
+  --surface: #0f1424;
+  --border: #1f2740;
+  --text: #e8ecf7;
+  --text-dim: #8a93b0;
+  --accent: #6d7bff;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #0a0e1a; --surface: #0f1424; --border: #1f2740;
+    --text: #e8ecf7; --text-dim: #8a93b0; --accent: #6d7bff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a0e1a; --surface: #0f1424; --border: #1f2740;
+  --text: #e8ecf7; --text-dim: #8a93b0; --accent: #6d7bff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 860px; margin: 0 auto; padding-block: 2.5rem 4rem; }
+.eyebrow {
+  font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent); font-weight: 500; margin: 0 0 0.5rem;
+}
+h1 {
+  font-size: clamp(26px, 4vw, 34px); font-weight: 500; margin: 0 0 0.6rem;
+  text-wrap: balance; letter-spacing: -0.01em;
+}
+.lede { color: var(--text-dim); font-size: 15px; line-height: 1.65; max-width: 62ch; margin: 0 0 2.5rem; }
+.shot { margin: 0 0 2.75rem; }
+.shot img {
+  width: 100%; display: block; border-radius: 10px;
+  border: 0.5px solid var(--border);
+}
+.shot .cap {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-top: 0.85rem; padding-left: 2px;
+}
+.shot .cap .n {
+  font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums;
+  min-width: 18px;
+}
+.shot .cap .t { font-size: 14.5px; color: var(--text); font-weight: 500; }
+.shot .cap .d { font-size: 13.5px; color: var(--text-dim); }
+footer {
+  border-top: 0.5px solid var(--border); margin-top: 1rem; padding-top: 1.25rem;
+  font-size: 13px; color: var(--text-dim);
+}
+footer a { color: var(--accent); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Screenshot preview</p>
+  <h1>CyberGuard LLM</h1>
+  <p class="lede">An AI security assessment platform that black-box scans LLM agents and chatbots against the OWASP LLM Top 10 — AI-PENTEST, Garak, and PyRIT in one tool. These are real screens from a running instance, for anyone browsing the repo without spinning it up first.</p>
+
+  <div class="shot">
+    <img src="images/cg-login.jpg" alt="CyberGuard LLM login screen, dark theme, OWASP LLM Top 10 categories shown on the left panel" />
+    <div class="cap"><span class="n">01</span><span class="t">Sign in</span><span class="d">— OWASP LLM Top 10 categories at a glance before you're even logged in</span></div>
+  </div>
+
+  <div class="shot">
+    <img src="images/cg-dashboard.jpg" alt="Dashboard showing total scans, targets, high/critical findings, a severity donut chart, and OWASP coverage bars" />
+    <div class="cap"><span class="n">02</span><span class="t">Dashboard</span><span class="d">— findings by severity, OWASP coverage, recent scans at a glance</span></div>
+  </div>
+
+  <div class="shot">
+    <img src="images/cg-findings.jpg" alt="Critical findings list filtered to High and Critical severity, showing OWASP category, target, scan number, and triage status per finding" />
+    <div class="cap"><span class="n">03</span><span class="t">Critical findings</span><span class="d">— every confirmed vulnerability, worst first, with one-click triage</span></div>
+  </div>
+
+  <div class="shot">
+    <img src="images/cg-targets.jpg" alt="Targets list showing configured LLM endpoints with auth type, payload format, and status" />
+    <div class="cap"><span class="n">04</span><span class="t">Targets</span><span class="d">— point it at any chat endpoint: REST, SSE, WebSocket, Socket.io</span></div>
+  </div>
+
+  <footer>Built by <a href="https://github.com/exploitcartel" target="_blank" rel="noopener">exploitcartel</a>.</footer>
+</div>
+</body>
+</html>
