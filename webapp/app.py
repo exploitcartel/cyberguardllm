@@ -842,7 +842,7 @@ def scan_config_create():
     pentest_agent = int(use_ai_pentest and request.form.get('pentest_agent') == 'on')
     pentest_categories = list(dict.fromkeys(c for c in request.form.getlist('pentest_categories') if c in pentest_objectives))
     try:
-        pentest_budget = max(8, min(40, int(request.form.get('pentest_budget', '16'))))
+        pentest_budget = max(8, min(200, int(request.form.get('pentest_budget', '16'))))
     except (ValueError, TypeError):
         pentest_budget = 16
     if use_ai_pentest and not pentest_categories:
@@ -1261,13 +1261,24 @@ def results_delete():
         f"SELECT id FROM scan_results WHERE id IN ({placeholders})", ids).fetchall()]
     if found_ids:
         fplaceholders = ",".join("?" * len(found_ids))
-        # scan_results has no DB-level ON DELETE CASCADE, so findings and
-        # attack_chains for these results are removed explicitly first; a
-        # task that produced one of these results has its result_id cleared
-        # rather than left pointing at a now-missing row.
+        # scan_results has no DB-level ON DELETE CASCADE, so findings,
+        # attack_chains and the other per-result progress/event tables are
+        # removed explicitly first. The task(s) that produced these results
+        # are deleted too, not just unlinked (result_id=NULL) - leaving them
+        # behind made a deleted scan result keep showing up as a "Recent
+        # Scan" on the Tasks tab, pointing at nothing.
         conn.execute(f"DELETE FROM findings WHERE scan_result_id IN ({fplaceholders})", found_ids)
         conn.execute(f"DELETE FROM attack_chains WHERE scan_result_id IN ({fplaceholders})", found_ids)
-        conn.execute(f"UPDATE tasks SET result_id=NULL WHERE result_id IN ({fplaceholders})", found_ids)
+        conn.execute(f"DELETE FROM pentest_events WHERE result_id IN ({fplaceholders})", found_ids)
+        conn.execute(f"DELETE FROM garak_progress WHERE result_id IN ({fplaceholders})", found_ids)
+        conn.execute(f"DELETE FROM pyrit_progress WHERE result_id IN ({fplaceholders})", found_ids)
+        conn.execute(f"DELETE FROM scan_events WHERE result_id IN ({fplaceholders})", found_ids)
+        task_ids = [r["id"] for r in conn.execute(
+            f"SELECT id FROM tasks WHERE result_id IN ({fplaceholders})", found_ids).fetchall()]
+        if task_ids:
+            tplaceholders = ",".join("?" * len(task_ids))
+            conn.execute(f"DELETE FROM pentest_commands WHERE task_id IN ({tplaceholders})", task_ids)
+            conn.execute(f"DELETE FROM tasks WHERE id IN ({tplaceholders})", task_ids)
         conn.execute(f"DELETE FROM scan_results WHERE id IN ({fplaceholders})", found_ids)
         conn.commit()
         log_activity(username, "Scan Result(s) Deleted", f"{len(found_ids)} result(s): {', '.join(map(str, found_ids))}")
